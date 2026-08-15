@@ -1,6 +1,6 @@
 ---
 created_on: 2026-08-14 21:25
-last_modified: 2026-08-14 21:35
+last_modified: 2026-08-14 21:40
 status: current
 ---
 
@@ -43,6 +43,13 @@ just run "Boris Brejcha - Space X"
   just test
   just vet
   ```
+
+### Tagged Binary Releases
+To publish cross-platform binaries (macOS, Linux, Windows for `amd64` and `arm64`) to GitHub Releases via GoReleaser:
+```bash
+git tag -a v1.0.0 -m "Release v1.0.0"
+git push origin v1.0.0
+```
 
 ## Audio Conventions & Rules
 - **Target Audience & Disclaimer:** This tool is strictly for amateur and bedroom DJs practicing at home or playing informal sets, who are not seeking professional careers. Professional DJs must source music from legitimate commercial sources (Beatport, Bandcamp, Juno Download, iTunes, or authorized record pools).
