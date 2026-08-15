@@ -1,105 +1,98 @@
 # fetch-track
 
-> **⚠️ WARNING / DISCLAIMER:** This tool is strictly for amateur and bedroom DJs practicing at home or playing informal sets who are not seeking professional careers. Professional DJs must source their music from legitimate commercial sources (Beatport, Bandcamp, Juno Download, iTunes, or authorized record pools).
-
 `fetch-track` is a Go CLI tool for acquiring, inspecting, and enriching high-fidelity single tracks for DJ collections.
 
-It searches configured sources (**YouTube, SoundCloud, Bandcamp**) in parallel for full/extended DJ mixes. When given a direct URL or search query, it extracts search terms, evaluates audio candidates concurrently across all sources for frequency response and track length, downloads native audio streams, performs spectral bandwidth & loudness analysis, resolves metadata with multi-tiered API fallbacks, and embeds 1400x1400 cover art compatible with DJ software, hardware decks, and file manager previews.
-
----
-
-## Output Format & Compatibility
-
-By default, acquired tracks are dropped directly into your current working directory (`.`):
-
-| Specification | Details |
-| :--- | :--- |
-| **Container & Format** | **`.m4a`** (MPEG-4 Part 14 Audio) |
-| **Audio Codec** | Native High-Bitrate **AAC** (up to 20 kHz spectral bandwidth) |
-| **Embedded Artwork** | **1400x1400** high-resolution cover art embedded as an **MP4 `covr` atom** |
-| **Embedded Tags** | Title, Artist, Album, Genre, Release Year |
-| **Filename Pattern** | `./<Artist> - <Title>.m4a`<br>*(e.g., `./Boris Brejcha - Space X.m4a` — stripped of video IDs, brackets `[...]`, or illegal characters)* |
-| **Compatibility** | Hardware DJ decks, Rekordbox, Serato DJ, Traktor, and **macOS Finder** QuickLook previews |
-
----
-
-## Metadata Sources & Fallback Chain
-
-Metadata and high-resolution cover art are fetched without commercial API keys using a 3-tier fallback resolution chain:
-
-```
-[ Track Search Query / Clean Filename ]
-                   │
-                   ▼
-    ┌──────────────────────────────┐
-    │ 1. iTunes Search API         │ ──► (Match Found) ──► Returns Title, Artist, Album, Genre,
-    └──────────────────────────────┘                        Year, and 1400x1400 High-Res Cover Art
-                   │ (No match)
-                   ▼
-    ┌──────────────────────────────┐
-    │ 2. MusicBrainz API           │ ──► (Match Found) ──► Returns Recording Data +
-    │    + Cover Art Archive       │                        Release Cover Art Archive URL
-    └──────────────────────────────┘
-                   │ (No match)
-                   ▼
-    ┌──────────────────────────────┐
-    │ 3. YouTube / Raw Fallback    │ ──► Uses cleaned Uploader / Title from URL / filename
-    └──────────────────────────────┘
-```
+It searches YouTube for full/extended DJ mixes, downloads native `.m4a` audio streams, performs spectral bandwidth & loudness analysis, resolves metadata with multi-tiered API fallbacks, and embeds 1400x1400 cover art compatible with media players, DJ software, and file manager previews.
 
 ---
 
 ## Features
 
 - **Single-Track DJ Acquisition:** Takes a search query or direct URL and automates search term extraction, parallel multi-source candidate evaluation, downloading, verification, and tagging in one step.
-- **Default CWD Output:** Drops acquired `.m4a` tracks into the current working directory (`.`) by default. Override with `-o` / `--out-dir`.
-- **LLM Agent Mode (`AGENT=1`):** When `AGENT=1` environment variable is set, outputs compact, token-conservative key-value text designed for LLM agents and fast human reading (no emojis, banner boxes, or JSON syntax overhead).
-- **Direct URL Search Term Extraction:** If given a direct URL (e.g. a YouTube or SoundCloud link), `fetch-track` probes its metadata to extract artist and track title, pools the direct URL with parallel search results across all configured sources, and guarantees selecting the best full Extended/Original DJ Mix track.
 - **Parallel Multi-Source Search:** Queries configured sources (**YouTube, SoundCloud, Bandcamp**) concurrently in parallel by default (configurable via `-s`).
-- **Parallel Candidate Audio Inspection:** Concurrently samples audio streams and verifies track length across top candidates from all sources before selecting the winning track.
-- **Full DJ Mix Candidate Ranking:** Evaluates search candidates and ranks full extended/original DJ mixes (4.5 to 13 minutes) while filtering out short radio edits and continuous album mixes.
-- **Spectral Bandwidth & Quality Inspection:** Analyzes audio frequency response up to 20 kHz via PCM Goertzel analysis to detect low-bitrate rips or transcoded uploads.
+- **Direct URL Search Term Extraction:** If given a direct URL, `fetch-track` probes its metadata to extract artist and track title, searches across all configured sources, and guarantees selecting the best full Extended/Original DJ Mix track.
+- **LLM Agent Mode (`AGENT=1`):** When `AGENT=1` environment variable is set, outputs compact, token-conservative key-value text formatted for LLM agents.
+- **Full DJ Mix Candidate Ranking:** Evaluates search candidates across sources and ranks full extended/original DJ mixes (4.5 to 13 minutes) while filtering out short radio edits and continuous album mixes.
+- **High-Res Artwork Compatibility:** Saves tracks in `.m4a` container format with embedded 1400x1400 MP4 `covr` artwork, guaranteeing native artwork rendering across DJ software and operating systems.
+- **Spectral Bandwidth & Quality Inspection:** Analyzes audio frequency response up to 20 kHz via PCM Goertzel analysis to detect low-bitrate rips or transcoded YouTube uploads.
 - **Gain Staging & DJ Trim Calculation:** Measures Peak dBFS and RMS loudness to recommend channel trim offsets before mixing.
+- **Multi-Tiered Metadata Fallback:** Queries iTunes Search API (with 1400x1400 artwork), falling back to MusicBrainz API + Cover Art Archive, and local YouTube metadata fallback.
 
 ---
 
 ## Prerequisites
 
-Ensure `go` (1.23+), `yt-dlp`, and `ffmpeg` / `ffprobe` are installed and available in your system `PATH`:
+Ensure `go` (1.23+), `yt-dlp`, `ffmpeg` / `ffprobe`, and optionally `just` are installed and available in your system `PATH`:
 
 ```bash
 go version
 yt-dlp --version
 ffmpeg -version
 ffprobe -version
+just --version
 ```
 
 ---
 
 ## Installation
 
-Build the binary directly with Go:
+Build the binary using `just` or `go`:
 
 ```bash
+# Using just
+just build
+
+# Or directly with Go
 go build -o fetch-track ./cmd/fetch-track
 ```
 
 Optionally install it to your Go bin directory:
 
 ```bash
-go install ./cmd/fetch-track
+just install
+# or: go install ./cmd/fetch-track
 ```
 
 ---
 
 ## Quick Start
 
-### 1. Parallel Multi-Source Acquisition (Drops into current working directory)
+### 1. Download and Process a Track by Search Query
 
-Search YouTube, SoundCloud, and Bandcamp in parallel:
+Query a track by artist and title:
 
 ```bash
-./fetch-track "Boris Brejcha - Space X"
+just run "Boris Brejcha - Space X"
+# or: ./fetch-track "Boris Brejcha - Space X"
+```
+
+Sample Output:
+```
+=======================================================
+🎧 DJ FULL MIX TRACK ACQUISITION PIPELINE
+=======================================================
+Target: Boris Brejcha - Space X
+
+🔍 Step 1: Inspecting top YouTube candidates for Full Extended DJ Mix...
+  ✅ Selected Full DJ Mix Candidate: https://www.youtube.com/watch?v=T4EGCbhVbnY
+
+📥 Step 2: Downloading audio stream & artwork...
+  Saved: Boris Brejcha - Space X (Unreleased Extended Fix).m4a
+
+🔍 Step 3: Running DJ Audio Quality & Spectrum Inspection...
+  Duration  : 8:23 (Original / Extended DJ Mix)
+  Bandwidth : High Fidelity (>=18.5 kHz) (20 kHz)
+  Peak / RMS: 0.04 dBFS / -9.44 dBFS
+  DJ Trim   : -2.6 dB
+  Status    : [ PASS ]
+
+🖼️ Step 4: Enriching metadata & 1400x1400 cover art via API fallback...
+  Matched  : "Boris Brejcha - Space X" (Space X - Single, 2024)
+  Source   : iTunes API
+
+=======================================================
+✅ TRACK ACQUISITION COMPLETE: tracks/Boris Brejcha - Space X.m4a
+=======================================================
 ```
 
 ### 2. LLM Agent Mode (`AGENT=1`)
@@ -122,28 +115,19 @@ metadata: "Boris Brejcha - Space X" (Space X - Single, 2024) [iTunes API]
 output: ./Boris Brejcha - Space X.m4a
 ```
 
-### 3. Specify Custom Output Directory
-
-Use `-o` to save tracks into a specific directory instead of cwd:
+### 3. Download a Direct URL
 
 ```bash
-./fetch-track -o tracks "Boris Brejcha - Space X"
+just run "https://www.youtube.com/watch?v=T4EGCbhVbnY"
 ```
 
-### 4. Direct URL Search
+### 3. Run Stand-Alone Audio Quality Verification
 
-If given a direct link (e.g., a short 2-minute radio edit link), `fetch-track` extracts the track title and artist, searches SoundCloud/Bandcamp/YouTube in parallel, and selects the full 8-minute Extended Mix:
-
-```bash
-./fetch-track "https://www.youtube.com/watch?v=short_radio_edit_id"
-```
-
-### 5. Stand-Alone Audio Quality Verification
-
-Inspect any local track or remote URL without downloading:
+Inspect any local track or YouTube link without downloading:
 
 ```bash
-./fetch-track verify "Boris Brejcha - Space X.m4a"
+just verify "tracks/Boris Brejcha - Space X.m4a"
+# or: ./fetch-track verify "tracks/Boris Brejcha - Space X.m4a"
 ```
 
 ---
@@ -160,18 +144,45 @@ Inspect any local track or remote URL without downloading:
 | `--skip-metadata` | | `false` | Skip metadata enrichment and cover art tagging |
 | `--verbose` | `-v` | `false` | Enable verbose logging |
 
+### Commands
+
+- `fetch-track <query_or_url>`: Full single-track acquisition pipeline.
+- `fetch-track verify <file_path_or_url>`: Stand-alone DJ quality inspection.
+
 ---
 
-## Testing
+## Development & Recipes
 
-Run unit tests for all packages:
+List all available `just` recipes:
 
 ```bash
-go test -v ./...
+just --list
 ```
 
-Run static analysis checks:
+Available recipes:
+- `just build`: Compile `fetch-track` binary.
+- `just install`: Install `fetch-track` binary to `$GOPATH/bin`.
+- `just test`: Run all unit tests (`go test -v ./...`).
+- `just vet`: Run Go static analysis (`go vet ./...`).
+- `just fmt`: Format source code (`go fmt ./...`).
+- `just clean`: Remove build artifacts and temp files.
 
-```bash
-go vet ./...
+---
+
+## Project Structure
+
+```
+fetch-track-cli/
+├── cmd/
+│   └── fetch-track/        # Main Cobra CLI entrypoint
+├── internal/
+│   ├── downloader/         # YouTube candidate search, ranking, and yt-dlp downloader
+│   ├── metadata/           # iTunes / MusicBrainz client, filename sanitizer, and FFmpeg tagger
+│   ├── pipeline/           # Track acquisition workflow orchestrator
+│   └── verifier/           # PCM spectral analysis (Goertzel), mix structure, loudness checks
+├── AGENTS.md               # Workspace guidelines and rules for coding agents
+├── justfile                # Task runner recipes for build, test, run, and clean
+├── go.mod                  # Go module definitions
+├── .gitignore              # Ignored binaries, temp files, and tracks
+└── README.md               # Overview and usage documentation
 ```
