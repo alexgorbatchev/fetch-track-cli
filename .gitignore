@@ -1,0 +1,23 @@
+# Binaries
+fetch-track
+fetch-track-cli
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Directories and symlinks
+.tmp/
+tracks/
+.codegraph
+.codegraph/
+.cache/
+.pi-subagents/
+dist/
+build/
+
+# OS / Editor files
+.DS_Store
+*.swp
+*.swo
