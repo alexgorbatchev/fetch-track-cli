@@ -90,14 +90,14 @@ just --version
 
 ## Installation
 
-Build the binary directly with `just` or `go`:
+Build the binary directly into `bin/` with `just` or `go`:
 
 ```bash
 # Using just
 just build
 
 # Or directly with Go
-go build -o fetch-track ./cmd/fetch-track
+go build -o bin/fetch-track ./cmd/fetch-track
 ```
 
 Optionally install it to your Go bin directory:
@@ -117,38 +117,30 @@ Search YouTube, SoundCloud, and Bandcamp in parallel:
 
 ```bash
 just run "Boris Brejcha - Space X"
-# or: ./fetch-track "Boris Brejcha - Space X"
+# or: ./bin/fetch-track "Boris Brejcha - Space X"
 ```
 
 Sample Output:
 ```
-=======================================================
-🎧 DJ FULL MIX TRACK ACQUISITION PIPELINE
-=======================================================
-Target: Boris Brejcha - Space X
-Sources: youtube, soundcloud, bandcamp (Parallel Search & Quality Inspection)
+Searching sources (youtube, soundcloud, bandcamp) in parallel for best Extended DJ MIX track...
+  Selected Best Full Extended DJ Mix Candidate [SOUNDCLOUD]: https://soundcloud.com/boris-brejcha/space-x-extended-mix
+  Candidate Spectrum: 20 kHz bandwidth | Rank Score: 150
 
-🔍 Step 1: Searching sources in parallel & inspecting top audio candidates...
-  ✅ Selected Best Full DJ Mix Candidate [SOUNDCLOUD]: https://soundcloud.com/boris-brejcha/space-x-extended-mix
-  📊 Pre-inspection: 20 kHz bandwidth | Score: 150
-
-📥 Step 2: Downloading audio stream & artwork...
+Step 2: Downloading audio stream & artwork...
   Saved: Boris Brejcha - Space X (Extended Mix).m4a
 
-🔍 Step 3: Running Final DJ Audio Quality & Spectrum Inspection...
+Step 3: Running Final DJ Audio Quality & Spectrum Inspection...
   Duration  : 8:23 (Original / Extended DJ Mix)
   Bandwidth : High Fidelity (>=18.5 kHz) (20 kHz)
   Peak / RMS: 0.04 dBFS / -9.44 dBFS
   DJ Trim   : -2.6 dB
   Status    : [ PASS ]
 
-🖼️ Step 4: Enriching metadata & 1400x1400 cover art via API fallback...
+Step 4: Enriching metadata & 1400x1400 cover art via API fallback...
   Matched  : "Boris Brejcha - Space X" (Space X - Single, 2024)
   Source   : iTunes API
 
-=======================================================
-✅ TRACK ACQUISITION COMPLETE: Boris Brejcha - Space X.m4a
-=======================================================
+DONE: tracks/Boris Brejcha - Space X.m4a
 ```
 
 ### 2. LLM Agent Mode (`AGENT=1`)
@@ -156,7 +148,7 @@ Sources: youtube, soundcloud, bandcamp (Parallel Search & Quality Inspection)
 For compact, token-conservative key-value output formatted for LLM agents:
 
 ```bash
-AGENT=1 ./fetch-track "Boris Brejcha - Space X"
+AGENT=1 ./bin/fetch-track "Boris Brejcha - Space X"
 ```
 
 Sample Agent Output:
@@ -176,13 +168,13 @@ output: Boris Brejcha - Space X.m4a
 If given a direct link (e.g., a short 2-minute radio edit link), `fetch-track` extracts the track title and artist, searches SoundCloud/Bandcamp/YouTube in parallel, and selects the full 8-minute Extended Mix:
 
 ```bash
-./fetch-track "https://www.youtube.com/watch?v=short_radio_edit_id"
+./bin/fetch-track "https://www.youtube.com/watch?v=short_radio_edit_id"
 ```
 
 ### 4. Restrict Search Sources
 
 ```bash
-./fetch-track -s "youtube,soundcloud" "Boris Brejcha - Space X"
+./bin/fetch-track -s "youtube,soundcloud" "Boris Brejcha - Space X"
 ```
 
 ### 5. Stand-Alone Audio Quality Verification
@@ -191,7 +183,7 @@ Inspect any local track or remote URL without downloading:
 
 ```bash
 just verify "tracks/Boris Brejcha - Space X.m4a"
-# or: ./fetch-track verify "tracks/Boris Brejcha - Space X.m4a"
+# or: ./bin/fetch-track verify "tracks/Boris Brejcha - Space X.m4a"
 ```
 
 ---
@@ -216,6 +208,26 @@ just verify "tracks/Boris Brejcha - Space X.m4a"
 
 ---
 
+## Technical Details
+
+### Re-Encoding Chain & Audio Processing
+
+`fetch-track` preserves original source audio quality by using stream copying during tagging and in-memory decoding during quality analysis:
+
+1. **Source Stream Extraction (`yt-dlp`):**  
+   Searches and requests native M4A/AAC streams (`-f "140/bestaudio[ext=m4a]/bestaudio/best"`). Extracts the stream directly to disk as `.m4a` without transcoding.
+
+2. **In-Memory Spectral Analysis (`ffmpeg`):**  
+   Decodes a 30-second audio snippet directly to a 32-bit float PCM memory buffer (`pipe:1`) for Goertzel frequency analysis and Peak/RMS loudness measurement. Decoded PCM data is analyzed in memory and is never written to disk.
+
+3. **Lossless Tagging & Artwork Embedding (`ffmpeg`):**  
+   Embeds metadata and 1400x1400 cover art into the M4A container using audio stream copying (`-c:a copy`). The underlying AAC bitstream remains untouched, avoiding lossy re-encoding artifacts.
+
+4. **Atomic File Finalization:**  
+   Writes the tagged track to a temporary file before atomically renaming it to `<outDir>/<Artist> - <Title>.m4a` to ensure valid file state on disk.
+
+---
+
 ## Development & Recipes
 
 List all available `just` recipes:
@@ -225,12 +237,12 @@ just --list
 ```
 
 Available recipes:
-- `just build`: Compile `fetch-track` binary.
+- `just build`: Compile `fetch-track` binary to `bin/fetch-track`.
 - `just install`: Install `fetch-track` binary to `$GOPATH/bin`.
 - `just test`: Run all unit tests (`go test -v ./...`).
 - `just vet`: Run Go static analysis (`go vet ./...`).
 - `just fmt`: Format source code (`go fmt ./...`).
-- `just clean`: Remove build artifacts and temp files.
+- `just clean`: Remove build artifacts (`bin/`) and temp files.
 
 ---
 
