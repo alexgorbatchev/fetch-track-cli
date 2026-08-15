@@ -1,8 +1,8 @@
 # fetch-track
 
-`fetch-track` is a Go CLI tool for acquiring, inspecting, and enriching high-fidelity single tracks for home DJ setups (Engine DJ, Pioneer Rekordbox, Serato, Traktor).
+`fetch-track` is a Go CLI tool for acquiring, inspecting, and enriching high-fidelity single tracks for DJ collections.
 
-It searches YouTube for full/extended DJ mixes, downloads native `.m4a` audio streams, performs spectral bandwidth & loudness analysis, resolves metadata with multi-tiered API fallbacks, and embeds 1400x1400 cover art compatible with Engine DJ hardware decks and macOS Finder QuickLook previews.
+It searches YouTube for full/extended DJ mixes, downloads native `.m4a` audio streams, performs spectral bandwidth & loudness analysis, resolves metadata with multi-tiered API fallbacks, and embeds 1400x1400 cover art compatible with media players, DJ software, and file manager previews.
 
 ---
 
@@ -10,7 +10,7 @@ It searches YouTube for full/extended DJ mixes, downloads native `.m4a` audio st
 
 - **Single-Track DJ Acquisition:** Takes a single YouTube URL or track search query and automates candidate ranking, downloading, verification, and tagging in one step.
 - **Full DJ Mix Candidate Ranking:** Evaluates search candidates on YouTube and ranks full extended/original DJ mixes (4.5 to 13 minutes) while filtering out short radio edits and continuous album mixes.
-- **Engine DJ & macOS Finder Artwork Compatibility:** Saves tracks in `.m4a` container format with embedded 1400x1400 MP4 `covr` artwork, guaranteeing native artwork rendering across DJ software and hardware decks.
+- **High-Res Artwork Compatibility:** Saves tracks in `.m4a` container format with embedded 1400x1400 MP4 `covr` artwork, guaranteeing native artwork rendering across DJ software and operating systems.
 - **Spectral Bandwidth & Quality Inspection:** Analyzes audio frequency response up to 20 kHz via PCM Goertzel analysis to detect low-bitrate rips or transcoded YouTube uploads.
 - **Gain Staging & DJ Trim Calculation:** Measures Peak dBFS and RMS loudness to recommend channel trim offsets before mixing.
 - **Multi-Tiered Metadata Fallback:** Queries iTunes Search API (with 1400x1400 artwork), falling back to MusicBrainz API + Cover Art Archive, and local YouTube metadata fallback.
