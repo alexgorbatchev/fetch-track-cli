@@ -31,7 +31,7 @@ func IsAgentMode() bool {
 // Run executes the full single-track acquisition pipeline.
 func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 	if opts.OutDir == "" {
-		opts.OutDir = "tracks"
+		opts.OutDir = "."
 	}
 	if len(opts.Sources) == 0 {
 		opts.Sources = []string{"youtube", "soundcloud", "bandcamp"}
@@ -217,6 +217,7 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 	}
 
 	finalFilename := filepath.Base(finalPath)
+	outDisplayPath := filepath.Join(opts.OutDir, finalFilename)
 
 	if opts.IsAgent {
 		fmt.Printf("target: %s\n", urlOrQuery)
@@ -236,12 +237,12 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 		if metaResult != nil {
 			fmt.Printf("metadata: \"%s - %s\" (%s, %s) [%s]\n", metaResult.Artist, metaResult.Title, metaResult.Album, metaResult.ReleaseYear, metaResult.Source)
 		}
-		fmt.Printf("output: %s\n", filepath.Join(opts.OutDir, finalFilename))
+		fmt.Printf("output: %s\n", outDisplayPath)
 		return nil
 	}
 
 	fmt.Println("\n=======================================================")
-	fmt.Printf("✅ TRACK ACQUISITION COMPLETE: %s/%s\n", opts.OutDir, finalFilename)
+	fmt.Printf("✅ TRACK ACQUISITION COMPLETE: %s\n", outDisplayPath)
 	fmt.Println("=======================================================")
 
 	return nil
