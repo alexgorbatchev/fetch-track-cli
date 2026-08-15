@@ -9,7 +9,8 @@ It searches configured sources (**YouTube, SoundCloud, Bandcamp**) in parallel f
 ## Features
 
 - **Single-Track DJ Acquisition:** Takes a search query or direct URL and automates search term extraction, parallel multi-source candidate evaluation, downloading, verification, and tagging in one step.
-- **Direct URL Search Term Extraction:** If given a direct URL (e.g. a YouTube or SoundCloud link), `fetch-track` probes its metadata to extract the artist and track title, pools the direct URL with parallel search results across all configured sources, and guarantees selecting the best full Extended/Original DJ Mix track (overriding short radio edit links if a better mix version exists).
+- **LLM Agent Mode (`AGENT=1`):** When `AGENT=1` environment variable is set, outputs compact, token-conservative key-value text designed for LLM agents and fast human reading (no emojis, banner boxes, or JSON syntax overhead).
+- **Direct URL Search Term Extraction:** If given a direct URL (e.g. a YouTube or SoundCloud link), `fetch-track` probes its metadata to extract artist and track title, pools the direct URL with parallel search results across all configured sources, and guarantees selecting the best full Extended/Original DJ Mix track.
 - **Parallel Multi-Source Search:** Queries configured sources (**YouTube, SoundCloud, Bandcamp**) concurrently in parallel.
 - **Parallel Candidate Audio Inspection:** Concurrently samples audio streams and verifies track length across top candidates from all sources before selecting the winning track.
 - **Full DJ Mix Candidate Ranking:** Evaluates search candidates and ranks full extended/original DJ mixes (4.5 to 13 minutes) while filtering out short radio edits and continuous album mixes.
@@ -59,56 +60,51 @@ Search YouTube, SoundCloud, and Bandcamp in parallel:
 ./fetch-track "Boris Brejcha - Space X"
 ```
 
-Sample Output:
-```
-=======================================================
-🎧 DJ FULL MIX TRACK ACQUISITION PIPELINE
-=======================================================
-Target: Boris Brejcha - Space X
+### 2. LLM Agent Mode (`AGENT=1`)
 
-🔍 Searching sources (youtube, soundcloud, bandcamp) in parallel for best Extended DJ MIX track...
-  ✅ Selected Best Full Extended DJ Mix Candidate [SOUNDCLOUD]: https://soundcloud.com/boris-brejcha/space-x-extended-mix
-  📊 Candidate Spectrum: 20 kHz bandwidth | Rank Score: 150
+For compact, token-conservative key-value output formatted for LLM agents:
 
-📥 Step 2: Downloading audio stream & artwork...
-  Saved: Boris Brejcha - Space X (Extended Mix).m4a
-
-🔍 Step 3: Running Final DJ Audio Quality & Spectrum Inspection...
-  Duration  : 8:23 (Original / Extended DJ Mix)
-  Bandwidth : High Fidelity (>=18.5 kHz) (20 kHz)
-  Peak / RMS: 0.04 dBFS / -9.44 dBFS
-  DJ Trim   : -2.6 dB
-  Status    : [ PASS ]
-
-🖼️ Step 4: Enriching metadata & 1400x1400 cover art via API fallback...
-  Matched  : "Boris Brejcha - Space X" (Space X - Single, 2024)
-  Source   : iTunes API
-
-=======================================================
-✅ TRACK ACQUISITION COMPLETE: tracks/Boris Brejcha - Space X.m4a
-=======================================================
+```bash
+AGENT=1 ./fetch-track "Boris Brejcha - Space X"
 ```
 
-### 2. Passing a Direct URL (Probes & Overrides Short Edits for Best Mix)
+Sample Agent Output:
+```
+target: Boris Brejcha - Space X
+candidate: Boris Brejcha - Space X (Extended Mix) [soundcloud] (https://soundcloud.com/boris-brejcha/space-x-extended-mix)
+duration: 8:23 (Original / Extended DJ Mix)
+bandwidth: 20 kHz (High Fidelity (>=18.5 kHz))
+dynamics: peak=0.04 dBFS rms=-9.44 dBFS trim=-2.6 dB
+status: PASS
+metadata: "Boris Brejcha - Space X" (Space X - Single, 2024) [iTunes API]
+output: tracks/Boris Brejcha - Space X.m4a
+```
 
-If you pass a direct link (e.g., a 2-minute YouTube short edit link), `fetch-track` extracts its track title and artist, searches SoundCloud/Bandcamp/YouTube in parallel, and selects the full 8-minute Extended Mix:
+### 3. Direct URL Search
+
+If given a direct link (e.g., a short 2-minute radio edit link), `fetch-track` extracts the track title and artist, searches SoundCloud/Bandcamp/YouTube in parallel, and selects the full 8-minute Extended Mix:
 
 ```bash
 ./fetch-track "https://www.youtube.com/watch?v=short_radio_edit_id"
 ```
 
-### 3. Restrict to Specific Sources
+### 4. Restrict Search Sources
 
 ```bash
 ./fetch-track -s "youtube,soundcloud" "Boris Brejcha - Space X"
 ```
 
-### 4. Run Stand-Alone Audio Quality Verification
+### 5. Stand-Alone Audio Quality Verification
 
 Inspect any local track or remote URL without downloading:
 
 ```bash
 ./fetch-track verify "tracks/Boris Brejcha - Space X.m4a"
+```
+
+Agent verify mode:
+```bash
+AGENT=1 ./fetch-track verify "tracks/Boris Brejcha - Space X.m4a"
 ```
 
 ---
