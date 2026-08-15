@@ -1,8 +1,8 @@
 # fetch-track
 
-`fetch-track` is a Go CLI tool for acquiring, inspecting, and enriching high-fidelity single tracks for home DJ setups (Engine DJ, Pioneer Rekordbox, Serato, Traktor).
+`fetch-track` is a Go CLI tool for acquiring, inspecting, and enriching high-fidelity single tracks for DJ collections.
 
-It searches configured sources (**YouTube, SoundCloud, Bandcamp**) in parallel for full/extended DJ mixes. When given a direct URL or search query, it extracts search terms, evaluates audio candidates concurrently across all sources for frequency response and track length, downloads native audio streams, performs spectral bandwidth & loudness analysis, resolves metadata with multi-tiered API fallbacks, and embeds 1400x1400 cover art compatible with Engine DJ hardware decks and macOS Finder QuickLook previews.
+It searches configured sources (**YouTube, SoundCloud, Bandcamp**) in parallel for full/extended DJ mixes. When given a direct URL or search query, it extracts search terms, evaluates audio candidates concurrently across all sources for frequency response and track length, downloads native audio streams, performs spectral bandwidth & loudness analysis, resolves metadata with multi-tiered API fallbacks, and embeds 1400x1400 cover art compatible with DJ software, hardware decks, and file manager previews.
 
 ---
 
@@ -17,7 +17,7 @@ By default, acquired tracks are dropped directly into your current working direc
 | **Embedded Artwork** | **1400x1400** high-resolution cover art embedded as an **MP4 `covr` atom** |
 | **Embedded Tags** | Title, Artist, Album, Genre, Release Year |
 | **Filename Pattern** | `./<Artist> - <Title>.m4a`<br>*(e.g., `./Boris Brejcha - Space X.m4a` — stripped of video IDs, brackets `[...]`, or illegal characters)* |
-| **Hardware & App Support** | **Engine DJ OS**, Pioneer Rekordbox, Serato DJ, Traktor, and **macOS Finder** QuickLook previews |
+| **Compatibility** | Hardware DJ decks, Rekordbox, Serato DJ, Traktor, and **macOS Finder** QuickLook previews |
 
 ---
 
