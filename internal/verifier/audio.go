@@ -31,16 +31,25 @@ type VerificationReport struct {
 	Recommendations []string           `json:"recommendations"`
 }
 
-// IsYouTubeURL checks if input is an HTTP(S) link or YouTube domain.
-func IsYouTubeURL(input string) bool {
-	return strings.HasPrefix(input, "http://") ||
-		strings.HasPrefix(input, "https://") ||
-		strings.Contains(input, "youtube.com") ||
-		strings.Contains(input, "youtu.be")
+// IsURL checks if input is an HTTP(S) link or web domain.
+func IsURL(input string) bool {
+	lower := strings.ToLower(input)
+	return strings.HasPrefix(lower, "http://") ||
+		strings.HasPrefix(lower, "https://") ||
+		strings.Contains(lower, "youtube.com") ||
+		strings.Contains(lower, "youtu.be") ||
+		strings.Contains(lower, "soundcloud.com") ||
+		strings.Contains(lower, "bandcamp.com") ||
+		strings.Contains(lower, "mixcloud.com")
 }
 
-// FetchYouTubeMetadata fetches video info via yt-dlp dump-json.
-func FetchYouTubeMetadata(ctx context.Context, url string) (*TrackMetadata, error) {
+// IsYouTubeURL maintains backwards compatibility.
+func IsYouTubeURL(input string) bool {
+	return IsURL(input)
+}
+
+// FetchURLMetadata fetches metadata for any supported URL via yt-dlp dump-json.
+func FetchURLMetadata(ctx context.Context, url string) (*TrackMetadata, error) {
 	cmdCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
@@ -49,25 +58,25 @@ func FetchYouTubeMetadata(ctx context.Context, url string) (*TrackMetadata, erro
 		"--no-warnings",
 		"--quiet",
 		"--js-runtimes", "node",
-		"--extractor-args", "youtube:player_client=android_vr,mweb",
 		url,
 	)
 
 	var stdout bytes.Buffer
 	cmd.Stdout = &stdout
 	if err := cmd.Run(); err != nil || stdout.Len() == 0 {
-		return nil, fmt.Errorf("fetching YouTube metadata for %s: %w", url, err)
+		return nil, fmt.Errorf("fetching URL metadata for %s: %w", url, err)
 	}
 
 	var rawData struct {
 		Title    string  `json:"title"`
 		Uploader string  `json:"uploader"`
+		Artist   string  `json:"artist"`
 		Duration float64 `json:"duration"`
 		Ext      string  `json:"ext"`
 	}
 
 	if err := json.Unmarshal(stdout.Bytes(), &rawData); err != nil {
-		return nil, fmt.Errorf("parsing YouTube metadata JSON: %w", err)
+		return nil, fmt.Errorf("parsing URL metadata JSON: %w", err)
 	}
 
 	title := rawData.Title
@@ -75,6 +84,9 @@ func FetchYouTubeMetadata(ctx context.Context, url string) (*TrackMetadata, erro
 		title = "Unknown Title"
 	}
 	uploader := rawData.Uploader
+	if uploader == "" {
+		uploader = rawData.Artist
+	}
 	if uploader == "" {
 		uploader = "Unknown Uploader"
 	}
@@ -90,6 +102,11 @@ func FetchYouTubeMetadata(ctx context.Context, url string) (*TrackMetadata, erro
 		Format:          format,
 		SourceURLOrPath: url,
 	}, nil
+}
+
+// FetchYouTubeMetadata maintains backwards compatibility.
+func FetchYouTubeMetadata(ctx context.Context, url string) (*TrackMetadata, error) {
+	return FetchURLMetadata(ctx, url)
 }
 
 // FetchLocalMetadata probes a local file with ffprobe.
@@ -147,14 +164,14 @@ func FetchLocalMetadata(ctx context.Context, filePath string) (*TrackMetadata, e
 	}, nil
 }
 
-// VerifyAudioTrack analyzes a local audio file or remote YouTube URL for mix structure and bandwidth.
+// VerifyAudioTrack analyzes a local audio file or remote URL for mix structure and bandwidth.
 func VerifyAudioTrack(ctx context.Context, target string) (*VerificationReport, error) {
-	isURL := IsYouTubeURL(target)
+	isURL := IsURL(target)
 	var metadata *TrackMetadata
 	var err error
 
 	if isURL {
-		metadata, err = FetchYouTubeMetadata(ctx, target)
+		metadata, err = FetchURLMetadata(ctx, target)
 	} else {
 		metadata, err = FetchLocalMetadata(ctx, target)
 	}
@@ -176,8 +193,7 @@ func VerifyAudioTrack(ctx context.Context, target string) (*VerificationReport, 
 			"--no-warnings",
 			"--quiet",
 			"--js-runtimes", "node",
-			"--extractor-args", "youtube:player_client=android_vr,web",
-			"-f", "140/bestaudio[ext=m4a]/bestaudio",
+			"-f", "140/bestaudio[ext=m4a]/bestaudio/best",
 			"-x",
 			"-o", localAudioPath,
 			target,

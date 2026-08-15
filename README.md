@@ -2,13 +2,14 @@
 
 `fetch-track` is a Go CLI tool for acquiring, inspecting, and enriching high-fidelity single tracks for home DJ setups (Engine DJ, Pioneer Rekordbox, Serato, Traktor).
 
-It searches configured sources (**YouTube, SoundCloud, Bandcamp**) in parallel for full/extended DJ mixes, evaluates audio candidates concurrently for frequency response and track length, downloads native audio streams, performs spectral bandwidth & loudness analysis, resolves metadata with multi-tiered API fallbacks, and embeds 1400x1400 cover art compatible with Engine DJ hardware decks and macOS Finder QuickLook previews.
+It searches configured sources (**YouTube, SoundCloud, Bandcamp**) in parallel for full/extended DJ mixes. When given a direct URL or search query, it extracts search terms, evaluates audio candidates concurrently across all sources for frequency response and track length, downloads native audio streams, performs spectral bandwidth & loudness analysis, resolves metadata with multi-tiered API fallbacks, and embeds 1400x1400 cover art compatible with Engine DJ hardware decks and macOS Finder QuickLook previews.
 
 ---
 
 ## Features
 
-- **Single-Track DJ Acquisition:** Takes a single track search query or direct URL and automates parallel multi-source search, candidate audio evaluation, downloading, verification, and tagging in one step.
+- **Single-Track DJ Acquisition:** Takes a search query or direct URL and automates search term extraction, parallel multi-source candidate evaluation, downloading, verification, and tagging in one step.
+- **Direct URL Search Term Extraction:** If given a direct URL (e.g. a YouTube or SoundCloud link), `fetch-track` probes its metadata to extract the artist and track title, pools the direct URL with parallel search results across all configured sources, and guarantees selecting the best full Extended/Original DJ Mix track (overriding short radio edit links if a better mix version exists).
 - **Parallel Multi-Source Search:** Queries configured sources (**YouTube, SoundCloud, Bandcamp**) concurrently in parallel.
 - **Parallel Candidate Audio Inspection:** Concurrently samples audio streams and verifies track length across top candidates from all sources before selecting the winning track.
 - **Full DJ Mix Candidate Ranking:** Evaluates search candidates and ranks full extended/original DJ mixes (4.5 to 13 minutes) while filtering out short radio edits and continuous album mixes.
@@ -64,11 +65,10 @@ Sample Output:
 🎧 DJ FULL MIX TRACK ACQUISITION PIPELINE
 =======================================================
 Target: Boris Brejcha - Space X
-Sources: youtube, soundcloud, bandcamp (Parallel Search & Quality Inspection)
 
-🔍 Step 1: Searching sources in parallel & inspecting top audio candidates...
-  ✅ Selected Best Full DJ Mix Candidate [SOUNDCLOUD]: https://soundcloud.com/boris-brejcha/space-x-extended-mix
-  📊 Pre-inspection: 20 kHz bandwidth | Score: 150
+🔍 Searching sources (youtube, soundcloud, bandcamp) in parallel for best Extended DJ MIX track...
+  ✅ Selected Best Full Extended DJ Mix Candidate [SOUNDCLOUD]: https://soundcloud.com/boris-brejcha/space-x-extended-mix
+  📊 Candidate Spectrum: 20 kHz bandwidth | Rank Score: 150
 
 📥 Step 2: Downloading audio stream & artwork...
   Saved: Boris Brejcha - Space X (Extended Mix).m4a
@@ -89,16 +89,18 @@ Sources: youtube, soundcloud, bandcamp (Parallel Search & Quality Inspection)
 =======================================================
 ```
 
-### 2. Restrict to Specific Sources
+### 2. Passing a Direct URL (Probes & Overrides Short Edits for Best Mix)
+
+If you pass a direct link (e.g., a 2-minute YouTube short edit link), `fetch-track` extracts its track title and artist, searches SoundCloud/Bandcamp/YouTube in parallel, and selects the full 8-minute Extended Mix:
+
+```bash
+./fetch-track "https://www.youtube.com/watch?v=short_radio_edit_id"
+```
+
+### 3. Restrict to Specific Sources
 
 ```bash
 ./fetch-track -s "youtube,soundcloud" "Boris Brejcha - Space X"
-```
-
-### 3. Download a Direct URL (YouTube, SoundCloud, Bandcamp, Mixcloud)
-
-```bash
-./fetch-track "https://soundcloud.com/artist-name/track-title"
 ```
 
 ### 4. Run Stand-Alone Audio Quality Verification

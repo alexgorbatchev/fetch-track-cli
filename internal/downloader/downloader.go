@@ -170,10 +170,10 @@ func EvaluateAndInspectCandidatesInParallel(ctx context.Context, candidates []Ca
 	copy(ranked, candidates)
 	_ = RankCandidates(ranked, artist, title)
 
-	// Pick top candidate per source (up to top 4 total) for parallel audio sample inspection
+	// Pick top candidate per source (up to top 5 total) for parallel audio sample inspection
 	selectedMap := make(map[string]Candidate)
 	for _, cand := range ranked {
-		if _, exists := selectedMap[cand.Source]; !exists && len(selectedMap) < 4 {
+		if _, exists := selectedMap[cand.Source]; !exists && len(selectedMap) < 5 {
 			selectedMap[cand.Source] = cand
 		}
 	}

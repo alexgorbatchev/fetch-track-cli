@@ -29,41 +29,78 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 		opts.Sources = []string{"youtube", "soundcloud", "bandcamp"}
 	}
 
-	isURL := verifier.IsYouTubeURL(urlOrQuery)
+	isURL := verifier.IsURL(urlOrQuery)
 	targetURL := urlOrQuery
 
 	fmt.Println("\n=======================================================")
 	fmt.Println("🎧 DJ FULL MIX TRACK ACQUISITION PIPELINE")
 	fmt.Println("=======================================================")
 	fmt.Printf("Target: %s\n", urlOrQuery)
-	if !isURL {
-		fmt.Printf("Sources: %s (Parallel Search & Quality Inspection)\n", strings.Join(opts.Sources, ", "))
-	}
 
-	// Step 1: Candidate resolution if input is a search query
-	if !isURL {
-		fmt.Println("\n🔍 Step 1: Searching sources in parallel & inspecting top audio candidates...")
-		artist := ""
-		title := urlOrQuery
+	artist := ""
+	title := urlOrQuery
+	rawSearchQuery := urlOrQuery
+
+	var initialCandidates []downloader.Candidate
+
+	if isURL {
+		fmt.Println("\n🔍 Inspecting provided URL metadata & extracting track search terms...")
+		meta, err := verifier.FetchURLMetadata(ctx, urlOrQuery)
+		if err == nil && meta != nil && meta.Title != "" {
+			title = meta.Title
+			artist = meta.Uploader
+			rawSearchQuery = meta.Title
+
+			if strings.Contains(meta.Title, " - ") {
+				parts := strings.SplitN(meta.Title, " - ", 2)
+				artist = strings.TrimSpace(parts[0])
+				title = strings.TrimSpace(parts[1])
+			}
+
+			fmt.Printf("  URL Title: \"%s\" (Uploader: %s)\n", meta.Title, meta.Uploader)
+
+			// Include direct URL as candidate in pool
+			initialCandidates = append(initialCandidates, downloader.Candidate{
+				ID:         "direct_url",
+				Title:      meta.Title,
+				Duration:   meta.DurationSeconds,
+				Source:     "direct_url",
+				WebpageURL: urlOrQuery,
+			})
+		} else {
+			fmt.Printf("  ⚠️ Could not probe direct URL metadata: %v. Proceeding with URL.\n", err)
+		}
+	} else {
 		if strings.Contains(urlOrQuery, " - ") {
 			parts := strings.SplitN(urlOrQuery, " - ", 2)
 			artist = strings.TrimSpace(parts[0])
 			title = strings.TrimSpace(parts[1])
 		}
+	}
 
-		bestCandidate, err := downloader.SearchAndSelectBestCandidate(ctx, opts.Sources, artist, title, urlOrQuery)
-		if err == nil && bestCandidate != nil {
+	// ALWAYS search across configured sources in parallel for best DJ MIX track
+	fmt.Printf("\n🔍 Searching sources (%s) in parallel for best Extended DJ MIX track...\n", strings.Join(opts.Sources, ", "))
+	foundCandidates, searchErr := downloader.SearchSourcesInParallel(ctx, opts.Sources, artist, title, rawSearchQuery)
+
+	var candidatePool []downloader.Candidate
+	candidatePool = append(candidatePool, initialCandidates...)
+	if searchErr == nil {
+		candidatePool = append(candidatePool, foundCandidates...)
+	}
+
+	if len(candidatePool) > 0 {
+		bestCandidate, evalErr := downloader.EvaluateAndInspectCandidatesInParallel(ctx, candidatePool, artist, title)
+		if evalErr == nil && bestCandidate != nil {
 			targetURL = bestCandidate.WebpageURL
-			fmt.Printf("  ✅ Selected Best Full DJ Mix Candidate [%s]: %s\n", strings.ToUpper(bestCandidate.Source), targetURL)
-			if bestCandidate.BandwidthHz > 0 {
-				fmt.Printf("  📊 Pre-inspection: %d kHz bandwidth | Score: %d\n", bestCandidate.BandwidthHz/1000, bestCandidate.Score)
+			if bestCandidate.Source == "direct_url" {
+				fmt.Printf("  ✅ Selected Direct URL Candidate (already best Extended DJ Mix): %s\n", targetURL)
+			} else {
+				fmt.Printf("  ✅ Selected Best Full Extended DJ Mix Candidate [%s]: %s\n", strings.ToUpper(bestCandidate.Source), targetURL)
 			}
-		} else {
-			targetURL = fmt.Sprintf("ytsearch1:%s Extended Mix", urlOrQuery)
-			fmt.Printf("  Fallback Search Query: %s\n", targetURL)
+			if bestCandidate.BandwidthHz > 0 {
+				fmt.Printf("  📊 Candidate Spectrum: %d kHz bandwidth | Rank Score: %d\n", bestCandidate.BandwidthHz/1000, bestCandidate.Score)
+			}
 		}
-	} else {
-		fmt.Println("\n📥 Step 1: Specified URL accepted...")
 	}
 
 	// Step 2: Download audio stream
