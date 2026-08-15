@@ -5,16 +5,22 @@ import (
 	"strings"
 )
 
-// YouTubeCandidate represents a YouTube search candidate with metadata for mix ranking.
-type YouTubeCandidate struct {
-	ID       string `json:"id"`
-	Title    string `json:"title"`
-	Duration float64 `json:"duration"` // in seconds
-	Score    int    `json:"score,omitempty"`
+// Candidate represents a candidate track from any source (YouTube, SoundCloud, Bandcamp, etc.).
+type Candidate struct {
+	ID           string  `json:"id"`
+	Title        string  `json:"title"`
+	Duration     float64 `json:"duration"` // in seconds
+	Source       string  `json:"source"`   // e.g., "youtube", "soundcloud", "bandcamp"
+	WebpageURL   string  `json:"webpage_url"`
+	Score        int     `json:"score,omitempty"`
+	BandwidthHz  int     `json:"bandwidth_hz,omitempty"`
+	PeakDbFS     float64 `json:"peak_dbfs,omitempty"`
+	RMSDbFS      float64 `json:"rms_dbfs,omitempty"`
+	QualityScore int     `json:"quality_score,omitempty"`
 }
 
-// RankYouTubeCandidates scores and ranks YouTube search candidates to find the best full/extended DJ mix.
-func RankYouTubeCandidates(candidates []YouTubeCandidate, artist, title string) *YouTubeCandidate {
+// RankCandidates scores and ranks candidates across all sources to select the best full/extended DJ mix.
+func RankCandidates(candidates []Candidate, artist, title string) *Candidate {
 	if len(candidates) == 0 {
 		return nil
 	}
@@ -26,7 +32,7 @@ func RankYouTubeCandidates(candidates []YouTubeCandidate, artist, title string) 
 	}
 	cleanTitle = strings.TrimSpace(cleanTitle)
 
-	scored := make([]YouTubeCandidate, len(candidates))
+	scored := make([]Candidate, len(candidates))
 	copy(scored, candidates)
 
 	for i := range scored {
@@ -69,6 +75,11 @@ func RankYouTubeCandidates(candidates []YouTubeCandidate, artist, title string) 
 			score += 20
 		}
 
+		// 4. Source preference / Quality adjustment
+		if cand.QualityScore != 0 {
+			score += cand.QualityScore
+		}
+
 		cand.Score = score
 	}
 
@@ -78,4 +89,12 @@ func RankYouTubeCandidates(candidates []YouTubeCandidate, artist, title string) 
 
 	best := scored[0]
 	return &best
+}
+
+// Deprecated alias for backwards compatibility with earlier tests.
+type YouTubeCandidate = Candidate
+
+// Deprecated wrapper for backwards compatibility with earlier code.
+func RankYouTubeCandidates(candidates []Candidate, artist, title string) *Candidate {
+	return RankCandidates(candidates, artist, title)
 }

@@ -14,6 +14,7 @@ import (
 // Options configures the track acquisition pipeline execution.
 type Options struct {
 	OutDir       string
+	Sources      []string
 	SkipVerify   bool
 	SkipMetadata bool
 	Verbose      bool
@@ -24,6 +25,9 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 	if opts.OutDir == "" {
 		opts.OutDir = "tracks"
 	}
+	if len(opts.Sources) == 0 {
+		opts.Sources = []string{"youtube", "soundcloud", "bandcamp"}
+	}
 
 	isURL := verifier.IsYouTubeURL(urlOrQuery)
 	targetURL := urlOrQuery
@@ -32,10 +36,13 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 	fmt.Println("🎧 DJ FULL MIX TRACK ACQUISITION PIPELINE")
 	fmt.Println("=======================================================")
 	fmt.Printf("Target: %s\n", urlOrQuery)
+	if !isURL {
+		fmt.Printf("Sources: %s (Parallel Search & Quality Inspection)\n", strings.Join(opts.Sources, ", "))
+	}
 
 	// Step 1: Candidate resolution if input is a search query
 	if !isURL {
-		fmt.Println("\n🔍 Step 1: Inspecting top YouTube candidates for Full Extended DJ Mix...")
+		fmt.Println("\n🔍 Step 1: Searching sources in parallel & inspecting top audio candidates...")
 		artist := ""
 		title := urlOrQuery
 		if strings.Contains(urlOrQuery, " - ") {
@@ -44,16 +51,19 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 			title = strings.TrimSpace(parts[1])
 		}
 
-		resolvedURL, err := downloader.SearchYouTubeCandidates(ctx, artist, title, urlOrQuery)
-		if err == nil && resolvedURL != "" {
-			targetURL = resolvedURL
-			fmt.Printf("  ✅ Selected Full DJ Mix Candidate: %s\n", targetURL)
+		bestCandidate, err := downloader.SearchAndSelectBestCandidate(ctx, opts.Sources, artist, title, urlOrQuery)
+		if err == nil && bestCandidate != nil {
+			targetURL = bestCandidate.WebpageURL
+			fmt.Printf("  ✅ Selected Best Full DJ Mix Candidate [%s]: %s\n", strings.ToUpper(bestCandidate.Source), targetURL)
+			if bestCandidate.BandwidthHz > 0 {
+				fmt.Printf("  📊 Pre-inspection: %d kHz bandwidth | Score: %d\n", bestCandidate.BandwidthHz/1000, bestCandidate.Score)
+			}
 		} else {
 			targetURL = fmt.Sprintf("ytsearch1:%s Extended Mix", urlOrQuery)
 			fmt.Printf("  Fallback Search Query: %s\n", targetURL)
 		}
 	} else {
-		fmt.Println("\n📥 Step 1: Specified YouTube URL accepted...")
+		fmt.Println("\n📥 Step 1: Specified URL accepted...")
 	}
 
 	// Step 2: Download audio stream
@@ -66,10 +76,10 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 	downloadedFilename := filepath.Base(downloadedPath)
 	fmt.Printf("  Saved: %s\n", downloadedFilename)
 
-	// Step 3: Verification
+	// Step 3: Full Verification
 	var report *verifier.VerificationReport
 	if !opts.SkipVerify {
-		fmt.Println("\n🔍 Step 3: Running DJ Audio Quality & Spectrum Inspection...")
+		fmt.Println("\n🔍 Step 3: Running Final DJ Audio Quality & Spectrum Inspection...")
 		rep, err := verifier.VerifyAudioTrack(ctx, downloadedPath)
 		if err != nil {
 			fmt.Printf("  ⚠️ Audio verification notice: %v\n", err)
