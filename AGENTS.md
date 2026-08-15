@@ -1,6 +1,6 @@
 ---
 created_on: 2026-08-14 21:25
-last_modified: 2026-08-14 21:30
+last_modified: 2026-08-14 21:35
 status: current
 ---
 
@@ -45,6 +45,7 @@ just run "Boris Brejcha - Space X"
   ```
 
 ## Audio Conventions & Rules
+- **Target Audience & Disclaimer:** This tool is strictly for amateur and bedroom DJs practicing at home or playing informal sets, who are not seeking professional careers. Professional DJs must source music from legitimate commercial sources (Beatport, Bandcamp, Juno Download, iTunes, or authorized record pools).
 - **Storage Directory & M4A Format:** All acquired tracks MUST be placed in `./tracks/` as **`.m4a`** files. Output filenames MUST NOT contain YouTube IDs or brackets `[...]` (e.g. `Artist - Title.m4a`).
 - **Artwork Compatibility:** `.m4a` (MP4 container with `covr` atom) is required because it guarantees native cover art rendering across media players and file managers.
 - **API Fallback Chain for Metadata & Artwork:**
