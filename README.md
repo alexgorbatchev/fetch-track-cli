@@ -3,7 +3,7 @@
 > **⚠️ Intended Audience & Legal Disclaimer:**  
 > `fetch-track` is strictly intended for **amateur and bedroom DJs** practicing at home or playing non-commercial sets who are not seeking to become professional DJs. **Working professional DJs and commercial performers must source music from legitimate sources** (such as Beatport, Bandcamp purchases, Juno Download, iTunes, or authorized record pools).
 
-`fetch-track` is a Go CLI tool for acquiring, inspecting, and enriching high-fidelity single tracks for amateur and bedroom DJ setups (Engine DJ / Denon, Pioneer Rekordbox, Serato DJ, Traktor). It does not depend on proprietary record pools or specific DJ software—it produces clean, high-fidelity `.m4a` audio files with embedded metadata and artwork that import directly into any DJ software or hardware deck.
+`fetch-track` is a CLI tool for acquiring, inspecting, and enriching high-fidelity single tracks for amateur and bedroom DJ setups (Engine DJ / Denon, Pioneer Rekordbox, Serato DJ, Traktor). It does not depend on proprietary record pools or specific DJ software—it produces clean, high-fidelity `.m4a` audio files with embedded metadata and artwork that import directly into any DJ software or hardware deck.
 
 It searches configured sources (**YouTube, SoundCloud, Bandcamp**) in parallel for full/extended DJ mixes. When given a direct URL or search query, it extracts search terms, evaluates audio candidates concurrently across all sources for frequency response and track length, downloads native audio streams, performs spectral bandwidth & loudness analysis, resolves metadata with multi-tiered API fallbacks, and embeds 1400x1400 cover art compatible with Engine DJ hardware decks, DJ software, and macOS Finder QuickLook previews.
 
@@ -19,7 +19,7 @@ All acquired tracks are stored as `.m4a` files with clean filenames and embedded
 | **Audio Codec** | Native High-Bitrate **AAC** (up to 20 kHz spectral bandwidth) |
 | **Embedded Artwork** | **1400x1400** high-resolution cover art embedded as an **MP4 `covr` atom** |
 | **Embedded Tags** | Title, Artist, Album, Genre, Release Year |
-| **Filename Pattern** | `<outDir>/<Artist> - <Title>.m4a`<br>*(e.g., `tracks/Boris Brejcha - Space X.m4a` — stripped of video IDs, brackets `[...]`, or illegal characters)* |
+| **Filename Pattern** | `<outDir>/<Artist> - <Title>.m4a`<br>*(e.g., `./Boris Brejcha - Space X.m4a` — stripped of video IDs, brackets `[...]`, or illegal characters)* |
 | **Hardware & App Support** | **Engine DJ OS (Denon)**, Pioneer Rekordbox, Serato DJ, Traktor, and **macOS Finder** QuickLook previews |
 
 ---
@@ -147,7 +147,7 @@ Sources: youtube, soundcloud, bandcamp (Parallel Search & Quality Inspection)
   Source   : iTunes API
 
 =======================================================
-✅ TRACK ACQUISITION COMPLETE: tracks/Boris Brejcha - Space X.m4a
+✅ TRACK ACQUISITION COMPLETE: Boris Brejcha - Space X.m4a
 =======================================================
 ```
 
@@ -168,7 +168,7 @@ bandwidth: 20 kHz (High Fidelity (>=18.5 kHz))
 dynamics: peak=0.04 dBFS rms=-9.44 dBFS trim=-2.6 dB
 status: PASS
 metadata: "Boris Brejcha - Space X" (Space X - Single, 2024) [iTunes API]
-output: tracks/Boris Brejcha - Space X.m4a
+output: Boris Brejcha - Space X.m4a
 ```
 
 ### 3. Direct URL Search
