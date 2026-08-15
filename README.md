@@ -19,29 +19,35 @@ It searches YouTube for full/extended DJ mixes, downloads native `.m4a` audio st
 
 ## Prerequisites
 
-Ensure `go` (1.23+), `yt-dlp`, and `ffmpeg` / `ffprobe` are installed and available in your system `PATH`:
+Ensure `go` (1.23+), `yt-dlp`, `ffmpeg` / `ffprobe`, and optionally `just` are installed and available in your system `PATH`:
 
 ```bash
 go version
 yt-dlp --version
 ffmpeg -version
 ffprobe -version
+just --version
 ```
 
 ---
 
 ## Installation
 
-Build the binary directly with Go:
+Build the binary using `just` or `go`:
 
 ```bash
+# Using just
+just build
+
+# Or directly with Go
 go build -o fetch-track ./cmd/fetch-track
 ```
 
 Optionally install it to your Go bin directory:
 
 ```bash
-go install ./cmd/fetch-track
+just install
+# or: go install ./cmd/fetch-track
 ```
 
 ---
@@ -53,7 +59,8 @@ go install ./cmd/fetch-track
 Query a track by artist and title:
 
 ```bash
-./fetch-track "Boris Brejcha - Space X"
+just run "Boris Brejcha - Space X"
+# or: ./fetch-track "Boris Brejcha - Space X"
 ```
 
 Sample Output:
@@ -88,7 +95,7 @@ Target: Boris Brejcha - Space X
 ### 2. Download a Direct YouTube URL
 
 ```bash
-./fetch-track "https://www.youtube.com/watch?v=T4EGCbhVbnY"
+just run "https://www.youtube.com/watch?v=T4EGCbhVbnY"
 ```
 
 ### 3. Run Stand-Alone Audio Quality Verification
@@ -96,7 +103,8 @@ Target: Boris Brejcha - Space X
 Inspect any local track or YouTube link without downloading:
 
 ```bash
-./fetch-track verify "tracks/Boris Brejcha - Space X.m4a"
+just verify "tracks/Boris Brejcha - Space X.m4a"
+# or: ./fetch-track verify "tracks/Boris Brejcha - Space X.m4a"
 ```
 
 ---
@@ -119,19 +127,21 @@ Inspect any local track or YouTube link without downloading:
 
 ---
 
-## Testing
+## Development & Recipes
 
-Run unit tests for all packages:
-
-```bash
-go test -v ./...
-```
-
-Run static analysis checks:
+List all available `just` recipes:
 
 ```bash
-go vet ./...
+just --list
 ```
+
+Available recipes:
+- `just build`: Compile `fetch-track` binary.
+- `just install`: Install `fetch-track` binary to `$GOPATH/bin`.
+- `just test`: Run all unit tests (`go test -v ./...`).
+- `just vet`: Run Go static analysis (`go vet ./...`).
+- `just fmt`: Format source code (`go fmt ./...`).
+- `just clean`: Remove build artifacts and temp files.
 
 ---
 
@@ -146,7 +156,9 @@ fetch-track-cli/
 │   ├── metadata/           # iTunes / MusicBrainz client, filename sanitizer, and FFmpeg tagger
 │   ├── pipeline/           # Track acquisition workflow orchestrator
 │   └── verifier/           # PCM spectral analysis (Goertzel), mix structure, loudness checks
+├── AGENTS.md               # Workspace guidelines and rules for coding agents
+├── justfile                # Task runner recipes for build, test, run, and clean
 ├── go.mod                  # Go module definitions
 ├── .gitignore              # Ignored binaries, temp files, and tracks
-└── README.md
+└── README.md               # Overview and usage documentation
 ```
