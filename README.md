@@ -1,5 +1,7 @@
 # fetch-track
 
+> **⚠️ WARNING / DISCLAIMER:** This tool is strictly for amateur and bedroom DJs practicing at home or playing informal sets who are not seeking professional careers. Professional DJs must source their music from legitimate commercial sources (Beatport, Bandcamp, Juno Download, iTunes, or authorized record pools).
+
 `fetch-track` is a Go CLI tool for acquiring, inspecting, and enriching high-fidelity single tracks for DJ collections.
 
 It searches configured sources (**YouTube, SoundCloud, Bandcamp**) in parallel for full/extended DJ mixes. When given a direct URL or search query, it extracts search terms, evaluates audio candidates concurrently across all sources for frequency response and track length, downloads native audio streams, performs spectral bandwidth & loudness analysis, resolves metadata with multi-tiered API fallbacks, and embeds 1400x1400 cover art compatible with DJ software, hardware decks, and file manager previews.
