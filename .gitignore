@@ -1,5 +1,6 @@
 # Binaries
-fetch-track
+bin/
+/fetch-track
 fetch-track-cli
 *.exe
 *.exe~

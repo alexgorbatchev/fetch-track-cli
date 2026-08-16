@@ -4,20 +4,21 @@
 default:
     @just --list
 
-# Build the fetch-track binary in the root directory
+# Build the fetch-track binary in bin/
 build:
-    go build -o fetch-track ./cmd/fetch-track
+	mkdir -p bin
+	go build -o bin/fetch-track ./cmd/fetch-track
 
 # Install fetch-track binary to GOPATH bin directory
 install:
     go install ./cmd/fetch-track
 
 # Run single-track acquisition pipeline
-run +ARGS:
+run *ARGS:
     go run ./cmd/fetch-track {{ARGS}}
 
 # Run stand-alone DJ audio quality verification
-verify +ARGS:
+verify *ARGS:
     go run ./cmd/fetch-track verify {{ARGS}}
 
 # Run all unit tests
@@ -34,5 +35,4 @@ fmt:
 
 # Clean up build binaries and temporary files
 clean:
-    rm -f fetch-track coverage.out
-    rm -rf .tmp
+	rm -rf bin fetch-track coverage.out .tmp
