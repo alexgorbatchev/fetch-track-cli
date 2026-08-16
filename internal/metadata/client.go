@@ -239,7 +239,8 @@ func (c *Client) FetchFromMusicBrainz(ctx context.Context, query, expectedTitle 
 	coverArtURL := ""
 	if releaseID != "" {
 		coverURL := fmt.Sprintf("https://coverartarchive.org/release/%s", releaseID)
-		cReq, err := http.NewRequestWithContext(ctx, http.MethodGet, coverURL, nil)
+		cCtx, cCancel := context.WithTimeout(ctx, 3*time.Second)
+		cReq, err := http.NewRequestWithContext(cCtx, http.MethodGet, coverURL, nil)
 		if err == nil {
 			cResp, cErr := c.httpClient.Do(cReq)
 			if cErr == nil && cResp.StatusCode == http.StatusOK {
@@ -254,6 +255,7 @@ func (c *Client) FetchFromMusicBrainz(ctx context.Context, query, expectedTitle 
 				_ = cResp.Body.Close()
 			}
 		}
+		cCancel()
 	}
 
 	return &TrackMetadataResult{

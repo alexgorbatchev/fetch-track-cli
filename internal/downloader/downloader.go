@@ -91,7 +91,7 @@ func SearchSourcesInParallel(ctx context.Context, sources []string, artist, titl
 					fmt.Printf("%s: %q\n", srcName, q)
 				}
 
-				cmdCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+				cmdCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
 				defer cancel()
 
 				cmd := exec.CommandContext(cmdCtx, "yt-dlp",
@@ -234,9 +234,8 @@ func DownloadAudioStream(ctx context.Context, targetURL, outDir string, verbose 
 	}
 
 	extractorArgsList := []string{
-		"youtube:player_client=android_vr,web",
-		"youtube:player_client=android_vr,mweb",
-		"", // no extractor args fallback for non-YouTube sources (SoundCloud, Bandcamp, etc.)
+		"youtube:player_client=mweb,web",
+		"",
 	}
 
 	outPattern := filepath.Join(outDir, "%(title)s.%(ext)s")
@@ -256,9 +255,8 @@ func DownloadAudioStream(ctx context.Context, targetURL, outDir string, verbose 
 			"--no-warnings",
 			"--quiet",
 			"--js-runtimes", "node",
-			"-f", "140/bestaudio[ext=m4a]/bestaudio/best",
+			"-f", "bestaudio/best",
 			"-x",
-			"--audio-format", "m4a",
 			"--embed-metadata",
 			"--embed-thumbnail",
 			"-o", outPattern,
