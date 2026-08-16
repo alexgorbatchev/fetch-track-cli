@@ -11,6 +11,10 @@ import (
 	ffmpeg "github.com/u2takey/ffmpeg-go"
 )
 
+func init() {
+	ffmpeg.LogCompiledCommand = false
+}
+
 const TargetRMSDb = -12.0
 
 // AudioQualityReport contains frequency spectrum and dynamics analysis results.

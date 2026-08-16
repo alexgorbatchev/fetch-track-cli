@@ -172,87 +172,13 @@ func SearchSourcesInParallel(ctx context.Context, sources []string, artist, titl
 	return candidateList, nil
 }
 
-// EvaluateAndInspectCandidatesInParallel samples audio in parallel across top candidates from all sources.
+// EvaluateAndInspectCandidatesInParallel ranks candidates based on duration, title, keywords, and metadata.
 func EvaluateAndInspectCandidatesInParallel(ctx context.Context, candidates []Candidate, artist, title string, verbose ...bool) (*Candidate, error) {
-	isVerbose := len(verbose) > 0 && verbose[0]
 	if len(candidates) == 0 {
 		return nil, ErrNoCandidateFound
 	}
 
-	// Step 1: Preliminary ranking based on metadata and duration
-	ranked := make([]Candidate, len(candidates))
-	copy(ranked, candidates)
-	_ = RankCandidates(ranked, artist, title)
-
-	// Pick top 5 overall ranked candidates (excluding heavily penalized candidates with score < 0)
-	topCandidates := make([]Candidate, 0, 5)
-	for _, cand := range ranked {
-		if cand.Score < 0 {
-			continue // Skip non-matching, preview clips (< 2m), or continuous album mixes
-		}
-		topCandidates = append(topCandidates, cand)
-		if len(topCandidates) == 5 {
-			break
-		}
-	}
-
-	// Fallback if all candidates had score < 0: take top candidate
-	if len(topCandidates) == 0 && len(ranked) > 0 {
-		topCandidates = append(topCandidates, ranked[0])
-	}
-
-	// Step 2: Inspect audio samples in parallel across top candidates
-	var wg sync.WaitGroup
-	var mu sync.Mutex
-
-	for i := range topCandidates {
-		wg.Add(1)
-		go func(idx int) {
-			defer wg.Done()
-			cand := &topCandidates[idx]
-
-			sampleCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
-			defer cancel()
-
-			rep, err := verifier.VerifyAudioTrack(sampleCtx, cand.WebpageURL, isVerbose)
-			if err == nil && rep != nil {
-				qualityScore := 0
-				if rep.Quality.BandwidthRating == "High Fidelity (>=18.5 kHz)" {
-					qualityScore += 30
-				} else if rep.Quality.HasLowBandwidthWarning {
-					qualityScore -= 40
-				}
-
-				if rep.MixStructure.IsRadioEditWarning {
-					qualityScore -= 50
-				} else if rep.MixStructure.IsOriginalOrExtendedMix {
-					qualityScore += 20
-				}
-
-				mu.Lock()
-				cand.BandwidthHz = rep.Quality.EstimatedBandwidthHz
-				cand.PeakDbFS = rep.Quality.PeakDbFS
-				cand.RMSDbFS = rep.Quality.RMSDbFS
-				cand.QualityScore = qualityScore
-
-				if !isAgentMode() {
-					fmt.Printf("\r\033[Kcandidate: %q [%s] (%s) %d kHz score=%d\n",
-						cand.Title,
-						cand.Source,
-						verifier.FormatDuration(cand.Duration),
-						rep.Quality.EstimatedBandwidthHz/1000,
-						cand.Score+qualityScore,
-					)
-				}
-				mu.Unlock()
-			}
-		}(i)
-	}
-
-	wg.Wait()
-
-	// Step 3: Final re-ranking with parallel audio inspection quality scores included
-	best := RankCandidates(topCandidates, artist, title)
+	best := RankCandidates(candidates, artist, title)
 	if best == nil {
 		return nil, ErrNoCandidateFound
 	}

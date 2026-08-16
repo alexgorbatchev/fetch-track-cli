@@ -13,6 +13,10 @@ import (
 	ffmpeg "github.com/u2takey/ffmpeg-go"
 )
 
+func init() {
+	ffmpeg.LogCompiledCommand = false
+}
+
 // ApplyMetadataToLocalTrack embeds metadata and high-res cover art into the M4A file
 // using ffmpeg and renames the file to <outDir>/<SanitizedArtist - SanitizedTitle>.m4a.
 func ApplyMetadataToLocalTrack(ctx context.Context, filePath string, metadata TrackMetadataResult, outDir string, verbose ...bool) (string, error) {

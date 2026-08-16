@@ -119,7 +119,7 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 				if bestCandidate.Source == "direct_url" {
 					fmt.Printf("selected: %q [direct_url]\n", bestCandidate.Title)
 				} else {
-					fmt.Printf("selected: %q [%s] (%s) %d kHz score=%d\n", bestCandidate.Title, bestCandidate.Source, verifier.FormatDuration(bestCandidate.Duration), bestCandidate.BandwidthHz/1000, bestCandidate.Score)
+					fmt.Printf("selected: %q [%s] (%s) score=%d\n", bestCandidate.Title, bestCandidate.Source, verifier.FormatDuration(bestCandidate.Duration), bestCandidate.Score)
 				}
 			}
 		}
