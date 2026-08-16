@@ -204,7 +204,7 @@ func VerifyAudioTrack(ctx context.Context, target string, verbose ...bool) (*Ver
 
 	localAudioPath := target
 	isTempDownloadedFile := false
-	tmpDir := filepath.Join(".tmp", "fetch-track-cli-tmp")
+	tmpDir := ".tmp"
 
 	_, errStat := os.Stat(".tmp")
 	dotTmpExisted := !os.IsNotExist(errStat)
@@ -239,9 +239,8 @@ func VerifyAudioTrack(ctx context.Context, target string, verbose ...bool) (*Ver
 	defer func() {
 		if isTempDownloadedFile {
 			_ = os.Remove(localAudioPath)
-			_ = os.Remove(tmpDir)
 			if !dotTmpExisted {
-				_ = os.Remove(".tmp")
+				_ = os.Remove(tmpDir)
 			}
 		}
 	}()

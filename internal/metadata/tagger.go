@@ -32,7 +32,7 @@ func ApplyMetadataToLocalTrack(ctx context.Context, filePath string, metadata Tr
 	_, errStat := os.Stat(".tmp")
 	dotTmpExisted := !os.IsNotExist(errStat)
 
-	tmpDir := filepath.Join(".tmp", "fetch-track-cli-tmp")
+	tmpDir := ".tmp"
 	_ = os.MkdirAll(tmpDir, 0755)
 
 	var coverTempPath string

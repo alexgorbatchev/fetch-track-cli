@@ -8,6 +8,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/dj/fetch-track-cli/internal/downloader"
 )
 
 // TrackMetadataResult contains normalized track metadata and artwork URL.
@@ -41,8 +43,8 @@ func NewClient() *Client {
 }
 
 // FetchFromITunes queries the iTunes Search API for song metadata and 1400x1400 artwork.
-func (c *Client) FetchFromITunes(ctx context.Context, query string) (*TrackMetadataResult, error) {
-	apiURL := fmt.Sprintf("https://itunes.apple.com/search?term=%s&entity=song&limit=1", url.QueryEscape(query))
+func (c *Client) FetchFromITunes(ctx context.Context, query, expectedTitle string) (*TrackMetadataResult, error) {
+	apiURL := fmt.Sprintf("https://itunes.apple.com/search?term=%s&entity=song&limit=5", url.QueryEscape(query))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("creating iTunes request: %w", err)
@@ -77,7 +79,34 @@ func (c *Client) FetchFromITunes(ctx context.Context, query string) (*TrackMetad
 		return nil, fmt.Errorf("no iTunes match for %q", query)
 	}
 
-	item := data.Results[0]
+	expectedNorm := downloader.NormalizeUnicode(expectedTitle)
+	var matchedResult *struct {
+		TrackName        string `json:"trackName"`
+		ArtistName       string `json:"artistName"`
+		CollectionName   string `json:"collectionName"`
+		PrimaryGenreName string `json:"primaryGenreName"`
+		ReleaseDate      string `json:"releaseDate"`
+		ArtworkURL100    string `json:"artworkUrl100"`
+	}
+
+	for i := range data.Results {
+		item := &data.Results[i]
+		if expectedNorm == "" {
+			matchedResult = item
+			break
+		}
+		itemNorm := downloader.NormalizeUnicode(item.TrackName)
+		if strings.Contains(itemNorm, expectedNorm) || strings.Contains(expectedNorm, itemNorm) {
+			matchedResult = item
+			break
+		}
+	}
+
+	if matchedResult == nil {
+		return nil, fmt.Errorf("no iTunes track name matched expected title %q", expectedTitle)
+	}
+
+	item := *matchedResult
 	if item.TrackName == "" || item.ArtistName == "" {
 		return nil, fmt.Errorf("incomplete iTunes data for %q", query)
 	}
@@ -112,7 +141,7 @@ func (c *Client) FetchFromITunes(ctx context.Context, query string) (*TrackMetad
 }
 
 // FetchFromMusicBrainz queries MusicBrainz API and Cover Art Archive.
-func (c *Client) FetchFromMusicBrainz(ctx context.Context, query string) (*TrackMetadataResult, error) {
+func (c *Client) FetchFromMusicBrainz(ctx context.Context, query, expectedTitle string) (*TrackMetadataResult, error) {
 	apiURL := fmt.Sprintf("https://musicbrainz.org/ws/2/recording/?query=%s&fmt=json", url.QueryEscape(query))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
 	if err != nil {
@@ -152,7 +181,37 @@ func (c *Client) FetchFromMusicBrainz(ctx context.Context, query string) (*Track
 		return nil, fmt.Errorf("no MusicBrainz match for %q", query)
 	}
 
-	rec := data.Recordings[0]
+	expectedNorm := downloader.NormalizeUnicode(expectedTitle)
+	var matchedRec *struct {
+		Title        string `json:"title"`
+		ArtistCredit []struct {
+			Name string `json:"name"`
+		} `json:"artist-credit"`
+		Releases []struct {
+			ID    string `json:"id"`
+			Title string `json:"title"`
+			Date  string `json:"date"`
+		} `json:"releases"`
+	}
+
+	for i := range data.Recordings {
+		rec := &data.Recordings[i]
+		if expectedNorm == "" {
+			matchedRec = rec
+			break
+		}
+		recNorm := downloader.NormalizeUnicode(rec.Title)
+		if strings.Contains(recNorm, expectedNorm) || strings.Contains(expectedNorm, recNorm) {
+			matchedRec = rec
+			break
+		}
+	}
+
+	if matchedRec == nil {
+		return nil, fmt.Errorf("no MusicBrainz recording matched expected title %q", expectedTitle)
+	}
+
+	rec := *matchedRec
 	if rec.Title == "" {
 		return nil, fmt.Errorf("incomplete MusicBrainz recording for %q", query)
 	}
@@ -212,12 +271,17 @@ func (c *Client) FetchFromMusicBrainz(ctx context.Context, query string) (*Track
 func (c *Client) ResolveTrackMetadata(ctx context.Context, searchQuery, fallbackArtist, fallbackTitle string, verbose ...bool) TrackMetadataResult {
 	isVerbose := len(verbose) > 0 && verbose[0]
 
+	expectedTitle := fallbackTitle
+	if expectedTitle == "" {
+		expectedTitle = searchQuery
+	}
+
 	if isVerbose {
 		fmt.Printf("metadata search: %q\n", searchQuery)
 		fmt.Printf("itunes: searching\n")
 	}
 
-	if res, err := c.FetchFromITunes(ctx, searchQuery); err == nil && res.Title != "" && res.Artist != "" {
+	if res, err := c.FetchFromITunes(ctx, searchQuery, expectedTitle); err == nil && res.Title != "" && res.Artist != "" {
 		if isVerbose {
 			fmt.Printf("itunes match: %q (Album: %s, %s)\n", res.Artist+" - "+res.Title, res.Album, res.ReleaseYear)
 			if res.CoverArtURL != "" {
@@ -229,7 +293,7 @@ func (c *Client) ResolveTrackMetadata(ctx context.Context, searchQuery, fallback
 		fmt.Printf("itunes: no match\nmusicbrainz: searching\n")
 	}
 
-	if res, err := c.FetchFromMusicBrainz(ctx, searchQuery); err == nil && res.Title != "" {
+	if res, err := c.FetchFromMusicBrainz(ctx, searchQuery, expectedTitle); err == nil && res.Title != "" {
 		if isVerbose {
 			fmt.Printf("musicbrainz match: %q (Album: %s, %s)\n", res.Artist+" - "+res.Title, res.Album, res.ReleaseYear)
 			if res.CoverArtURL != "" {

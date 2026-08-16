@@ -19,7 +19,7 @@ Go CLI tool for searching, verifying, downloading, and managing high-fidelity si
 ## Setup & Environment
 - **Prerequisites:** Go 1.26+, `yt-dlp`, `ffmpeg`, `ffprobe`, `just`.
 - **Output Directory:** Master tracks are stored in `./tracks/` with clean sanitized filenames. `.m4a` is preferred when native AAC streams are available; native formats (`.mp3`, `.flac`) are preserved zero-loss when downloaded from sources like SoundCloud.
-- **Temporary Files:** Temporary file operations use `.tmp/fetch-track-cli-tmp` within the project root.
+- **Temporary Files:** Temporary file operations use `.tmp/` within the project root.
 
 ## Conventions
 - **Original & Extended Mixes First:** Prefer full-length Extended, Original, Club, or Dub Mixes (4.5 to 13 minutes) with beatmatchable intro/outro sections. Reject short radio edits (< 3.5 minutes).

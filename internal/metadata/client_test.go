@@ -5,6 +5,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -84,7 +85,7 @@ func TestFetchFromITunes(t *testing.T) {
 				}, nil
 			})
 
-			res, err := client.FetchFromITunes(context.Background(), "Space X")
+			res, err := client.FetchFromITunes(context.Background(), "Space X", "Space X")
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("FetchFromITunes error = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -145,7 +146,7 @@ func TestFetchFromMusicBrainz(t *testing.T) {
 				}, nil
 			})
 
-			res, err := client.FetchFromMusicBrainz(context.Background(), "Gopnik")
+			res, err := client.FetchFromMusicBrainz(context.Background(), "Gopnik", "Gopnik")
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("FetchFromMusicBrainz error = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -164,13 +165,13 @@ func TestFetchFromMusicBrainz(t *testing.T) {
 func TestResolveTrackMetadataFallback(t *testing.T) {
 	// Mock client that returns 404 for iTunes and successful MusicBrainz
 	client := newMockClient(func(req *http.Request) (*http.Response, error) {
-		if req.URL.Host == "itunes.apple.com" {
+		if strings.Contains(req.URL.Host, "itunes") {
 			return &http.Response{
 				StatusCode: http.StatusNotFound,
 				Body:       io.NopCloser(bytes.NewBufferString(`{}`)),
 			}, nil
 		}
-		if req.URL.Host == "musicbrainz.org" {
+		if strings.Contains(req.URL.Host, "musicbrainz") {
 			return &http.Response{
 				StatusCode: http.StatusOK,
 				Body: io.NopCloser(bytes.NewBufferString(`{
@@ -190,7 +191,7 @@ func TestResolveTrackMetadataFallback(t *testing.T) {
 		}, nil
 	})
 
-	res := client.ResolveTrackMetadata(context.Background(), "Gopnik", "Fallback Artist", "Fallback Title", true)
+	res := client.ResolveTrackMetadata(context.Background(), "Gopnik", "Fallback Artist", "Gopnik", true)
 	if res.Artist != "DJ Blyatman MB" {
 		t.Errorf("Artist = %q, want DJ Blyatman MB", res.Artist)
 	}
