@@ -5,6 +5,16 @@ import (
 	"strings"
 )
 
+const (
+	// MaxRadioEditDurationSeconds (4 minutes / 240s) is the duration threshold at or below which
+	// a track without explicit extended mix keywords is classified as a short radio edit.
+	MaxRadioEditDurationSeconds = 240.0
+
+	// MinExtendedMixDurationSeconds (5 minutes / 300s) is the duration threshold at or above which
+	// a track is classified as a full-length DJ track.
+	MinExtendedMixDurationSeconds = 300.0
+)
+
 // MixStructureReport details the track's duration and mix structure for DJ compatibility.
 type MixStructureReport struct {
 	IsRadioEditWarning      bool     `json:"isRadioEditWarning"`
@@ -47,9 +57,9 @@ func AnalyzeMixStructure(title string, durationSec float64) MixStructureReport {
 	isRadioKeywordPresent := len(detectedRadioKeywords) > 0
 	isExtendedKeywordPresent := len(detectedExtendedKeywords) > 0
 
-	isShortDuration := durationSec < 150
-	isMediumDuration := durationSec >= 150 && durationSec < 240
-	isLongDuration := durationSec >= 240
+	isShortDuration := durationSec <= MaxRadioEditDurationSeconds
+	isMediumDuration := durationSec > MaxRadioEditDurationSeconds && durationSec < MinExtendedMixDurationSeconds
+	isLongDuration := durationSec >= MinExtendedMixDurationSeconds
 
 	isRadioEditWarning := isRadioKeywordPresent || (isShortDuration && !isExtendedKeywordPresent)
 	isOriginalOrExtendedMix := isExtendedKeywordPresent || (isLongDuration && !isRadioKeywordPresent)
@@ -61,11 +71,11 @@ func AnalyzeMixStructure(title string, durationSec float64) MixStructureReport {
 	case isExtendedKeywordPresent:
 		mixTypeDescription = "Original / Extended DJ Mix"
 	case isShortDuration:
-		mixTypeDescription = "Short Snippet (< 2.5 mins)"
+		mixTypeDescription = "Radio Edit / Short Track (<= 4.0 mins)"
 	case isLongDuration:
-		mixTypeDescription = "Full Length Track (> 4.0 mins)"
+		mixTypeDescription = "Full Length Track (> 5.0 mins)"
 	case isMediumDuration:
-		mixTypeDescription = "Standard Track (2.5 - 4.0 mins)"
+		mixTypeDescription = "Standard Track (4.0 - 5.0 mins)"
 	}
 
 	var allDetected []string
@@ -78,7 +88,7 @@ func AnalyzeMixStructure(title string, durationSec float64) MixStructureReport {
 		DurationFormatted:       FormatDuration(durationSec),
 		MixTypeDescription:     mixTypeDescription,
 		DetectedKeywords:        allDetected,
-		HasIntroBeats:           durationSec > 210,
-		HasOutroBeats:           durationSec > 210,
+		HasIntroBeats:           durationSec >= MaxRadioEditDurationSeconds,
+		HasOutroBeats:           durationSec >= MaxRadioEditDurationSeconds,
 	}
 }
