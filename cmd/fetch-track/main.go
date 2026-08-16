@@ -113,7 +113,7 @@ performs spectral bandwidth & loudness analysis, and enriches files with 1400x14
 				if report.Quality.SuggestedDJGainDb > 0 {
 					gainSign = "+"
 				}
-				fmt.Printf("dynamics: peak=%.2f dBFS rms=%.2f dBFS trim=%s%.1f dB\n", report.Quality.PeakDbFS, report.Quality.RMSDbFS, gainSign, report.Quality.SuggestedDJGainDb)
+				fmt.Printf("dynamics: peak=%.2f dBFS rms=%.2f dBFS gain=%s%.1f dB\n", report.Quality.PeakDbFS, report.Quality.RMSDbFS, gainSign, report.Quality.SuggestedDJGainDb)
 				fmt.Printf("status: %s\n", report.SummaryStatus)
 				for _, rec := range report.Recommendations {
 					fmt.Printf("rec: %s\n", rec)
@@ -130,7 +130,7 @@ performs spectral bandwidth & loudness analysis, and enriches files with 1400x14
 			if report.Quality.SuggestedDJGainDb > 0 {
 				gainSign = "+"
 			}
-			fmt.Printf("DJ Trim: %s%.1f dB\n", gainSign, report.Quality.SuggestedDJGainDb)
+			fmt.Printf("Gain Offset: %s%.1f dB\n", gainSign, report.Quality.SuggestedDJGainDb)
 			fmt.Printf("Status: %s\n\n", report.SummaryStatus)
 
 			fmt.Println("Recommendations:")

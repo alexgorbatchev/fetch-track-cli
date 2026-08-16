@@ -69,7 +69,7 @@ Metadata and high-resolution cover art are fetched without commercial API keys u
 - **Full DJ Mix Candidate Ranking:** Evaluates search candidates across sources and ranks full extended/original DJ mixes (4.5 to 13 minutes) while filtering out short radio edits and continuous album mixes.
 - **Engine DJ & High-Res Artwork Compatibility:** Saves tracks in `.m4a` container format with embedded 1400x1400 MP4 `covr` artwork, guaranteeing native artwork rendering across DJ software, hardware decks, and operating systems.
 - **Spectral Bandwidth & Quality Inspection:** Analyzes audio frequency response up to 20 kHz via PCM Goertzel analysis to detect low-bitrate rips or transcoded uploads.
-- **Gain Staging & DJ Trim Calculation:** Measures Peak dBFS and RMS loudness to recommend channel trim offsets before mixing.
+- **Gain Staging & Gain Offset Calculation:** Measures Peak dBFS and RMS loudness to recommend channel gain offsets before mixing.
 - **Multi-Tiered Metadata Fallback:** Queries iTunes Search API (with 1400x1400 artwork), falling back to MusicBrainz API + Cover Art Archive, and local metadata fallback.
 
 ---
@@ -134,7 +134,7 @@ running audio quality & spectrum inspection
   Duration: 8:23 (Original / Extended DJ Mix)
   Bandwidth: High Fidelity (>=18.5 kHz) (20 kHz)
   Peak / RMS: 0.04 dBFS / -9.44 dBFS
-  DJ Trim: -2.6 dB
+  Gain Offset: -2.6 dB
   Status: PASS
 
 enriching metadata & cover art via API fallback
@@ -158,7 +158,7 @@ target: Boris Brejcha - Space X
 candidate: Boris Brejcha - Space X (Extended Mix) [soundcloud] (https://soundcloud.com/boris-brejcha/space-x-extended-mix)
 duration: 8:23 (Original / Extended DJ Mix)
 bandwidth: 20 kHz (High Fidelity (>=18.5 kHz))
-dynamics: peak=0.04 dBFS rms=-9.44 dBFS trim=-2.6 dB
+dynamics: peak=0.04 dBFS rms=-9.44 dBFS gain=-2.6 dB
 status: PASS
 metadata: "Boris Brejcha - Space X" (Space X - Single, 2024) [iTunes API]
 output: Boris Brejcha - Space X.m4a
