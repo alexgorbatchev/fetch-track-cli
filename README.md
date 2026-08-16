@@ -76,7 +76,7 @@ Metadata and high-resolution cover art are fetched without commercial API keys u
 
 ## Prerequisites
 
-Ensure `go` (1.23+), `yt-dlp`, `ffmpeg` / `ffprobe`, and optionally `just` are installed and available in your system `PATH`:
+Ensure `go` (1.26+), `yt-dlp`, `ffmpeg` / `ffprobe`, and optionally `just` are installed and available in your system `PATH`:
 
 ```bash
 go version
