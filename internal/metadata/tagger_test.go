@@ -19,7 +19,7 @@ func createDummyAudioFile(t *testing.T, dir, filename string) string {
 	return filePath
 }
 
-func TestApplyMetadataToLocalTrack_ForcesM4AFormat(t *testing.T) {
+func TestApplyMetadataToLocalTrack_ZeroTranscodePreservesNativeFormat(t *testing.T) {
 	outDir := t.TempDir()
 	srcDir := t.TempDir()
 
@@ -28,9 +28,10 @@ func TestApplyMetadataToLocalTrack_ForcesM4AFormat(t *testing.T) {
 		inputFilename string
 		meta          TrackMetadataResult
 		wantFileName  string
+		wantExt       string
 	}{
 		{
-			name:          "mp3 input converted to m4a",
+			name:          "mp3 input stream copied as mp3",
 			inputFilename: "Gopnik.mp3",
 			meta: TrackMetadataResult{
 				Title:       "Gopnik",
@@ -40,10 +41,11 @@ func TestApplyMetadataToLocalTrack_ForcesM4AFormat(t *testing.T) {
 				Genre:       "Hardbass",
 				Source:      "iTunes API",
 			},
-			wantFileName: "DJ Blyatman - Gopnik.m4a",
+			wantFileName: "DJ Blyatman - Gopnik.mp3",
+			wantExt:      ".mp3",
 		},
 		{
-			name:          "m4a input stream copied to m4a",
+			name:          "m4a input stream copied as m4a",
 			inputFilename: "Space X.m4a",
 			meta: TrackMetadataResult{
 				Title:       "Space X",
@@ -54,16 +56,18 @@ func TestApplyMetadataToLocalTrack_ForcesM4AFormat(t *testing.T) {
 				Source:      "iTunes API",
 			},
 			wantFileName: "Boris Brejcha - Space X.m4a",
+			wantExt:      ".m4a",
 		},
 		{
-			name:          "unknown artist falls back to clean filename with m4a",
+			name:          "unknown artist falls back to clean filename with native extension",
 			inputFilename: "Raw Track.mp3",
 			meta: TrackMetadataResult{
 				Title:  "Raw Track",
 				Artist: "Unknown Artist",
 				Source: "YouTube Raw Fallback",
 			},
-			wantFileName: "Raw Track.m4a",
+			wantFileName: "Raw Track.mp3",
+			wantExt:      ".mp3",
 		},
 	}
 
@@ -80,19 +84,12 @@ func TestApplyMetadataToLocalTrack_ForcesM4AFormat(t *testing.T) {
 				t.Errorf("ApplyMetadataToLocalTrack output filename = %q, want %q", filepath.Base(taggedPath), tt.wantFileName)
 			}
 
-			if !strings.HasSuffix(taggedPath, ".m4a") {
-				t.Errorf("ApplyMetadataToLocalTrack file extension is not .m4a: %q", taggedPath)
+			if !strings.HasSuffix(taggedPath, tt.wantExt) {
+				t.Errorf("ApplyMetadataToLocalTrack file extension is not %s: %q", tt.wantExt, taggedPath)
 			}
 
 			if _, err := os.Stat(taggedPath); os.IsNotExist(err) {
 				t.Errorf("tagged output file does not exist on disk: %s", taggedPath)
-			}
-
-			// Verify source non-m4a file was cleaned up if input was different from output
-			if inputPath != taggedPath {
-				if _, err := os.Stat(inputPath); !os.IsNotExist(err) {
-					t.Errorf("original input file %s was not cleaned up after format conversion", inputPath)
-				}
 			}
 		})
 	}

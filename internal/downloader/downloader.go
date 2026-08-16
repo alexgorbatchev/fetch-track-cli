@@ -342,17 +342,6 @@ func DownloadAudioStream(ctx context.Context, targetURL, outDir string, verbose 
 				for file := range currentFiles {
 					if !initialFiles[file] {
 						savedPath := filepath.Join(outDir, file)
-						if strings.ToLower(filepath.Ext(savedPath)) != ".m4a" {
-							m4aPath := strings.TrimSuffix(savedPath, filepath.Ext(savedPath)) + ".m4a"
-							convCtx, convCancel := context.WithTimeout(ctx, 2*time.Minute)
-							convCmd := exec.CommandContext(convCtx, "ffmpeg", "-v", "quiet", "-hide_banner", "-i", savedPath, "-c:a", "aac", "-b:a", "256k", "-y", m4aPath)
-							convErr := convCmd.Run()
-							convCancel()
-							if convErr == nil {
-								_ = os.Remove(savedPath)
-								savedPath = m4aPath
-							}
-						}
 						if isVerbose {
 							fmt.Printf("downloaded: %s\n", savedPath)
 						}

@@ -64,37 +64,33 @@ func ApplyMetadataToLocalTrack(ctx context.Context, filePath string, metadata Tr
 		}
 	}()
 
-	targetFilename := fmt.Sprintf("%s - %s.m4a", metadata.Artist, metadata.Title)
+	ext := strings.ToLower(filepath.Ext(filePath))
+	if ext == "" {
+		ext = ".m4a"
+	}
+
+	targetFilename := fmt.Sprintf("%s - %s%s", metadata.Artist, metadata.Title, ext)
 	if metadata.Artist == "Unknown Artist" || metadata.Artist == "" {
 		baseName := filepath.Base(filePath)
 		baseExt := filepath.Ext(baseName)
 		cleanBaseName := strings.TrimSuffix(baseName, baseExt)
-		targetFilename = cleanBaseName + ".m4a"
+		targetFilename = cleanBaseName + ext
 	}
 
 	cleanTargetFilename := SanitizeFilename(targetFilename)
 	finalPath := filepath.Join(outDir, cleanTargetFilename)
 
-	tmpTaggedPath := filepath.Join(tmpDir, fmt.Sprintf("tagged_%d.m4a", time.Now().UnixNano()))
-
-	inputExt := strings.ToLower(filepath.Ext(filePath))
+	tmpTaggedPath := filepath.Join(tmpDir, fmt.Sprintf("tagged_%d%s", time.Now().UnixNano(), ext))
 
 	args := []string{"-v", "quiet", "-hide_banner", "-i", filePath}
 	if coverTempPath != "" {
-		args = append(args, "-i", coverTempPath, "-map", "0:a:0", "-map", "1:v:0")
-		if inputExt == ".m4a" {
-			args = append(args, "-c:a", "copy")
-		} else {
-			args = append(args, "-c:a", "aac", "-b:a", "256k")
-		}
-		args = append(args, "-c:v", "copy", "-disposition:v", "attached_pic")
+		args = append(args, "-i", coverTempPath, "-map", "0:a:0", "-map", "1:v:0", "-c:a", "copy", "-c:v", "copy", "-disposition:v", "attached_pic")
 	} else {
-		args = append(args, "-map", "0:a:0")
-		if inputExt == ".m4a" {
-			args = append(args, "-c:a", "copy")
-		} else {
-			args = append(args, "-c:a", "aac", "-b:a", "256k")
-		}
+		args = append(args, "-map", "0:a:0", "-c:a", "copy")
+	}
+
+	if ext == ".mp3" {
+		args = append(args, "-id3v2_version", "3")
 	}
 
 	args = append(args,
