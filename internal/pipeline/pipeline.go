@@ -177,15 +177,15 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 		} else {
 			report = rep
 			if !opts.IsAgent {
-				fmt.Printf("  Duration  : %s (%s)\n", report.MixStructure.DurationFormatted, report.MixStructure.MixTypeDescription)
-				fmt.Printf("  Bandwidth : %s (%d kHz)\n", report.Quality.BandwidthRating, report.Quality.EstimatedBandwidthHz/1000)
+				fmt.Printf("  Duration: %s (%s)\n", report.MixStructure.DurationFormatted, report.MixStructure.MixTypeDescription)
+				fmt.Printf("  Bandwidth: %s (%d kHz)\n", report.Quality.BandwidthRating, report.Quality.EstimatedBandwidthHz/1000)
 				fmt.Printf("  Peak / RMS: %.2f dBFS / %.2f dBFS\n", report.Quality.PeakDbFS, report.Quality.RMSDbFS)
 				gainSign := ""
 				if report.Quality.SuggestedDJGainDb > 0 {
 					gainSign = "+"
 				}
-				fmt.Printf("  DJ Trim   : %s%.1f dB\n", gainSign, report.Quality.SuggestedDJGainDb)
-				fmt.Printf("  Status    : [ %s ]\n", report.SummaryStatus)
+				fmt.Printf("  DJ Trim: %s%.1f dB\n", gainSign, report.Quality.SuggestedDJGainDb)
+				fmt.Printf("  Status: %s\n", report.SummaryStatus)
 
 				if report.SummaryStatus == "FAIL" && report.MixStructure.IsRadioEditWarning {
 					fmt.Println("  WARNING: Downloaded track appears to be a short radio edit.")
@@ -223,9 +223,13 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 		metaRes := metaClient.ResolveTrackMetadata(ctx, cleanTitle, artist, title, opts.Verbose)
 		metaResult = &metaRes
 
+		if sp != nil {
+			sp.Stop()
+		}
+
 		if !opts.IsAgent {
-			fmt.Printf("  Matched  : \"%s - %s\" (%s, %s)\n", metaRes.Artist, metaRes.Title, metaRes.Album, metaRes.ReleaseYear)
-			fmt.Printf("  Source   : %s\n", metaRes.Source)
+			fmt.Printf("  Matched: \"%s - %s\" (%s, %s)\n", metaRes.Artist, metaRes.Title, metaRes.Album, metaRes.ReleaseYear)
+			fmt.Printf("  Source: %s\n", metaRes.Source)
 		}
 
 		taggedPath, tagErr := metadata.ApplyMetadataToLocalTrack(ctx, downloadedPath, metaRes, opts.OutDir, opts.Verbose)

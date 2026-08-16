@@ -51,10 +51,10 @@ func TestAnalyzeMixStructure(t *testing.T) {
 		{
 			name:                   "Short track without extended keyword",
 			title:                  "Boris Brejcha - Space X",
-			durationSec:            180,
+			durationSec:            120,
 			wantRadioEditWarning:   true,
 			wantExtendedMix:        false,
-			wantMixTypeDescription: "Short Single (< 3.5 mins)",
+			wantMixTypeDescription: "Short Snippet (< 2.5 mins)",
 		},
 	}
 

@@ -131,15 +131,15 @@ downloading audio stream & artwork (https://soundcloud.com/boris-brejcha/space-x
   Saved: Boris Brejcha - Space X (Extended Mix).m4a
 
 running audio quality & spectrum inspection
-  Duration  : 8:23 (Original / Extended DJ Mix)
-  Bandwidth : High Fidelity (>=18.5 kHz) (20 kHz)
+  Duration: 8:23 (Original / Extended DJ Mix)
+  Bandwidth: High Fidelity (>=18.5 kHz) (20 kHz)
   Peak / RMS: 0.04 dBFS / -9.44 dBFS
-  DJ Trim   : -2.6 dB
-  Status    : [ PASS ]
+  DJ Trim: -2.6 dB
+  Status: PASS
 
 enriching metadata & cover art via API fallback
-  Matched  : "Boris Brejcha - Space X" (Space X - Single, 2024)
-  Source   : iTunes API
+  Matched: "Boris Brejcha - Space X" (Space X - Single, 2024)
+  Source: iTunes API
 
 DONE: tracks/Boris Brejcha - Space X.m4a
 ```

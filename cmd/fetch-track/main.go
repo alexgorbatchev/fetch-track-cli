@@ -121,17 +121,17 @@ performs spectral bandwidth & loudness analysis, and enriches files with 1400x14
 				return nil
 			}
 
-			fmt.Printf("Title     : %s\n", report.Metadata.Title)
-			fmt.Printf("Duration  : %s (%s)\n", report.MixStructure.DurationFormatted, report.MixStructure.MixTypeDescription)
-			fmt.Printf("Bandwidth : %s (%d kHz)\n", report.Quality.BandwidthRating, report.Quality.EstimatedBandwidthHz/1000)
+			fmt.Printf("Title: %s\n", report.Metadata.Title)
+			fmt.Printf("Duration: %s (%s)\n", report.MixStructure.DurationFormatted, report.MixStructure.MixTypeDescription)
+			fmt.Printf("Bandwidth: %s (%d kHz)\n", report.Quality.BandwidthRating, report.Quality.EstimatedBandwidthHz/1000)
 			fmt.Printf("Peak / RMS: %.2f dBFS / %.2f dBFS\n", report.Quality.PeakDbFS, report.Quality.RMSDbFS)
 			fmt.Printf("Sub / Kick: %.2f dBFS / %.2f dBFS\n", report.Quality.SubBassDbFS, report.Quality.KickBassDbFS)
 			gainSign := ""
 			if report.Quality.SuggestedDJGainDb > 0 {
 				gainSign = "+"
 			}
-			fmt.Printf("DJ Trim   : %s%.1f dB\n", gainSign, report.Quality.SuggestedDJGainDb)
-			fmt.Printf("Status    : [ %s ]\n\n", report.SummaryStatus)
+			fmt.Printf("DJ Trim: %s%.1f dB\n", gainSign, report.Quality.SuggestedDJGainDb)
+			fmt.Printf("Status: %s\n\n", report.SummaryStatus)
 
 			fmt.Println("Recommendations:")
 			for _, rec := range report.Recommendations {
