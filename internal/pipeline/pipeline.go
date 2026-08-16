@@ -132,7 +132,7 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 
 	// Step 2: Download audio stream
 	if !opts.IsAgent {
-		fmt.Println("\ndownloading audio stream & artwork")
+		fmt.Printf("\ndownloading audio stream & artwork (%s)\n", targetURL)
 		if sp != nil {
 			sp.Update("working...")
 			sp.Start()

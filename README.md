@@ -127,17 +127,17 @@ candidate: "Boris Brejcha - Space X (Original Mix)" [bandcamp] (7:45) 20 kHz sco
 candidate: "Boris Brejcha - Space X (Extended Mix)" [soundcloud] (8:23) 20 kHz score=150
 selected: "Boris Brejcha - Space X (Extended Mix)" [soundcloud] (8:23) 20 kHz score=150
 
-Step 2: Downloading audio stream & artwork...
+downloading audio stream & artwork (https://soundcloud.com/boris-brejcha/space-x-extended-mix)
   Saved: Boris Brejcha - Space X (Extended Mix).m4a
 
-Step 3: Running Final DJ Audio Quality & Spectrum Inspection...
+running DJ audio quality & spectrum inspection
   Duration  : 8:23 (Original / Extended DJ Mix)
   Bandwidth : High Fidelity (>=18.5 kHz) (20 kHz)
   Peak / RMS: 0.04 dBFS / -9.44 dBFS
   DJ Trim   : -2.6 dB
   Status    : [ PASS ]
 
-Step 4: Enriching metadata & 1400x1400 cover art via API fallback...
+enriching metadata & cover art via API fallback
   Matched  : "Boris Brejcha - Space X" (Space X - Single, 2024)
   Source   : iTunes API
 
