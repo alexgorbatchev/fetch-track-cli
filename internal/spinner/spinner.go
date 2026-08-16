@@ -78,6 +78,19 @@ func (s *Spinner) Update(msg string) {
 	s.mu.Unlock()
 }
 
+// PrintAbove clears the current spinner on the bottom line, prints msg on a new line above,
+// and lets the spinner redraw on the bottom line on the next frame.
+func (s *Spinner) PrintAbove(msg string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.active && isTTY() {
+		fmt.Printf("\r\033[K%s\n", msg)
+	} else if !isTTY() {
+		fmt.Println(msg)
+	}
+}
+
 // Stop stops the spinner animation and clears the line.
 func (s *Spinner) Stop() {
 	s.mu.Lock()

@@ -10,6 +10,7 @@ func TestSpinnerLifecycle(t *testing.T) {
 	sp.Start()
 	time.Sleep(200 * time.Millisecond)
 
+	sp.PrintAbove("Candidate found above spinner")
 	sp.Update("Updating message...")
 	time.Sleep(100 * time.Millisecond)
 

@@ -199,7 +199,7 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 
 	if !opts.SkipMetadata {
 		if sp != nil {
-			sp.Update("Enriching metadata & 1400x1400 cover art via API fallback...")
+			sp.Update("working... enriching metadata & cover art via API fallback")
 			sp.Start()
 		} else if !opts.IsAgent {
 			fmt.Println("\nStep 4: Enriching metadata & 1400x1400 cover art via API fallback...")

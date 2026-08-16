@@ -146,8 +146,8 @@ func SearchSourcesInParallel(ctx context.Context, sources []string, artist, titl
 									WebpageURL: targetURL,
 								}
 								candidatesMap[key] = candObj
-								if isVerbose {
-									fmt.Printf("candidate: %q [%s] (%s)\n", cand.Title, srcName, verifier.FormatDuration(cand.Duration))
+								if !isAgentMode() {
+									fmt.Printf("\r\033[Kcandidate: %q [%s] (%s)\n", cand.Title, srcName, verifier.FormatDuration(cand.Duration))
 								}
 							}
 							mu.Unlock()

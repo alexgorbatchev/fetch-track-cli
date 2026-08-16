@@ -1,6 +1,6 @@
 ---
 created_on: 2026-08-14 21:25
-last_modified: 2026-08-14 23:35
+last_modified: 2026-08-16 08:50
 status: current
 ---
 
@@ -25,7 +25,7 @@ Go CLI tool for searching, verifying, downloading, and managing high-fidelity si
 - **Original & Extended Mixes First:** Prefer full-length Extended, Original, Club, or Dub Mixes (4.5 to 13 minutes) with beatmatchable intro/outro sections. Reject short radio edits (< 3.5 minutes).
 - **Zero-Transcode Policy:** Never lossily re-encode MP3, OPUS, or FLAC streams to AAC. Prioritize audio quality at all times. Always use `-c:a copy` during metadata tagging to preserve the original bitstream byte-for-byte.
 - **Filename Sanitization:** Clean output filenames (`<outDir>/<Artist> - <Title>.<ext>`). Stripped of YouTube IDs or brackets `[...]`.
-- **Unicode & Accent Matching:** Title and artist matching uses `golang.org/x/text` NFD decomposition and non-spacing combining mark stripping (`unicode.Mn`) for accent-insensitive matching across Unicode alphabets (`ë`, `ё`, `ö`, `é`, `ñ`).
+- **Output Formatting:** All CLI output must be plain text without emojis across all modes and logs. In interactive non-AGENT mode, a bottom-line braille terminal spinner (`⠏ working... <action>`) indicates active background tasks while candidate results print above it in real time as they arrive (`PrintAbove`).
 - **Metadata Fallback Chain:**
   1. iTunes Search API (1400x1400 artwork)
   2. MusicBrainz API + Cover Art Archive
