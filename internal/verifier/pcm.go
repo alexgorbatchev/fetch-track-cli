@@ -6,8 +6,9 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
-	"os/exec"
 	"time"
+
+	ffmpeg "github.com/u2takey/ffmpeg-go"
 )
 
 const TargetRMSDb = -12.0
@@ -57,21 +58,23 @@ func AnalyzePCMAudio(ctx context.Context, filePath string, durationSec float64) 
 		startTime = "0"
 	}
 
-	cmd := exec.CommandContext(cmdCtx, "ffmpeg",
-		"-v", "quiet",
-		"-hide_banner",
-		"-ss", startTime,
-		"-i", filePath,
-		"-t", "30",
-		"-f", "f32le",
-		"-ac", "1",
-		"-ar", "48000",
-		"pipe:1",
-	)
-
 	var pcmBuf bytes.Buffer
-	cmd.Stdout = &pcmBuf
-	if err := cmd.Run(); err != nil || pcmBuf.Len() == 0 {
+	err := ffmpeg.OutputContext(cmdCtx, []*ffmpeg.Stream{
+		ffmpeg.Input(filePath, ffmpeg.KwArgs{
+			"ss":          startTime,
+			"v":           "quiet",
+			"hide_banner": "",
+		}),
+	}, "pipe:1", ffmpeg.KwArgs{
+		"t":  "30",
+		"f":  "f32le",
+		"ac": "1",
+		"ar": "48000",
+	}).
+		WithOutput(&pcmBuf).
+		Run()
+
+	if err != nil || pcmBuf.Len() == 0 {
 		return nil, fmt.Errorf("ffmpeg PCM extraction failed for %s: %w", filePath, err)
 	}
 

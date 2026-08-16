@@ -6,10 +6,11 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
+
+	ffmpeg "github.com/u2takey/ffmpeg-go"
 )
 
 // ApplyMetadataToLocalTrack embeds metadata and high-res cover art into the M4A file
@@ -82,34 +83,49 @@ func ApplyMetadataToLocalTrack(ctx context.Context, filePath string, metadata Tr
 
 	tmpTaggedPath := filepath.Join(tmpDir, fmt.Sprintf("tagged_%d%s", time.Now().UnixNano(), ext))
 
-	args := []string{"-v", "quiet", "-hide_banner", "-i", filePath}
-	if coverTempPath != "" {
-		args = append(args, "-i", coverTempPath, "-map", "0:a:0", "-map", "1:v:0", "-c:a", "copy", "-c:v", "copy", "-disposition:v", "attached_pic")
-	} else {
-		args = append(args, "-map", "0:a:0", "-c:a", "copy")
+	kwArgs := ffmpeg.KwArgs{
+		"v":           "quiet",
+		"hide_banner": "",
+		"y":           "",
+		"metadata": []string{
+			fmt.Sprintf("title=%s", metadata.Title),
+			fmt.Sprintf("artist=%s", metadata.Artist),
+			fmt.Sprintf("album=%s", metadata.Album),
+			fmt.Sprintf("genre=%s", metadata.Genre),
+			fmt.Sprintf("date=%s", metadata.ReleaseYear),
+		},
 	}
 
 	if ext == ".mp3" {
-		args = append(args, "-id3v2_version", "3")
+		kwArgs["id3v2_version"] = "3"
 	}
 
-	args = append(args,
-		"-metadata", fmt.Sprintf("title=%s", metadata.Title),
-		"-metadata", fmt.Sprintf("artist=%s", metadata.Artist),
-		"-metadata", fmt.Sprintf("album=%s", metadata.Album),
-		"-metadata", fmt.Sprintf("genre=%s", metadata.Genre),
-		"-metadata", fmt.Sprintf("date=%s", metadata.ReleaseYear),
-		"-y",
-		tmpTaggedPath,
-	)
-
 	cmdCtx, cancel := context.WithTimeout(ctx, 1*time.Minute)
-	cmd := exec.CommandContext(cmdCtx, "ffmpeg", args...)
+	defer cancel()
+
 	if isVerbose {
 		fmt.Printf("ffmpeg: embedding tags + covr\n")
 	}
-	err := cmd.Run()
-	cancel()
+
+	var err error
+	if coverTempPath != "" {
+		audioStream := ffmpeg.Input(filePath)
+		coverStream := ffmpeg.Input(coverTempPath)
+
+		kwArgs["map"] = []string{"0:a:0", "1:v:0"}
+		kwArgs["c:a"] = "copy"
+		kwArgs["c:v"] = "copy"
+		kwArgs["disposition:v"] = "attached_pic"
+
+		err = ffmpeg.OutputContext(cmdCtx, []*ffmpeg.Stream{audioStream, coverStream}, tmpTaggedPath, kwArgs).Run()
+	} else {
+		audioStream := ffmpeg.Input(filePath)
+
+		kwArgs["map"] = "0:a:0"
+		kwArgs["c:a"] = "copy"
+
+		err = ffmpeg.OutputContext(cmdCtx, []*ffmpeg.Stream{audioStream}, tmpTaggedPath, kwArgs).Run()
+	}
 
 	if err != nil {
 		_ = os.Remove(tmpTaggedPath)
