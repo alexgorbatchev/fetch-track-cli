@@ -69,104 +69,94 @@ func SearchSourcesInParallel(ctx context.Context, sources []string, artist, titl
 
 		prefix := MapSourceSearchPrefix(source)
 
-		var queries []string
+		q := rawQuery
 		if artist != "" && cleanTitle != "" {
-			queries = []string{
-				fmt.Sprintf("%s %s", artist, cleanTitle),
-				fmt.Sprintf("%s %s Extended Mix", artist, cleanTitle),
-			}
-		} else {
-			queries = []string{
-				rawQuery,
-				fmt.Sprintf("%s Extended Mix", rawQuery),
-			}
+			q = fmt.Sprintf("%s %s", artist, cleanTitle)
 		}
 
-		for _, query := range queries {
-			wg.Add(1)
-			go func(srcName, searchPrefix, q string) {
-				defer wg.Done()
+		wg.Add(1)
+		go func(srcName, searchPrefix, queryStr string) {
+			defer wg.Done()
 
-				if isVerbose {
-					fmt.Printf("%s: %q\n", srcName, q)
+			if isVerbose {
+				fmt.Printf("%s: %q\n", srcName, queryStr)
+			}
+
+			cmdCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
+			defer cancel()
+
+			cmd := exec.CommandContext(cmdCtx, "yt-dlp",
+				"--flat-playlist",
+				"--dump-json",
+				"--no-warnings",
+				"--quiet",
+				"--js-runtimes", "node",
+				fmt.Sprintf("%s:%s", searchPrefix, queryStr),
+			)
+
+			var stdout bytes.Buffer
+			cmd.Stdout = &stdout
+			_ = cmd.Run() // ignore individual query errors
+
+			scanner := bufio.NewScanner(&stdout)
+			for scanner.Scan() {
+				line := scanner.Text()
+				if strings.TrimSpace(line) == "" {
+					continue
 				}
 
-				cmdCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
-				defer cancel()
+				var cand struct {
+					ID         string  `json:"id"`
+					Title      string  `json:"title"`
+					Duration   float64 `json:"duration"`
+					WebpageURL string  `json:"webpage_url"`
+					URL        string  `json:"url"`
+				}
 
-				cmd := exec.CommandContext(cmdCtx, "yt-dlp",
-					"--flat-playlist",
-					"--dump-json",
-					"--no-warnings",
-					"--quiet",
-					"--js-runtimes", "node",
-					fmt.Sprintf("%s:%s", searchPrefix, q),
-				)
+				if err := json.Unmarshal([]byte(line), &cand); err == nil && cand.Title != "" && cand.Duration > 0 {
+					// Filter out irrelevant search hits, short snippets (< 60s), and continuous album mixes (> 900s)
+					candNorm := NormalizeUnicode(cand.Title)
+					titleNorm := NormalizeUnicode(cleanTitle)
 
-				var stdout bytes.Buffer
-				cmd.Stdout = &stdout
-				_ = cmd.Run() // ignore individual query errors
+					titleMatch := titleNorm == "" || strings.Contains(candNorm, titleNorm) || fuzzy.MatchFold(titleNorm, candNorm)
 
-				scanner := bufio.NewScanner(&stdout)
-				for scanner.Scan() {
-					line := scanner.Text()
-					if strings.TrimSpace(line) == "" {
-						continue
+					if !titleMatch || cand.Duration < 60 || cand.Duration > 900 {
+						continue // Discard garbage search candidate
 					}
 
-					var cand struct {
-						ID         string  `json:"id"`
-						Title      string  `json:"title"`
-						Duration   float64 `json:"duration"`
-						WebpageURL string  `json:"webpage_url"`
-						URL        string  `json:"url"`
+					targetURL := cand.WebpageURL
+					if targetURL == "" {
+						targetURL = cand.URL
+					}
+					if targetURL == "" && cand.ID != "" {
+						if srcName == "youtube" {
+							targetURL = fmt.Sprintf("https://www.youtube.com/watch?v=%s", cand.ID)
+						} else {
+							targetURL = cand.ID
+						}
 					}
 
-					if err := json.Unmarshal([]byte(line), &cand); err == nil && cand.Title != "" && cand.Duration > 0 {
-						// Filter out irrelevant search hits, short snippets (< 60s), and continuous album mixes (> 900s)
-						candNorm := NormalizeUnicode(cand.Title)
-						titleNorm := NormalizeUnicode(cleanTitle)
-
-						titleMatch := titleNorm == "" || strings.Contains(candNorm, titleNorm) || fuzzy.MatchFold(titleNorm, candNorm)
-
-						if !titleMatch || cand.Duration < 60 || cand.Duration > 900 {
-							continue // Discard garbage search candidate
-						}
-
-						targetURL := cand.WebpageURL
-						if targetURL == "" {
-							targetURL = cand.URL
-						}
-						if targetURL == "" && cand.ID != "" {
-							if srcName == "youtube" {
-								targetURL = fmt.Sprintf("https://www.youtube.com/watch?v=%s", cand.ID)
-							} else {
-								targetURL = cand.ID
+					if targetURL != "" {
+						key := fmt.Sprintf("%s:%s", srcName, targetURL)
+						mu.Lock()
+						if _, exists := candidatesMap[key]; !exists {
+							candObj := Candidate{
+								ID:         cand.ID,
+								Title:      cand.Title,
+								Duration:   cand.Duration,
+								Source:     srcName,
+								WebpageURL: targetURL,
+							}
+							candidatesMap[key] = candObj
+							if !isAgentMode() {
+								fmt.Printf("\r\033[Kcandidate: %q [%s %s]\n", cand.Title, srcName, verifier.FormatDuration(cand.Duration))
 							}
 						}
-
-						if targetURL != "" {
-							key := fmt.Sprintf("%s:%s", srcName, targetURL)
-							mu.Lock()
-							if _, exists := candidatesMap[key]; !exists {
-								candObj := Candidate{
-									ID:         cand.ID,
-									Title:      cand.Title,
-									Duration:   cand.Duration,
-									Source:     srcName,
-									WebpageURL: targetURL,
-								}
-								candidatesMap[key] = candObj
-								if !isAgentMode() {
-									fmt.Printf("\r\033[Kcandidate: %q [%s %s]\n", cand.Title, srcName, verifier.FormatDuration(cand.Duration))
-								}
-							}
-							mu.Unlock()
-						}
+						mu.Unlock()
 					}
 				}
-			}(source, prefix, query)
-		}
+			}
+		}(source, prefix, q)
 	}
 
 	wg.Wait()
