@@ -158,7 +158,7 @@ func SearchSourcesInParallel(ctx context.Context, sources []string, artist, titl
 								}
 								candidatesMap[key] = candObj
 								if !isAgentMode() {
-									fmt.Printf("\r\033[Kcandidate: %q [%s] (%s)\n", cand.Title, srcName, verifier.FormatDuration(cand.Duration))
+									fmt.Printf("\r\033[Kcandidate: %q [%s %s]\n", cand.Title, srcName, verifier.FormatDuration(cand.Duration))
 								}
 							}
 							mu.Unlock()

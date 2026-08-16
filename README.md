@@ -122,15 +122,15 @@ just run "Boris Brejcha - Space X"
 
 Sample Output:
 ```
-candidate: "Boris Brejcha - Space X (Radio Edit)" [youtube] (3:15) 18 kHz score=20
-candidate: "Boris Brejcha - Space X (Original Mix)" [bandcamp] (7:45) 20 kHz score=120
-candidate: "Boris Brejcha - Space X (Extended Mix)" [soundcloud] (8:23) 20 kHz score=150
-selected: "Boris Brejcha - Space X (Extended Mix)" [soundcloud] (8:23) 20 kHz score=150
+candidate: "Boris Brejcha - Space X (Radio Edit)" [youtube 3:15] 18 kHz score=20
+candidate: "Boris Brejcha - Space X (Original Mix)" [bandcamp 7:45] 20 kHz score=120
+candidate: "Boris Brejcha - Space X (Extended Mix)" [soundcloud 8:23] 20 kHz score=150
+selected: "Boris Brejcha - Space X (Extended Mix)" [soundcloud 8:23] 20 kHz score=150
 
 downloading audio stream & artwork (https://soundcloud.com/boris-brejcha/space-x-extended-mix)
   Saved: Boris Brejcha - Space X (Extended Mix).m4a
 
-running DJ audio quality & spectrum inspection
+running audio quality & spectrum inspection
   Duration  : 8:23 (Original / Extended DJ Mix)
   Bandwidth : High Fidelity (>=18.5 kHz) (20 kHz)
   Peak / RMS: 0.04 dBFS / -9.44 dBFS

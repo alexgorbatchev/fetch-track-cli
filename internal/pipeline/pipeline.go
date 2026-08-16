@@ -120,7 +120,7 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 				if bestCandidate.Source == "direct_url" {
 					fmt.Printf("selected: %q [direct_url]\n", bestCandidate.Title)
 				} else {
-					fmt.Printf("selected: %q [%s] (%s) score=%d\n", bestCandidate.Title, bestCandidate.Source, verifier.FormatDuration(bestCandidate.Duration), bestCandidate.Score)
+					fmt.Printf("selected: %q [%s %s] score=%d\n", bestCandidate.Title, bestCandidate.Source, verifier.FormatDuration(bestCandidate.Duration), bestCandidate.Score)
 				}
 			}
 		}
@@ -159,7 +159,7 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 	var report *verifier.VerificationReport
 	if !opts.SkipVerify {
 		if !opts.IsAgent {
-			fmt.Println("\nrunning DJ audio quality & spectrum inspection")
+			fmt.Println("\nrunning audio quality & spectrum inspection")
 			if sp != nil {
 				sp.Update("working...")
 				sp.Start()

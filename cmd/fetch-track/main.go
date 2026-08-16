@@ -87,10 +87,10 @@ performs spectral bandwidth & loudness analysis, and enriches files with 1400x14
 
 			var sp *spinner.Spinner
 			if !isAgent && !verbose {
-				sp = spinner.New(fmt.Sprintf("Running DJ Audio Quality Verification on %s...", target))
+				sp = spinner.New(fmt.Sprintf("Running Audio Quality Verification on %s...", target))
 				sp.Start()
 			} else if !isAgent {
-				fmt.Printf("Running DJ Audio Quality Verification on: %s\n\n", target)
+				fmt.Printf("Running Audio Quality Verification on: %s\n\n", target)
 			}
 
 			report, err := verifier.VerifyAudioTrack(cmd.Context(), target, verbose)
