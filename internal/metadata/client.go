@@ -209,13 +209,36 @@ func (c *Client) FetchFromMusicBrainz(ctx context.Context, query string) (*Track
 }
 
 // ResolveTrackMetadata performs iTunes -> MusicBrainz -> YouTube Fallback resolution chain.
-func (c *Client) ResolveTrackMetadata(ctx context.Context, searchQuery, fallbackArtist, fallbackTitle string) TrackMetadataResult {
+func (c *Client) ResolveTrackMetadata(ctx context.Context, searchQuery, fallbackArtist, fallbackTitle string, verbose ...bool) TrackMetadataResult {
+	isVerbose := len(verbose) > 0 && verbose[0]
+
+	if isVerbose {
+		fmt.Printf("metadata search: %q\n", searchQuery)
+		fmt.Printf("itunes: searching\n")
+	}
+
 	if res, err := c.FetchFromITunes(ctx, searchQuery); err == nil && res.Title != "" && res.Artist != "" {
+		if isVerbose {
+			fmt.Printf("itunes match: %q (Album: %s, %s)\n", res.Artist+" - "+res.Title, res.Album, res.ReleaseYear)
+			if res.CoverArtURL != "" {
+				fmt.Printf("itunes artwork: %s\n", res.CoverArtURL)
+			}
+		}
 		return *res
+	} else if isVerbose {
+		fmt.Printf("itunes: no match\nmusicbrainz: searching\n")
 	}
 
 	if res, err := c.FetchFromMusicBrainz(ctx, searchQuery); err == nil && res.Title != "" {
+		if isVerbose {
+			fmt.Printf("musicbrainz match: %q (Album: %s, %s)\n", res.Artist+" - "+res.Title, res.Album, res.ReleaseYear)
+			if res.CoverArtURL != "" {
+				fmt.Printf("coverart archive: %s\n", res.CoverArtURL)
+			}
+		}
 		return *res
+	} else if isVerbose {
+		fmt.Printf("musicbrainz: no match\nmetadata fallback: youtube raw\n")
 	}
 
 	artist := fallbackArtist

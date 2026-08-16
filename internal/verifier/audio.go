@@ -165,10 +165,15 @@ func FetchLocalMetadata(ctx context.Context, filePath string) (*TrackMetadata, e
 }
 
 // VerifyAudioTrack analyzes a local audio file or remote URL for mix structure and bandwidth.
-func VerifyAudioTrack(ctx context.Context, target string) (*VerificationReport, error) {
+func VerifyAudioTrack(ctx context.Context, target string, verbose ...bool) (*VerificationReport, error) {
+	isVerbose := len(verbose) > 0 && verbose[0]
 	isURL := IsURL(target)
 	var metadata *TrackMetadata
 	var err error
+
+	if isVerbose {
+		fmt.Printf("verify: %s\n", target)
+	}
 
 	if isURL {
 		metadata, err = FetchURLMetadata(ctx, target)
@@ -179,14 +184,39 @@ func VerifyAudioTrack(ctx context.Context, target string) (*VerificationReport, 
 		return nil, fmt.Errorf("fetching metadata for %s: %w", target, err)
 	}
 
+	if isVerbose && metadata != nil {
+		sourceLabel := "file"
+		if isURL {
+			lower := strings.ToLower(target)
+			switch {
+			case strings.Contains(lower, "soundcloud.com"):
+				sourceLabel = "soundcloud"
+			case strings.Contains(lower, "youtube.com"), strings.Contains(lower, "youtu.be"):
+				sourceLabel = "youtube"
+			case strings.Contains(lower, "bandcamp.com"):
+				sourceLabel = "bandcamp"
+			default:
+				sourceLabel = "url"
+			}
+		}
+		fmt.Printf("probed: %q [%s] (%s)\n", metadata.Title, sourceLabel, FormatDuration(metadata.DurationSeconds))
+	}
+
 	localAudioPath := target
 	isTempDownloadedFile := false
+	tmpDir := filepath.Join(".tmp", "fetch-track-cli-tmp")
+
+	_, errStat := os.Stat(".tmp")
+	dotTmpExisted := !os.IsNotExist(errStat)
 
 	if isURL {
-		tmpDir := filepath.Join(os.TempDir(), "fetch-track-cli-tmp")
 		_ = os.MkdirAll(tmpDir, 0755)
 		localAudioPath = filepath.Join(tmpDir, fmt.Sprintf("verify_%d.m4a", time.Now().UnixNano()))
 		isTempDownloadedFile = true
+
+		if isVerbose {
+			fmt.Printf("sample download: %s\n", localAudioPath)
+		}
 
 		dlCtx, cancel := context.WithTimeout(ctx, 3*time.Minute)
 		cmd := exec.CommandContext(dlCtx, "yt-dlp",
@@ -195,6 +225,7 @@ func VerifyAudioTrack(ctx context.Context, target string) (*VerificationReport, 
 			"--js-runtimes", "node",
 			"-f", "140/bestaudio[ext=m4a]/bestaudio/best",
 			"-x",
+			"--audio-format", "m4a",
 			"-o", localAudioPath,
 			target,
 		)
@@ -208,8 +239,16 @@ func VerifyAudioTrack(ctx context.Context, target string) (*VerificationReport, 
 	defer func() {
 		if isTempDownloadedFile {
 			_ = os.Remove(localAudioPath)
+			_ = os.Remove(tmpDir)
+			if !dotTmpExisted {
+				_ = os.Remove(".tmp")
+			}
 		}
 	}()
+
+	if isVerbose {
+		fmt.Printf("analyzing pcm: goertzel + dynamics\n")
+	}
 
 	mixStructure := AnalyzeMixStructure(metadata.Title, metadata.DurationSeconds)
 	pcmReport, err := AnalyzePCMAudio(ctx, localAudioPath, metadata.DurationSeconds)
@@ -222,15 +261,15 @@ func VerifyAudioTrack(ctx context.Context, target string) (*VerificationReport, 
 
 	var recommendations []string
 	if mixStructure.IsRadioEditWarning {
-		recommendations = append(recommendations, "⚠️ RADIO EDIT WARNING: This track appears to be a short radio edit.")
+		recommendations = append(recommendations, "RADIO EDIT WARNING: This track appears to be a short radio edit.")
 	} else {
-		recommendations = append(recommendations, "✅ MIX LENGTH: Track duration and mix structure are suitable for DJ mixing.")
+		recommendations = append(recommendations, "MIX LENGTH: Track duration and mix structure are suitable for DJ mixing.")
 	}
 
 	if pcmReport.HasLowBandwidthWarning {
-		recommendations = append(recommendations, "⚠️ LOW BANDWIDTH: High frequencies roll off below 16 kHz.")
+		recommendations = append(recommendations, "LOW BANDWIDTH: High frequencies roll off below 16 kHz.")
 	} else {
-		recommendations = append(recommendations, fmt.Sprintf("✅ AUDIO BANDWIDTH: Clean frequency response (%s).", pcmReport.BandwidthRating))
+		recommendations = append(recommendations, fmt.Sprintf("AUDIO BANDWIDTH: Clean frequency response (%s).", pcmReport.BandwidthRating))
 	}
 
 	summaryStatus := "PASS"

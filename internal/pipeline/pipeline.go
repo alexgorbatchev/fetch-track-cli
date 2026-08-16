@@ -9,6 +9,7 @@ import (
 
 	"github.com/dj/fetch-track-cli/internal/downloader"
 	"github.com/dj/fetch-track-cli/internal/metadata"
+	"github.com/dj/fetch-track-cli/internal/spinner"
 	"github.com/dj/fetch-track-cli/internal/verifier"
 )
 
@@ -43,13 +44,6 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 	isURL := verifier.IsURL(urlOrQuery)
 	targetURL := urlOrQuery
 
-	if !opts.IsAgent {
-		fmt.Println("\n=======================================================")
-		fmt.Println("🎧 DJ FULL MIX TRACK ACQUISITION PIPELINE")
-		fmt.Println("=======================================================")
-		fmt.Printf("Target: %s\n", urlOrQuery)
-	}
-
 	artist := ""
 	title := urlOrQuery
 	rawSearchQuery := urlOrQuery
@@ -58,7 +52,7 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 
 	if isURL {
 		if !opts.IsAgent {
-			fmt.Println("\n🔍 Inspecting provided URL metadata & extracting track search terms...")
+			fmt.Println("\nInspecting provided URL metadata & extracting track search terms...")
 		}
 		meta, err := verifier.FetchURLMetadata(ctx, urlOrQuery)
 		if err == nil && meta != nil && meta.Title != "" {
@@ -85,7 +79,7 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 				WebpageURL: urlOrQuery,
 			})
 		} else if !opts.IsAgent {
-			fmt.Printf("  ⚠️ Could not probe direct URL metadata: %v. Proceeding with URL.\n", err)
+			fmt.Printf("  Warning: Could not probe direct URL metadata: %v. Proceeding with URL.\n", err)
 		}
 	} else {
 		if strings.Contains(urlOrQuery, " - ") {
@@ -95,10 +89,15 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 		}
 	}
 
-	if !opts.IsAgent {
-		fmt.Printf("\n🔍 Searching sources (%s) in parallel for best Extended DJ MIX track...\n", strings.Join(opts.Sources, ", "))
+	var sp *spinner.Spinner
+	if !opts.IsAgent && !opts.Verbose {
+		sp = spinner.New(fmt.Sprintf("searching sources (%s) for best extended mix...", strings.Join(opts.Sources, ", ")))
+		sp.Start()
+	} else if !opts.IsAgent {
+		fmt.Printf("\nSearching sources (%s) in parallel for best extended mix...\n", strings.Join(opts.Sources, ", "))
 	}
-	foundCandidates, searchErr := downloader.SearchSourcesInParallel(ctx, opts.Sources, artist, title, rawSearchQuery)
+
+	foundCandidates, searchErr := downloader.SearchSourcesInParallel(ctx, opts.Sources, artist, title, rawSearchQuery, opts.Verbose)
 
 	var candidatePool []downloader.Candidate
 	candidatePool = append(candidatePool, initialCandidates...)
@@ -109,28 +108,39 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 	var selectedCandidate *downloader.Candidate
 
 	if len(candidatePool) > 0 {
-		bestCandidate, evalErr := downloader.EvaluateAndInspectCandidatesInParallel(ctx, candidatePool, artist, title)
+		bestCandidate, evalErr := downloader.EvaluateAndInspectCandidatesInParallel(ctx, candidatePool, artist, title, opts.Verbose)
 		if evalErr == nil && bestCandidate != nil {
 			selectedCandidate = bestCandidate
 			targetURL = bestCandidate.WebpageURL
+			if sp != nil {
+				sp.Stop()
+			}
 			if !opts.IsAgent {
 				if bestCandidate.Source == "direct_url" {
-					fmt.Printf("  ✅ Selected Direct URL Candidate (already best Extended DJ Mix): %s\n", targetURL)
+					fmt.Printf("selected: %q [direct_url]\n", bestCandidate.Title)
 				} else {
-					fmt.Printf("  ✅ Selected Best Full Extended DJ Mix Candidate [%s]: %s\n", strings.ToUpper(bestCandidate.Source), targetURL)
-				}
-				if bestCandidate.BandwidthHz > 0 {
-					fmt.Printf("  📊 Candidate Spectrum: %d kHz bandwidth | Rank Score: %d\n", bestCandidate.BandwidthHz/1000, bestCandidate.Score)
+					fmt.Printf("selected: %q [%s] (%s) %d kHz score=%d\n", bestCandidate.Title, bestCandidate.Source, verifier.FormatDuration(bestCandidate.Duration), bestCandidate.BandwidthHz/1000, bestCandidate.Score)
 				}
 			}
 		}
 	}
 
-	// Step 2: Download audio stream
-	if !opts.IsAgent {
-		fmt.Println("\n📥 Step 2: Downloading audio stream & artwork...")
+	if sp != nil {
+		sp.Stop()
 	}
-	downloadedPath, err := downloader.DownloadAudioStream(ctx, targetURL, opts.OutDir)
+
+	// Step 2: Download audio stream
+	if sp != nil {
+		sp.Update("Downloading audio stream & artwork...")
+		sp.Start()
+	} else if !opts.IsAgent {
+		fmt.Println("\nStep 2: Downloading audio stream & artwork...")
+	}
+
+	downloadedPath, err := downloader.DownloadAudioStream(ctx, targetURL, opts.OutDir, opts.Verbose)
+	if sp != nil {
+		sp.Stop()
+	}
 	if err != nil {
 		if opts.IsAgent {
 			fmt.Printf("target: %s\nstatus: error\nerror: %v\n", urlOrQuery, err)
@@ -146,13 +156,20 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 	// Step 3: Full Verification
 	var report *verifier.VerificationReport
 	if !opts.SkipVerify {
-		if !opts.IsAgent {
-			fmt.Println("\n🔍 Step 3: Running Final DJ Audio Quality & Spectrum Inspection...")
+		if sp != nil {
+			sp.Update("Running Final DJ Audio Quality & Spectrum Inspection...")
+			sp.Start()
+		} else if !opts.IsAgent {
+			fmt.Println("\nStep 3: Running Final DJ Audio Quality & Spectrum Inspection...")
 		}
-		rep, err := verifier.VerifyAudioTrack(ctx, downloadedPath)
+
+		rep, err := verifier.VerifyAudioTrack(ctx, downloadedPath, opts.Verbose)
+		if sp != nil {
+			sp.Stop()
+		}
 		if err != nil {
 			if !opts.IsAgent {
-				fmt.Printf("  ⚠️ Audio verification notice: %v\n", err)
+				fmt.Printf("  Audio verification notice: %v\n", err)
 			}
 		} else {
 			report = rep
@@ -168,12 +185,12 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 				fmt.Printf("  Status    : [ %s ]\n", report.SummaryStatus)
 
 				if report.SummaryStatus == "FAIL" && report.MixStructure.IsRadioEditWarning {
-					fmt.Println("  ⚠️ WARNING: Downloaded track appears to be a short radio edit.")
+					fmt.Println("  WARNING: Downloaded track appears to be a short radio edit.")
 				}
 			}
 		}
 	} else if !opts.IsAgent {
-		fmt.Println("\n🔍 Step 3: Skipped DJ Audio Quality & Spectrum Inspection (-skipVerify)")
+		fmt.Println("\nStep 3: Skipped DJ Audio Quality & Spectrum Inspection (-skipVerify)")
 	}
 
 	// Step 4: Metadata & High-Res Cover Art Enrichment
@@ -181,8 +198,11 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 	var metaResult *metadata.TrackMetadataResult
 
 	if !opts.SkipMetadata {
-		if !opts.IsAgent {
-			fmt.Println("\n🖼️ Step 4: Enriching metadata & 1400x1400 cover art via API fallback...")
+		if sp != nil {
+			sp.Update("Enriching metadata & 1400x1400 cover art via API fallback...")
+			sp.Start()
+		} else if !opts.IsAgent {
+			fmt.Println("\nStep 4: Enriching metadata & 1400x1400 cover art via API fallback...")
 		}
 		ext := filepath.Ext(downloadedFilename)
 		cleanTitle := strings.TrimSuffix(downloadedFilename, ext)
@@ -196,7 +216,7 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 		}
 
 		metaClient := metadata.NewClient()
-		metaRes := metaClient.ResolveTrackMetadata(ctx, cleanTitle, artist, title)
+		metaRes := metaClient.ResolveTrackMetadata(ctx, cleanTitle, artist, title, opts.Verbose)
 		metaResult = &metaRes
 
 		if !opts.IsAgent {
@@ -204,16 +224,19 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 			fmt.Printf("  Source   : %s\n", metaRes.Source)
 		}
 
-		taggedPath, tagErr := metadata.ApplyMetadataToLocalTrack(ctx, downloadedPath, metaRes, opts.OutDir)
+		taggedPath, tagErr := metadata.ApplyMetadataToLocalTrack(ctx, downloadedPath, metaRes, opts.OutDir, opts.Verbose)
+		if sp != nil {
+			sp.Stop()
+		}
 		if tagErr != nil {
 			if !opts.IsAgent {
-				fmt.Printf("  ⚠️ Tagging notice: %v\n", tagErr)
+				fmt.Printf("  Tagging notice: %v\n", tagErr)
 			}
 		} else {
 			finalPath = taggedPath
 		}
 	} else if !opts.IsAgent {
-		fmt.Println("\n🖼️ Step 4: Skipped metadata & cover art enrichment (-skipMetadata)")
+		fmt.Println("\nStep 4: Skipped metadata & cover art enrichment (-skipMetadata)")
 	}
 
 	finalFilename := filepath.Base(finalPath)
@@ -241,9 +264,7 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 		return nil
 	}
 
-	fmt.Println("\n=======================================================")
-	fmt.Printf("✅ TRACK ACQUISITION COMPLETE: %s\n", outDisplayPath)
-	fmt.Println("=======================================================")
+	fmt.Printf("\nDONE: %s\n", outDisplayPath)
 
 	return nil
 }

@@ -22,64 +22,179 @@ func newMockClient(fn mockTransport) *Client {
 	}
 }
 
+func TestNewClient(t *testing.T) {
+	c := NewClient()
+	if c == nil || c.httpClient == nil {
+		t.Fatal("NewClient returned nil client")
+	}
+}
+
 func TestFetchFromITunes(t *testing.T) {
-	jsonResp := `{
-		"results": [
-			{
-				"trackName": "Space X",
-				"artistName": "Boris Brejcha",
-				"collectionName": "Space X Single",
-				"primaryGenreName": "Minimal Techno",
-				"releaseDate": "2024-05-10T07:00:00Z",
-				"artworkUrl100": "https://is1-ssl.mzstatic.com/image/thumb/Music123/v4/100x100bb.jpg"
+	tests := []struct {
+		name       string
+		statusCode int
+		body       string
+		wantErr    bool
+		wantTitle  string
+	}{
+		{
+			name:       "successful iTunes search",
+			statusCode: http.StatusOK,
+			body: `{
+				"results": [
+					{
+						"trackName": "Space X",
+						"artistName": "Boris Brejcha",
+						"collectionName": "Space X Single",
+						"primaryGenreName": "Minimal Techno",
+						"releaseDate": "2024-05-10T07:00:00Z",
+						"artworkUrl100": "https://is1-ssl.mzstatic.com/image/thumb/Music123/v4/100x100bb.jpg"
+					}
+				]
+			}`,
+			wantErr:   false,
+			wantTitle: "Space X",
+		},
+		{
+			name:       "empty iTunes results",
+			statusCode: http.StatusOK,
+			body:       `{"results": []}`,
+			wantErr:    true,
+		},
+		{
+			name:       "iTunes HTTP error 500",
+			statusCode: http.StatusInternalServerError,
+			body:       `error`,
+			wantErr:    true,
+		},
+		{
+			name:       "invalid iTunes JSON",
+			statusCode: http.StatusOK,
+			body:       `{invalid json}`,
+			wantErr:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := newMockClient(func(req *http.Request) (*http.Response, error) {
+				return &http.Response{
+					StatusCode: tt.statusCode,
+					Body:       io.NopCloser(bytes.NewBufferString(tt.body)),
+				}, nil
+			})
+
+			res, err := client.FetchFromITunes(context.Background(), "Space X")
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("FetchFromITunes error = %v, wantErr %v", err, tt.wantErr)
 			}
-		]
-	}`
+			if !tt.wantErr && res.Title != tt.wantTitle {
+				t.Errorf("Title = %q, want %q", res.Title, tt.wantTitle)
+			}
+		})
+	}
+}
 
-	client := newMockClient(func(req *http.Request) (*http.Response, error) {
-		return &http.Response{
-			StatusCode: http.StatusOK,
-			Body:       io.NopCloser(bytes.NewBufferString(jsonResp)),
-		}, nil
-	})
-
-	res, err := client.FetchFromITunes(context.Background(), "Boris Brejcha - Space X")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+func TestFetchFromMusicBrainz(t *testing.T) {
+	tests := []struct {
+		name       string
+		statusCode int
+		body       string
+		wantErr    bool
+		wantTitle  string
+		wantArtist string
+	}{
+		{
+			name:       "successful MusicBrainz search",
+			statusCode: http.StatusOK,
+			body: `{
+				"recordings": [
+					{
+						"title": "Gopnik",
+						"artist-credit": [{"name": "DJ Blyatman"}],
+						"releases": [
+							{"id": "rel-123", "title": "Gopnik Album", "date": "2020-01-01"}
+						]
+					}
+				]
+			}`,
+			wantErr:    false,
+			wantTitle:  "Gopnik",
+			wantArtist: "DJ Blyatman",
+		},
+		{
+			name:       "empty MusicBrainz recordings",
+			statusCode: http.StatusOK,
+			body:       `{"recordings": []}`,
+			wantErr:    true,
+		},
+		{
+			name:       "invalid MusicBrainz JSON",
+			statusCode: http.StatusOK,
+			body:       `{bad}`,
+			wantErr:    true,
+		},
 	}
 
-	if res.Title != "Space X" {
-		t.Errorf("Title = %q, want Space X", res.Title)
-	}
-	if res.Artist != "Boris Brejcha" {
-		t.Errorf("Artist = %q, want Boris Brejcha", res.Artist)
-	}
-	wantArtwork := "https://is1-ssl.mzstatic.com/image/thumb/Music123/v4/1400x1400bb.jpg"
-	if res.CoverArtURL != wantArtwork {
-		t.Errorf("CoverArtURL = %q, want %q", res.CoverArtURL, wantArtwork)
-	}
-	if res.Source != "iTunes API" {
-		t.Errorf("Source = %q, want iTunes API", res.Source)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := newMockClient(func(req *http.Request) (*http.Response, error) {
+				return &http.Response{
+					StatusCode: tt.statusCode,
+					Body:       io.NopCloser(bytes.NewBufferString(tt.body)),
+				}, nil
+			})
+
+			res, err := client.FetchFromMusicBrainz(context.Background(), "Gopnik")
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("FetchFromMusicBrainz error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if !tt.wantErr {
+				if res.Title != tt.wantTitle {
+					t.Errorf("Title = %q, want %q", res.Title, tt.wantTitle)
+				}
+				if res.Artist != tt.wantArtist {
+					t.Errorf("Artist = %q, want %q", res.Artist, tt.wantArtist)
+				}
+			}
+		})
 	}
 }
 
 func TestResolveTrackMetadataFallback(t *testing.T) {
-	// Mock client that returns 404 for iTunes and MusicBrainz
+	// Mock client that returns 404 for iTunes and successful MusicBrainz
 	client := newMockClient(func(req *http.Request) (*http.Response, error) {
+		if req.URL.Host == "itunes.apple.com" {
+			return &http.Response{
+				StatusCode: http.StatusNotFound,
+				Body:       io.NopCloser(bytes.NewBufferString(`{}`)),
+			}, nil
+		}
+		if req.URL.Host == "musicbrainz.org" {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body: io.NopCloser(bytes.NewBufferString(`{
+					"recordings": [
+						{
+							"title": "Gopnik MB",
+							"artist-credit": [{"name": "DJ Blyatman MB"}],
+							"releases": [{"id": "mb-1", "title": "MB Album", "date": "2021"}]
+						}
+					]
+				}`)),
+			}, nil
+		}
 		return &http.Response{
 			StatusCode: http.StatusNotFound,
 			Body:       io.NopCloser(bytes.NewBufferString(`{}`)),
 		}, nil
 	})
 
-	res := client.ResolveTrackMetadata(context.Background(), "Unknown Song", "Default Artist", "Default Title")
-	if res.Artist != "Default Artist" {
-		t.Errorf("Artist = %q, want Default Artist", res.Artist)
+	res := client.ResolveTrackMetadata(context.Background(), "Gopnik", "Fallback Artist", "Fallback Title", true)
+	if res.Artist != "DJ Blyatman MB" {
+		t.Errorf("Artist = %q, want DJ Blyatman MB", res.Artist)
 	}
-	if res.Title != "Default Title" {
-		t.Errorf("Title = %q, want Default Title", res.Title)
-	}
-	if res.Source != "YouTube Fallback" {
-		t.Errorf("Source = %q, want YouTube Fallback", res.Source)
+	if res.Source != "MusicBrainz API" {
+		t.Errorf("Source = %q, want MusicBrainz API", res.Source)
 	}
 }

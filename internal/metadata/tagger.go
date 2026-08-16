@@ -14,12 +14,24 @@ import (
 
 // ApplyMetadataToLocalTrack embeds metadata and high-res cover art into the M4A file
 // using ffmpeg and renames the file to <outDir>/<SanitizedArtist - SanitizedTitle>.m4a.
-func ApplyMetadataToLocalTrack(ctx context.Context, filePath string, metadata TrackMetadataResult, outDir string) (string, error) {
+func ApplyMetadataToLocalTrack(ctx context.Context, filePath string, metadata TrackMetadataResult, outDir string, verbose ...bool) (string, error) {
+	isVerbose := len(verbose) > 0 && verbose[0]
+
 	if err := os.MkdirAll(outDir, 0755); err != nil {
 		return filePath, fmt.Errorf("creating output directory %s: %w", outDir, err)
 	}
 
-	tmpDir := filepath.Join(os.TempDir(), "fetch-track-cli-tmp")
+	if isVerbose {
+		fmt.Printf("tagging: %s\n", filePath)
+		if metadata.CoverArtURL != "" {
+			fmt.Printf("coverart: downloading %s\n", metadata.CoverArtURL)
+		}
+	}
+
+	_, errStat := os.Stat(".tmp")
+	dotTmpExisted := !os.IsNotExist(errStat)
+
+	tmpDir := filepath.Join(".tmp", "fetch-track-cli-tmp")
 	_ = os.MkdirAll(tmpDir, 0755)
 
 	var coverTempPath string
@@ -46,28 +58,43 @@ func ApplyMetadataToLocalTrack(ctx context.Context, filePath string, metadata Tr
 		if coverTempPath != "" {
 			_ = os.Remove(coverTempPath)
 		}
+		_ = os.Remove(tmpDir)
+		if !dotTmpExisted {
+			_ = os.Remove(".tmp")
+		}
 	}()
 
-	ext := strings.ToLower(filepath.Ext(filePath))
-	if ext == "" {
-		ext = ".m4a"
-	}
-
-	targetFilename := fmt.Sprintf("%s - %s%s", metadata.Artist, metadata.Title, ext)
+	targetFilename := fmt.Sprintf("%s - %s.m4a", metadata.Artist, metadata.Title)
 	if metadata.Artist == "Unknown Artist" || metadata.Artist == "" {
-		targetFilename = filepath.Base(filePath)
+		baseName := filepath.Base(filePath)
+		baseExt := filepath.Ext(baseName)
+		cleanBaseName := strings.TrimSuffix(baseName, baseExt)
+		targetFilename = cleanBaseName + ".m4a"
 	}
 
 	cleanTargetFilename := SanitizeFilename(targetFilename)
 	finalPath := filepath.Join(outDir, cleanTargetFilename)
 
-	tmpTaggedPath := filepath.Join(tmpDir, fmt.Sprintf("tagged_%d%s", time.Now().UnixNano(), ext))
+	tmpTaggedPath := filepath.Join(tmpDir, fmt.Sprintf("tagged_%d.m4a", time.Now().UnixNano()))
+
+	inputExt := strings.ToLower(filepath.Ext(filePath))
 
 	args := []string{"-v", "quiet", "-hide_banner", "-i", filePath}
 	if coverTempPath != "" {
-		args = append(args, "-i", coverTempPath, "-map", "0:a:0", "-map", "1:v:0", "-c:a", "copy", "-c:v", "copy", "-disposition:v", "attached_pic")
+		args = append(args, "-i", coverTempPath, "-map", "0:a:0", "-map", "1:v:0")
+		if inputExt == ".m4a" {
+			args = append(args, "-c:a", "copy")
+		} else {
+			args = append(args, "-c:a", "aac", "-b:a", "256k")
+		}
+		args = append(args, "-c:v", "copy", "-disposition:v", "attached_pic")
 	} else {
-		args = append(args, "-map", "0:a:0", "-c:a", "copy")
+		args = append(args, "-map", "0:a:0")
+		if inputExt == ".m4a" {
+			args = append(args, "-c:a", "copy")
+		} else {
+			args = append(args, "-c:a", "aac", "-b:a", "256k")
+		}
 	}
 
 	args = append(args,
@@ -82,6 +109,9 @@ func ApplyMetadataToLocalTrack(ctx context.Context, filePath string, metadata Tr
 
 	cmdCtx, cancel := context.WithTimeout(ctx, 1*time.Minute)
 	cmd := exec.CommandContext(cmdCtx, "ffmpeg", args...)
+	if isVerbose {
+		fmt.Printf("ffmpeg: embedding tags + covr\n")
+	}
 	err := cmd.Run()
 	cancel()
 

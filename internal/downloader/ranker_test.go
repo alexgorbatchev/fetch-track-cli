@@ -49,6 +49,16 @@ func TestRankCandidates(t *testing.T) {
 			title:  "Space X",
 			wantID: "high2",
 		},
+		{
+			name: "non-english diacritics and umlauts match",
+			candidates: []Candidate{
+				{ID: "noacc", Title: "Motley Crue - Bose", Duration: 300, Source: "youtube"},
+				{ID: "acc1", Title: "Mötley Crüe - BÖSE (Extended Mix)", Duration: 480, Source: "soundcloud"},
+			},
+			artist: "Motley Crue",
+			title:  "Bose",
+			wantID: "acc1",
+		},
 	}
 
 	for _, tt := range tests {

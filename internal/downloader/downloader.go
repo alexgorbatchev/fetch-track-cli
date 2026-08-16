@@ -39,7 +39,12 @@ func MapSourceSearchPrefix(source string) string {
 }
 
 // SearchSourcesInParallel searches all configured sources concurrently for track candidates.
-func SearchSourcesInParallel(ctx context.Context, sources []string, artist, title, rawQuery string) ([]Candidate, error) {
+func SearchSourcesInParallel(ctx context.Context, sources []string, artist, title, rawQuery string, verbose ...bool) ([]Candidate, error) {
+	isVerbose := len(verbose) > 0 && verbose[0]
+	if isVerbose {
+		fmt.Printf("search: %s\n", strings.Join(sources, ", "))
+	}
+
 	if len(sources) == 0 {
 		sources = []string{"youtube", "soundcloud", "bandcamp"}
 	}
@@ -80,6 +85,10 @@ func SearchSourcesInParallel(ctx context.Context, sources []string, artist, titl
 			wg.Add(1)
 			go func(srcName, searchPrefix, q string) {
 				defer wg.Done()
+
+				if isVerbose {
+					fmt.Printf("%s: %q\n", srcName, q)
+				}
 
 				cmdCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 				defer cancel()
@@ -129,12 +138,16 @@ func SearchSourcesInParallel(ctx context.Context, sources []string, artist, titl
 							key := fmt.Sprintf("%s:%s", srcName, targetURL)
 							mu.Lock()
 							if _, exists := candidatesMap[key]; !exists {
-								candidatesMap[key] = Candidate{
+								candObj := Candidate{
 									ID:         cand.ID,
 									Title:      cand.Title,
 									Duration:   cand.Duration,
 									Source:     srcName,
 									WebpageURL: targetURL,
+								}
+								candidatesMap[key] = candObj
+								if isVerbose {
+									fmt.Printf("candidate: %q [%s] (%s)\n", cand.Title, srcName, verifier.FormatDuration(cand.Duration))
 								}
 							}
 							mu.Unlock()
@@ -160,7 +173,8 @@ func SearchSourcesInParallel(ctx context.Context, sources []string, artist, titl
 }
 
 // EvaluateAndInspectCandidatesInParallel samples audio in parallel across top candidates from all sources.
-func EvaluateAndInspectCandidatesInParallel(ctx context.Context, candidates []Candidate, artist, title string) (*Candidate, error) {
+func EvaluateAndInspectCandidatesInParallel(ctx context.Context, candidates []Candidate, artist, title string, verbose ...bool) (*Candidate, error) {
+	isVerbose := len(verbose) > 0 && verbose[0]
 	if len(candidates) == 0 {
 		return nil, ErrNoCandidateFound
 	}
@@ -170,17 +184,21 @@ func EvaluateAndInspectCandidatesInParallel(ctx context.Context, candidates []Ca
 	copy(ranked, candidates)
 	_ = RankCandidates(ranked, artist, title)
 
-	// Pick top candidate per source (up to top 5 total) for parallel audio sample inspection
-	selectedMap := make(map[string]Candidate)
+	// Pick top 5 overall ranked candidates (excluding heavily penalized candidates with score < 0)
+	topCandidates := make([]Candidate, 0, 5)
 	for _, cand := range ranked {
-		if _, exists := selectedMap[cand.Source]; !exists && len(selectedMap) < 5 {
-			selectedMap[cand.Source] = cand
+		if cand.Score < 0 {
+			continue // Skip non-matching, preview clips (< 2m), or continuous album mixes
+		}
+		topCandidates = append(topCandidates, cand)
+		if len(topCandidates) == 5 {
+			break
 		}
 	}
 
-	topCandidates := make([]Candidate, 0, len(selectedMap))
-	for _, cand := range selectedMap {
-		topCandidates = append(topCandidates, cand)
+	// Fallback if all candidates had score < 0: take top candidate
+	if len(topCandidates) == 0 && len(ranked) > 0 {
+		topCandidates = append(topCandidates, ranked[0])
 	}
 
 	// Step 2: Inspect audio samples in parallel across top candidates
@@ -196,7 +214,7 @@ func EvaluateAndInspectCandidatesInParallel(ctx context.Context, candidates []Ca
 			sampleCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
 			defer cancel()
 
-			rep, err := verifier.VerifyAudioTrack(sampleCtx, cand.WebpageURL)
+			rep, err := verifier.VerifyAudioTrack(sampleCtx, cand.WebpageURL, isVerbose)
 			if err == nil && rep != nil {
 				qualityScore := 0
 				if rep.Quality.BandwidthRating == "High Fidelity (>=18.5 kHz)" {
@@ -216,6 +234,16 @@ func EvaluateAndInspectCandidatesInParallel(ctx context.Context, candidates []Ca
 				cand.PeakDbFS = rep.Quality.PeakDbFS
 				cand.RMSDbFS = rep.Quality.RMSDbFS
 				cand.QualityScore = qualityScore
+
+				if !isAgentMode() {
+					fmt.Printf("\r\033[Kcandidate: %q [%s] (%s) %d kHz score=%d\n",
+						cand.Title,
+						cand.Source,
+						verifier.FormatDuration(cand.Duration),
+						rep.Quality.EstimatedBandwidthHz/1000,
+						cand.Score+qualityScore,
+					)
+				}
 				mu.Unlock()
 			}
 		}(i)
@@ -252,9 +280,15 @@ func SearchYouTubeCandidates(ctx context.Context, artist, title, rawQuery string
 }
 
 // DownloadAudioStream downloads the audio stream from targetURL into outDir.
-func DownloadAudioStream(ctx context.Context, targetURL, outDir string) (string, error) {
+func DownloadAudioStream(ctx context.Context, targetURL, outDir string, verbose ...bool) (string, error) {
+	isVerbose := len(verbose) > 0 && verbose[0]
+
 	if err := os.MkdirAll(outDir, 0755); err != nil {
 		return "", fmt.Errorf("creating output directory: %w", err)
+	}
+
+	if isVerbose {
+		fmt.Printf("downloading: %s\n", targetURL)
 	}
 
 	initialFiles, err := listAudioFiles(outDir)
@@ -270,8 +304,16 @@ func DownloadAudioStream(ctx context.Context, targetURL, outDir string) (string,
 
 	outPattern := filepath.Join(outDir, "%(title)s.%(ext)s")
 
-	for _, extractorArgs := range extractorArgsList {
+	for idx, extractorArgs := range extractorArgsList {
 		cmdCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+
+		if isVerbose {
+			if extractorArgs != "" {
+				fmt.Printf("download try %d/3: args=%q\n", idx+1, extractorArgs)
+			} else {
+				fmt.Printf("download try %d/3: standard fallback\n", idx+1)
+			}
+		}
 
 		args := []string{
 			"--no-warnings",
@@ -279,6 +321,7 @@ func DownloadAudioStream(ctx context.Context, targetURL, outDir string) (string,
 			"--js-runtimes", "node",
 			"-f", "140/bestaudio[ext=m4a]/bestaudio/best",
 			"-x",
+			"--audio-format", "m4a",
 			"--embed-metadata",
 			"--embed-thumbnail",
 			"-o", outPattern,
@@ -298,14 +341,36 @@ func DownloadAudioStream(ctx context.Context, targetURL, outDir string) (string,
 			if err == nil {
 				for file := range currentFiles {
 					if !initialFiles[file] {
-						return filepath.Join(outDir, file), nil
+						savedPath := filepath.Join(outDir, file)
+						if strings.ToLower(filepath.Ext(savedPath)) != ".m4a" {
+							m4aPath := strings.TrimSuffix(savedPath, filepath.Ext(savedPath)) + ".m4a"
+							convCtx, convCancel := context.WithTimeout(ctx, 2*time.Minute)
+							convCmd := exec.CommandContext(convCtx, "ffmpeg", "-v", "quiet", "-hide_banner", "-i", savedPath, "-c:a", "aac", "-b:a", "256k", "-y", m4aPath)
+							convErr := convCmd.Run()
+							convCancel()
+							if convErr == nil {
+								_ = os.Remove(savedPath)
+								savedPath = m4aPath
+							}
+						}
+						if isVerbose {
+							fmt.Printf("downloaded: %s\n", savedPath)
+						}
+						return savedPath, nil
 					}
 				}
 			}
+		} else if isVerbose {
+			fmt.Printf("download retry: attempt %d failed (%v)\n", idx+1, err)
 		}
 	}
 
 	return "", ErrDownloadFailed
+}
+
+func isAgentMode() bool {
+	val := strings.TrimSpace(os.Getenv("AGENT"))
+	return val == "1" || strings.ToLower(val) == "true"
 }
 
 func listAudioFiles(dir string) (map[string]bool, error) {
