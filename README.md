@@ -122,9 +122,10 @@ just run "Boris Brejcha - Space X"
 
 Sample Output:
 ```
-Searching sources (youtube, soundcloud, bandcamp) in parallel for best Extended DJ MIX track...
-  Selected Best Full Extended DJ Mix Candidate [SOUNDCLOUD]: https://soundcloud.com/boris-brejcha/space-x-extended-mix
-  Candidate Spectrum: 20 kHz bandwidth | Rank Score: 150
+candidate: "Boris Brejcha - Space X (Radio Edit)" [youtube] (3:15) 18 kHz score=20
+candidate: "Boris Brejcha - Space X (Original Mix)" [bandcamp] (7:45) 20 kHz score=120
+candidate: "Boris Brejcha - Space X (Extended Mix)" [soundcloud] (8:23) 20 kHz score=150
+selected: "Boris Brejcha - Space X (Extended Mix)" [soundcloud] (8:23) 20 kHz score=150
 
 Step 2: Downloading audio stream & artwork...
   Saved: Boris Brejcha - Space X (Extended Mix).m4a

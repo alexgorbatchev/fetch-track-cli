@@ -1,6 +1,6 @@
 ---
 created_on: 2026-08-14 21:25
-last_modified: 2026-08-14 21:40
+last_modified: 2026-08-14 23:00
 status: current
 ---
 
@@ -10,7 +10,7 @@ Dedicated workspace for `fetch-track`, a Go CLI tool for searching, verifying, d
 
 ## Environment & Target Setup
 - **Track Location & Format:** Master tracks are stored in `./tracks/` in **`.m4a`** format for native album artwork rendering across audio players and file browsers.
-- **Go Toolchain & Binary:** Go 1.23+ with Cobra CLI framework (`github.com/spf13/cobra`).
+- **Go Toolchain & Binary:** Go 1.23+ with Cobra CLI framework (`github.com/spf13/cobra`). Local compiled binary output is placed in `bin/fetch-track` (and git-ignored).
 
 ## Primary Single-Command Track Acquisition
 To add any new track or YouTube URL in 1 step (runs DJ Full Mix candidate ranker, downloads native M4A, checks quality/bandwidth, resolves 1400x1400 cover art via API fallback, and embeds MP4 `covr` artwork):
@@ -38,6 +38,11 @@ just run "Boris Brejcha - Space X"
   just verify "tracks/Boris Brejcha - Space X.m4a"
   ```
 
+- **Run in Verbose Mode:**
+  ```bash
+  ./bin/fetch-track -v "Boris Brejcha - Space X"
+  ```
+
 - **Run Tests & Linter Checks:**
   ```bash
   just test
@@ -62,7 +67,7 @@ git push origin v1.0.0
 - **Original Mixes First:** Always select Original Mixes, Extended Mixes, Club Mixes, or Dub Mixes with mixable intro/outro beats. Reject short radio edits (< 3.5 minutes) that lack beatmatchable sections.
 - **Audio Bandwidth Verification:** Verify frequency response with `verifier` Go module. Ensure audio bandwidth reaches >= 16 kHz to avoid low-bitrate or transcoded rips.
 - **Gain Staging:** Check peak levels and RMS loudness to set appropriate channel trim offsets before playing tracks.
-- **Go Conventions:** Standard library first, strict error wrapping (`fmt.Errorf("...: %w", err)`), table-driven unit tests, no compiled binaries committed to git (`.gitignore`).
+- **Unicode & Accent Matching:** Title and artist matching uses `golang.org/x/text` NFD decomposition and non-spacing combining mark stripping (`unicode.Mn`) to perform accent/diacritic-insensitive comparisons across all Unicode alphabets (e.g. `ë`, `ё`, `ö`, `é`, `ñ`).
 
 ## Boundaries
 - **Always:** Automatically record all new user instructions in `AGENTS.md` immediately upon receipt.
