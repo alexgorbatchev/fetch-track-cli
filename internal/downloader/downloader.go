@@ -47,7 +47,7 @@ func SearchSourcesInParallel(ctx context.Context, sources []string, artist, titl
 	}
 
 	if len(sources) == 0 {
-		sources = []string{"youtube", "soundcloud", "bandcamp"}
+		sources = []string{"youtube", "soundcloud"}
 	}
 
 	cleanTitle := title

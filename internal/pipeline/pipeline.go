@@ -35,7 +35,7 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 		opts.OutDir = "."
 	}
 	if len(opts.Sources) == 0 {
-		opts.Sources = []string{"youtube", "soundcloud", "bandcamp"}
+		opts.Sources = []string{"youtube", "soundcloud"}
 	}
 	if IsAgentMode() {
 		opts.IsAgent = true

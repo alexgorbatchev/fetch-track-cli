@@ -196,7 +196,7 @@ just verify "tracks/Boris Brejcha - Space X.m4a"
 | Flag | Short | Default | Description |
 | :--- | :--- | :--- | :--- |
 | `--out-dir` | `-o` | `.` | Output directory for acquired tracks |
-| `--sources` | `-s` | `youtube,soundcloud,bandcamp` | Comma-separated list of search sources |
+| `--sources` | `-s` | `youtube,soundcloud` | Comma-separated list of search sources |
 | `--skip-verify` | | `false` | Skip DJ audio quality & spectrum inspection |
 | `--skip-metadata` | | `false` | Skip metadata enrichment and cover art tagging |
 | `--verbose` | `-v` | `false` | Enable verbose logging |
