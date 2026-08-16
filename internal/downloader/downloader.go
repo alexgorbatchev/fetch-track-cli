@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/dj/fetch-track-cli/internal/verifier"
+	"github.com/lithammer/fuzzysearch/fuzzy"
 )
 
 var (
@@ -122,6 +123,16 @@ func SearchSourcesInParallel(ctx context.Context, sources []string, artist, titl
 					}
 
 					if err := json.Unmarshal([]byte(line), &cand); err == nil && cand.Title != "" && cand.Duration > 0 {
+						// Filter out irrelevant search hits, short snippets (< 60s), and continuous album mixes (> 900s)
+						candNorm := NormalizeUnicode(cand.Title)
+						titleNorm := NormalizeUnicode(cleanTitle)
+
+						titleMatch := titleNorm == "" || strings.Contains(candNorm, titleNorm) || fuzzy.MatchFold(titleNorm, candNorm)
+
+						if !titleMatch || cand.Duration < 60 || cand.Duration > 900 {
+							continue // Discard garbage search candidate
+						}
+
 						targetURL := cand.WebpageURL
 						if targetURL == "" {
 							targetURL = cand.URL

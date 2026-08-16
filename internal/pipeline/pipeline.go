@@ -90,11 +90,12 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 	}
 
 	var sp *spinner.Spinner
-	if !opts.IsAgent && !opts.Verbose {
-		sp = spinner.New(fmt.Sprintf("searching sources (%s) for best extended mix...", strings.Join(opts.Sources, ", ")))
-		sp.Start()
-	} else if !opts.IsAgent {
-		fmt.Printf("\nSearching sources (%s) in parallel for best extended mix...\n", strings.Join(opts.Sources, ", "))
+	if !opts.IsAgent {
+		fmt.Printf("\nsearching sources (%s) for best extended mix\n", strings.Join(opts.Sources, ", "))
+		if !opts.Verbose {
+			sp = spinner.New("working...")
+			sp.Start()
+		}
 	}
 
 	foundCandidates, searchErr := downloader.SearchSourcesInParallel(ctx, opts.Sources, artist, title, rawSearchQuery, opts.Verbose)
@@ -130,11 +131,12 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 	}
 
 	// Step 2: Download audio stream
-	if sp != nil {
-		sp.Update("Downloading audio stream & artwork...")
-		sp.Start()
-	} else if !opts.IsAgent {
-		fmt.Println("\nStep 2: Downloading audio stream & artwork...")
+	if !opts.IsAgent {
+		fmt.Println("\ndownloading audio stream & artwork")
+		if sp != nil {
+			sp.Update("working...")
+			sp.Start()
+		}
 	}
 
 	downloadedPath, err := downloader.DownloadAudioStream(ctx, targetURL, opts.OutDir, opts.Verbose)
@@ -156,11 +158,12 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 	// Step 3: Full Verification
 	var report *verifier.VerificationReport
 	if !opts.SkipVerify {
-		if sp != nil {
-			sp.Update("Running Final DJ Audio Quality & Spectrum Inspection...")
-			sp.Start()
-		} else if !opts.IsAgent {
-			fmt.Println("\nStep 3: Running Final DJ Audio Quality & Spectrum Inspection...")
+		if !opts.IsAgent {
+			fmt.Println("\nrunning DJ audio quality & spectrum inspection")
+			if sp != nil {
+				sp.Update("working...")
+				sp.Start()
+			}
 		}
 
 		rep, err := verifier.VerifyAudioTrack(ctx, downloadedPath, opts.Verbose)
@@ -198,11 +201,12 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 	var metaResult *metadata.TrackMetadataResult
 
 	if !opts.SkipMetadata {
-		if sp != nil {
-			sp.Update("working... enriching metadata & cover art via API fallback")
-			sp.Start()
-		} else if !opts.IsAgent {
-			fmt.Println("\nStep 4: Enriching metadata & 1400x1400 cover art via API fallback...")
+		if !opts.IsAgent {
+			fmt.Println("\nenriching metadata & cover art via API fallback")
+			if sp != nil {
+				sp.Update("working...")
+				sp.Start()
+			}
 		}
 		ext := filepath.Ext(downloadedFilename)
 		cleanTitle := strings.TrimSuffix(downloadedFilename, ext)

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/lithammer/fuzzysearch/fuzzy"
 	"golang.org/x/text/runes"
 	"golang.org/x/text/transform"
 	"golang.org/x/text/unicode/norm"
@@ -60,9 +61,6 @@ func RankCandidates(candidates []Candidate, artist, title string) *Candidate {
 	cleanTitle = strings.TrimSpace(cleanTitle)
 	cleanTitleNorm := NormalizeUnicode(cleanTitle)
 
-	titleWords := strings.Fields(cleanTitle)
-	titleNormWords := strings.Fields(cleanTitleNorm)
-
 	scored := make([]Candidate, len(candidates))
 	copy(scored, candidates)
 
@@ -72,60 +70,24 @@ func RankCandidates(candidates []Candidate, artist, title string) *Candidate {
 		candTitleLower := strings.ToLower(cand.Title)
 		candTitleNorm := NormalizeUnicode(cand.Title)
 
-		// 1. Mandatory Title Matching Rule (exact or normalized)
-		hasFullTitle := (cleanTitle != "" && strings.Contains(candTitleLower, cleanTitle)) ||
-			(cleanTitleNorm != "" && strings.Contains(candTitleNorm, cleanTitleNorm))
-
-		hasWordMatch := false
-		if !hasFullTitle {
-			if len(titleWords) > 0 {
-				matchCount := 0
-				for _, w := range titleWords {
-					if len(w) >= 3 && (strings.Contains(candTitleLower, w) || strings.Contains(candTitleNorm, NormalizeUnicode(w))) {
-						matchCount++
-					}
-				}
-				if matchCount == len(titleWords) {
-					hasWordMatch = true
-				}
-			}
-			if !hasWordMatch && len(titleNormWords) > 0 {
-				normMatchCount := 0
-				for _, w := range titleNormWords {
-					if len(w) >= 3 && strings.Contains(candTitleNorm, w) {
-						normMatchCount++
-					}
-				}
-				if normMatchCount == len(titleNormWords) {
-					hasWordMatch = true
-				}
-			}
-		}
-
-		if hasFullTitle {
-			score += 100
-		} else if hasWordMatch {
-			score += 60
-		} else {
-			// Heavy penalty if candidate title does not match target track title
-			score -= 300
-		}
-
-		// 2. Artist Matching Rule (exact or normalized)
-		if artistLower != "" {
-			if strings.Contains(candTitleLower, artistLower) || (artistNorm != "" && strings.Contains(candTitleNorm, artistNorm)) {
+		// 1. Title Match (exact, substring, or fuzzy via github.com/lithammer/fuzzysearch/fuzzy)
+		if cleanTitleNorm != "" {
+			if strings.Contains(candTitleLower, cleanTitle) || strings.Contains(candTitleNorm, cleanTitleNorm) {
 				score += 100
+			} else if fuzzy.MatchFold(cleanTitleNorm, candTitleNorm) {
+				score += 60
 			} else {
-				artistWords := strings.Fields(artistNorm)
-				artistMatchCount := 0
-				for _, w := range artistWords {
-					if len(w) >= 3 && strings.Contains(candTitleNorm, w) {
-						artistMatchCount++
-					}
-				}
-				if artistMatchCount > 0 {
-					score += 50
-				}
+				// Heavy penalty for candidates that fail fuzzy title match
+				score -= 300
+			}
+		}
+
+		// 2. Artist Match (exact, substring, or fuzzy)
+		if artistNorm != "" {
+			if strings.Contains(candTitleLower, artistLower) || strings.Contains(candTitleNorm, artistNorm) {
+				score += 100
+			} else if fuzzy.MatchFold(artistNorm, candTitleNorm) {
+				score += 50
 			}
 		}
 
