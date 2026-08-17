@@ -271,13 +271,14 @@ func VerifyAudioTrack(ctx context.Context, target string, verbose ...bool) (*Ver
 		recommendations = append(recommendations, fmt.Sprintf("AUDIO BANDWIDTH: Clean frequency response (%s).", pcmReport.BandwidthRating))
 	}
 
-	summaryStatus := "PASS"
-	if mixStructure.IsRadioEditWarning || pcmReport.HasLowBandwidthWarning {
-		if mixStructure.IsRadioEditWarning {
-			summaryStatus = "FAIL"
-		} else {
-			summaryStatus = "WARNING"
-		}
+	summaryStatus := "STATUS: High fidelity audio suitable for mixing."
+	switch {
+	case mixStructure.IsRadioEditWarning && pcmReport.HasLowBandwidthWarning:
+		summaryStatus = "STATUS: Low audio quality detected and appears to be a short radio edit."
+	case mixStructure.IsRadioEditWarning:
+		summaryStatus = "STATUS: Downloaded track appears to be a short radio edit."
+	case pcmReport.HasLowBandwidthWarning:
+		summaryStatus = "STATUS: Low audio quality detected."
 	}
 
 	return &VerificationReport{

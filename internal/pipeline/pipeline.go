@@ -185,11 +185,7 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 					gainSign = "+"
 				}
 				fmt.Printf("  Gain Offset: %s%.1f dB\n", gainSign, report.Quality.SuggestedDJGainDb)
-				fmt.Printf("  Status: %s\n", report.SummaryStatus)
-
-				if report.SummaryStatus == "FAIL" && report.MixStructure.IsRadioEditWarning {
-					fmt.Println("  WARNING: Downloaded track appears to be a short radio edit.")
-				}
+				fmt.Printf("  %s\n", report.SummaryStatus)
 			}
 		}
 	} else if !opts.IsAgent {

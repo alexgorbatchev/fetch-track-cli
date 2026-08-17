@@ -131,14 +131,14 @@ performs spectral bandwidth & loudness analysis, and enriches files with 1400x14
 				gainSign = "+"
 			}
 			fmt.Printf("Gain Offset: %s%.1f dB\n", gainSign, report.Quality.SuggestedDJGainDb)
-			fmt.Printf("Status: %s\n\n", report.SummaryStatus)
+			fmt.Printf("%s\n\n", report.SummaryStatus)
 
 			fmt.Println("Recommendations:")
 			for _, rec := range report.Recommendations {
 				fmt.Printf("  %s\n", rec)
 			}
 
-			if report.SummaryStatus == "FAIL" {
+			if report.MixStructure.IsRadioEditWarning {
 				os.Exit(2)
 			}
 			return nil

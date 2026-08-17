@@ -136,7 +136,7 @@ running audio quality & spectrum inspection
   Bandwidth: High Fidelity (>=18.5 kHz) (20 kHz)
   Peak / RMS: 0.04 dBFS / -9.44 dBFS
   Gain Offset: -2.6 dB
-  Status: PASS
+  STATUS: High fidelity audio suitable for mixing.
 
 enriching metadata & cover art via API fallback
   Matched: "Boris Brejcha - Space X" (Space X - Single, 2024)
