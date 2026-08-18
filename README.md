@@ -39,7 +39,7 @@ Acquired tracks are saved in standard `.m4a` format with embedded 1400x1400 artw
 
 ## Prerequisites
 
-`fetch-track` requires `yt-dlp` and `ffmpeg` installed on your computer:
+`fetch-track` requires [`yt-dlp`](https://github.com/yt-dlp/yt-dlp#installation) and [`ffmpeg`](https://ffmpeg.org/download.html) installed on your computer:
 
 ```bash
 yt-dlp --version
