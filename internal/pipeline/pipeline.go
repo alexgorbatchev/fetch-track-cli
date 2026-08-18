@@ -91,7 +91,7 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 
 	var sp *spinner.Spinner
 	if !opts.IsAgent {
-		fmt.Printf("\nsearching sources (%s) for best extended mix\n", strings.Join(opts.Sources, ", "))
+		fmt.Printf("\nsearching: %s\n", strings.Join(opts.Sources, ", "))
 		if !opts.Verbose {
 			sp = spinner.New("working...")
 			sp.Start()
