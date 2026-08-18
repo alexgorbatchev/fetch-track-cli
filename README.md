@@ -183,7 +183,7 @@ bandwidth: 20 kHz (High Fidelity (>=18.5 kHz))
 dynamics: peak=0.04 dBFS rms=-9.44 dBFS gain=-2.6 dB
 status: PASS
 metadata: "Boris Brejcha - Space X" (Space X - Single, 2024) [iTunes API]
-output: Boris Brejcha - Space X.m4a
+output: tracks/Boris Brejcha - Space X.m4a
 ```
 
 ### 3. Direct URL Search
@@ -217,7 +217,7 @@ just verify "tracks/Boris Brejcha - Space X.m4a"
 
 | Flag | Short | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `--out-dir` | `-o` | `.` | Output directory for acquired tracks |
+| `--out-dir` | `-o` | `tracks` | Output directory for acquired tracks |
 | `--sources` | `-s` | `youtube,soundcloud` | Comma-separated list of search sources |
 | `--skip-verify` | | `false` | Skip DJ audio quality & spectrum inspection |
 | `--skip-metadata` | | `false` | Skip metadata enrichment and cover art tagging |
