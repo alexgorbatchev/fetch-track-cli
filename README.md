@@ -90,21 +90,31 @@ just --version
 
 ## Installation
 
-Build the binary directly into `bin/` with `just` or `go`:
+### 1. Download Pre-Built Binaries (Recommended)
+
+Download the latest pre-compiled release binary for macOS, Linux, or Windows from [GitHub Releases](https://github.com/alexgorbatchev/fetch-track-cli/releases/latest):
 
 ```bash
-# Using just
-just build
+# macOS (Apple Silicon / ARM64)
+curl -sL https://github.com/alexgorbatchev/fetch-track-cli/releases/download/v0.0.1/fetch-track_0.0.1_darwin_arm64.tar.gz | tar -xz
+sudo mv fetch-track /usr/local/bin/
 
-# Or directly with Go
-go build -o bin/fetch-track ./cmd/fetch-track
+# Linux (AMD64)
+curl -sL https://github.com/alexgorbatchev/fetch-track-cli/releases/download/v0.0.1/fetch-track_0.0.1_linux_amd64.tar.gz | tar -xz
+sudo mv fetch-track /usr/local/bin/
 ```
 
-Optionally install it to your Go bin directory:
+Or download via GitHub CLI (`gh`):
 
 ```bash
-just install
-# or: go install ./cmd/fetch-track
+gh release download --repo alexgorbatchev/fetch-track-cli --pattern "*darwin_arm64*" --archive=tar.gz
+tar -xzf fetch-track*.tar.gz
+```
+
+### 2. Install via Go
+
+```bash
+go install github.com/dj/fetch-track-cli/cmd/fetch-track@latest
 ```
 
 ---
