@@ -28,6 +28,9 @@ archives:
 checksum:
   name_template: checksums.txt
 
+release:
+  mode: keep-existing
+
 changelog:
   sort: asc
   filters:
