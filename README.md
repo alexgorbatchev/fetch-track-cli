@@ -5,8 +5,6 @@
 > **⚠️ Intended Audience & Legal Disclaimer:**  
 > `fetch-track` is strictly intended for **amateur and bedroom DJs** practicing at home or playing non-commercial sets who are not seeking to become professional DJs. **Working professional DJs and commercial performers must source music from legitimate commercial sources** (such as Beatport, Bandcamp purchases, Juno Download, iTunes, or authorized record pools).
 
----
-
 ## What It Does
 
 - **Finds Full DJ Mixes**: Searches YouTube and SoundCloud in parallel for extended and original DJ mixes with mixable intro/outro sections.
@@ -14,8 +12,6 @@
 - **Preserves Original Audio Quality**: Downloads high-bitrate audio streams directly without re-encoding or degrading sound quality.
 - **Checks Audio & Volume**: Analyzes frequency range to catch low-quality rips and calculates the recommended volume Gain Offset for your mixer.
 - **Adds Cover Art & Metadata**: Fetches official track details, release years, and high-res 1400x1400 album art so your music looks great on DJ decks and laptops.
-
----
 
 ## How It Works
 
@@ -25,18 +21,6 @@
 4. **Inspect**: Checks audio frequency response and calculates mixer Gain Offset.
 5. **Tag**: Adds high-res artwork and metadata tags before saving.
 
----
-
-## Compatibility
-
-Acquired tracks are saved in standard `.m4a` format with embedded 1400x1400 artwork and tags. They work natively across:
-
-- **Hardware Decks**: Denon DJ / Engine DJ OS standalone players
-- **DJ Software**: Pioneer Rekordbox, Serato DJ, Traktor, VirtualDJ
-- **File Browsers**: macOS Finder QuickLook previews, Windows File Explorer
-
----
-
 ## Prerequisites
 
 `fetch-track` requires the following dependencies installed on your computer:
@@ -44,24 +28,9 @@ Acquired tracks are saved in standard `.m4a` format with embedded 1400x1400 artw
 - [`yt-dlp`](https://github.com/yt-dlp/yt-dlp#installation) — for audio stream downloading
 - [`ffmpeg`](https://ffmpeg.org/download.html) (with `ffprobe`) — for audio quality analysis and cover art tagging
 
----
-
 ## Installation
 
-1. Go to the [GitHub Latest Release Page](https://github.com/alexgorbatchev/fetch-track-cli/releases/latest).
-2. Download the pre-compiled archive for your operating system:
-   - **macOS**: `fetch-track_1.0.0_darwin_arm64.tar.gz` (Apple Silicon) or `fetch-track_1.0.0_darwin_amd64.tar.gz` (Intel)
-   - **Linux**: `fetch-track_1.0.0_linux_amd64.tar.gz` or `fetch-track_1.0.0_linux_arm64.tar.gz`
-   - **Windows**: `fetch-track_1.0.0_windows_amd64.zip` or `fetch-track_1.0.0_windows_arm64.zip`
-3. Extract the downloaded archive and move the `fetch-track` executable into a folder in your system `PATH` (such as `/usr/local/bin` on macOS/Linux).
-
-Alternatively, if you have Go installed:
-
-```bash
-go install github.com/dj/fetch-track-cli/cmd/fetch-track@latest
-```
-
----
+Go to the [Latest Release Page](https://github.com/alexgorbatchev/fetch-track-cli/releases/latest) and download the pre-compiled archive for your operating system.
 
 ## Quick Start
 
@@ -120,8 +89,6 @@ Inspect any audio file without downloading:
 fetch-track verify "Boris Brejcha - Space X.m4a"
 ```
 
----
-
 ## Options & Flags
 
 | Flag | Short | Default | Description |
@@ -131,8 +98,6 @@ fetch-track verify "Boris Brejcha - Space X.m4a"
 | `--skip-verify` | | `false` | Skip audio frequency and loudness check |
 | `--skip-metadata` | | `false` | Skip fetching album artwork and track details |
 | `--verbose` | `-v` | `false` | Show extra detailed progress logs |
-
----
 
 ## License
 
