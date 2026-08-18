@@ -76,14 +76,12 @@ Metadata and high-resolution cover art are fetched without commercial API keys u
 
 ## Prerequisites
 
-Ensure `go` (1.26+), `yt-dlp`, `ffmpeg` / `ffprobe`, and optionally `just` are installed and available in your system `PATH`:
+`fetch-track` requires `yt-dlp` and `ffmpeg` / `ffprobe` available in your system `PATH`:
 
 ```bash
-go version
 yt-dlp --version
 ffmpeg -version
 ffprobe -version
-just --version
 ```
 
 ---
@@ -238,6 +236,17 @@ just verify "tracks/Boris Brejcha - Space X.m4a"
 ---
 
 ## Development & Recipes
+
+### Developer Prerequisites
+
+Building from source requires **Go 1.26+** and optionally **`just`**:
+
+```bash
+go version
+just --version
+```
+
+### Build Recipes
 
 List all available `just` recipes:
 
