@@ -40,6 +40,7 @@ func TestRun_CanceledContext(t *testing.T) {
 		Sources:      []string{"youtube"},
 		SkipVerify:   true,
 		SkipMetadata: true,
+		SkipDepCheck: true,
 		Verbose:      true,
 		IsAgent:      true,
 	}
@@ -47,5 +48,24 @@ func TestRun_CanceledContext(t *testing.T) {
 	err := Run(ctx, "Test Artist - Test Track", opts)
 	if err == nil {
 		t.Error("expected error when context is canceled, got nil")
+	}
+}
+
+func TestRun_SkipDepCheck(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	opts := Options{
+		OutDir:       t.TempDir(),
+		Sources:      []string{"youtube"},
+		SkipVerify:   true,
+		SkipMetadata: true,
+		SkipDepCheck: true,
+		IsAgent:      true,
+	}
+
+	err := Run(ctx, "Test Artist - Test Track", opts)
+	if err == nil {
+		t.Error("expected error when context is canceled with SkipDepCheck")
 	}
 }

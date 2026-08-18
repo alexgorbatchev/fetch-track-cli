@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/dj/fetch-track-cli/internal/deps"
 	"github.com/dj/fetch-track-cli/internal/downloader"
 	"github.com/dj/fetch-track-cli/internal/metadata"
 	"github.com/dj/fetch-track-cli/internal/spinner"
@@ -19,6 +20,7 @@ type Options struct {
 	Sources      []string
 	SkipVerify   bool
 	SkipMetadata bool
+	SkipDepCheck bool
 	Verbose      bool
 	IsAgent      bool
 }
@@ -39,6 +41,15 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 	}
 	if IsAgentMode() {
 		opts.IsAgent = true
+	}
+
+	if !opts.SkipDepCheck {
+		if err := deps.CheckDependencies(ctx); err != nil {
+			if opts.IsAgent {
+				fmt.Printf("target: %s\nstatus: error\nerror: %v\n", urlOrQuery, err)
+			}
+			return err
+		}
 	}
 
 	isURL := verifier.IsURL(urlOrQuery)

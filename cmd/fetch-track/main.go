@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/dj/fetch-track-cli/internal/deps"
 	"github.com/dj/fetch-track-cli/internal/pipeline"
 	"github.com/dj/fetch-track-cli/internal/spinner"
 	"github.com/dj/fetch-track-cli/internal/verifier"
@@ -87,6 +88,13 @@ performs spectral bandwidth & loudness analysis, and enriches files with 1400x14
 			target := strings.Join(args, " ")
 			isAgent := pipeline.IsAgentMode()
 
+			if err := deps.CheckDependencies(cmd.Context()); err != nil {
+				if isAgent {
+					fmt.Printf("target: %s\nstatus: error\nerror: %v\n", target, err)
+				}
+				return err
+			}
+
 			var sp *spinner.Spinner
 			if !isAgent && !verbose {
 				sp = spinner.New(fmt.Sprintf("Running Audio Quality Verification on %s...", target))
@@ -147,7 +155,53 @@ performs spectral bandwidth & loudness analysis, and enriches files with 1400x14
 		},
 	}
 
+	depsCmd := &cobra.Command{
+		Use:          "dependencies",
+		Aliases:      []string{"deps"},
+		Short:        "Verify required external binary dependencies (yt-dlp, ffmpeg, ffprobe)",
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			isAgent := pipeline.IsAgentMode()
+			reports, err := deps.VerifyDependencies(cmd.Context())
+
+			if isAgent {
+				for _, r := range reports {
+					if r.Satisfied {
+						fmt.Printf("%s: ok (version %s, min %s)\n", r.Name, r.DetectedVersion, r.MinVersion)
+					} else if !r.Installed {
+						fmt.Printf("%s: missing\n", r.Name)
+					} else {
+						fmt.Printf("%s: fail (version %s, min %s)\n", r.Name, r.DetectedVersion, r.MinVersion)
+					}
+				}
+				if err != nil {
+					fmt.Printf("status: error\nerror: %v\n", err)
+					return err
+				}
+				fmt.Println("status: ok")
+				return nil
+			}
+
+			for _, r := range reports {
+				if r.Satisfied {
+					fmt.Printf("%s: %s (min %s) [OK]\n", r.Name, r.DetectedVersion, r.MinVersion)
+				} else if !r.Installed {
+					fmt.Printf("%s: missing in $PATH [FAIL] - %s\n", r.Name, r.Error)
+				} else {
+					fmt.Printf("%s: %s (min %s) [FAIL] - %s\n", r.Name, r.DetectedVersion, r.MinVersion, r.Error)
+				}
+			}
+
+			if err != nil {
+				return err
+			}
+			fmt.Println("\nAll dependencies met.")
+			return nil
+		},
+	}
+
 	rootCmd.AddCommand(verifyCmd)
+	rootCmd.AddCommand(depsCmd)
 
 	if err := rootCmd.ExecuteContext(ctx); err != nil {
 		os.Exit(1)
