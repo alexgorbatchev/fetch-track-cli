@@ -94,10 +94,18 @@ fetch-track verify "Boris Brejcha - Space X.m4a"
 | Flag | Short | Default | Description |
 | :--- | :--- | :--- | :--- |
 | `--out-dir` | `-o` | `.` | Folder where tracks are saved |
-| `--sources` | `-s` | `youtube,soundcloud` | Sources to search (`youtube`, `soundcloud`) |
+| `--sources` | `-s` | `youtube,soundcloud` | Comma-separated list of [supported search sources](#supported-search-sources) |
 | `--skip-verify` | | `false` | Skip audio frequency and loudness check |
 | `--skip-metadata` | | `false` | Skip fetching album artwork and track details |
 | `--verbose` | `-v` | `false` | Show extra detailed progress logs |
+
+## Supported Search Sources
+
+`fetch-track` supports searching the following platforms via the `-s` / `--sources` flag:
+
+- `youtube` — [YouTube](https://www.youtube.com) (default)
+- `soundcloud` — [SoundCloud](https://soundcloud.com) (default)
+- `bandcamp` — [Bandcamp](https://bandcamp.com)
 
 ## License
 
