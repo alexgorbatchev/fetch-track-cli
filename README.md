@@ -1,6 +1,6 @@
 # fetch-track
 
-`fetch-track` is a simple command-line tool for bedroom and amateur DJs to find, check, and download high-quality single tracks for their DJ sets.
+`fetch-track` is a simple command-line tool with AI agent support for bedroom and amateur DJs to find, check, and download high-quality single tracks for their DJ sets.
 
 > **⚠️ Intended Audience & Legal Disclaimer:**  
 > `fetch-track` is strictly intended for **amateur and bedroom DJs** practicing at home or playing non-commercial sets who are not seeking to become professional DJs. **Working professional DJs and commercial performers must source music from legitimate commercial sources** (such as Beatport, Bandcamp purchases, Juno Download, iTunes, or authorized record pools).
