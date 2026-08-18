@@ -90,26 +90,23 @@ just --version
 
 ## Installation
 
-### 1. Download Pre-Built Binaries (Recommended)
+### 1. Download Latest Release Binary (Recommended)
 
-Download the latest pre-compiled release binary for macOS, Linux, or Windows from [GitHub Releases](https://github.com/alexgorbatchev/fetch-track-cli/releases/latest):
+Download the latest pre-compiled release binary for your platform using GitHub CLI (`gh`):
 
 ```bash
 # macOS (Apple Silicon / ARM64)
-curl -sL https://github.com/alexgorbatchev/fetch-track-cli/releases/download/v0.0.1/fetch-track_0.0.1_darwin_arm64.tar.gz | tar -xz
+gh release download --repo alexgorbatchev/fetch-track-cli --pattern "*darwin_arm64*.tar.gz" --clobber
+tar -xzf fetch-track*.tar.gz
 sudo mv fetch-track /usr/local/bin/
 
 # Linux (AMD64)
-curl -sL https://github.com/alexgorbatchev/fetch-track-cli/releases/download/v0.0.1/fetch-track_0.0.1_linux_amd64.tar.gz | tar -xz
+gh release download --repo alexgorbatchev/fetch-track-cli --pattern "*linux_amd64*.tar.gz" --clobber
+tar -xzf fetch-track*.tar.gz
 sudo mv fetch-track /usr/local/bin/
 ```
 
-Or download via GitHub CLI (`gh`):
-
-```bash
-gh release download --repo alexgorbatchev/fetch-track-cli --pattern "*darwin_arm64*" --archive=tar.gz
-tar -xzf fetch-track*.tar.gz
-```
+Or download directly from [GitHub Releases Latest](https://github.com/alexgorbatchev/fetch-track-cli/releases/latest).
 
 ### 2. Install via Go
 
