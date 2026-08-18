@@ -23,10 +23,10 @@
 
 ## Prerequisites
 
-`fetch-track` requires the following dependencies installed on your computer:
+`fetch-track` requires the following external binary dependencies installed on your system:
 
-- [`yt-dlp`](https://github.com/yt-dlp/yt-dlp#installation) — for audio stream downloading
-- [`ffmpeg`](https://ffmpeg.org/download.html) (with `ffprobe`) — for audio quality analysis and cover art tagging
+- [`yt-dlp`](https://github.com/yt-dlp/yt-dlp#installation) (version 2024.08.01 or newer) — for audio stream downloading
+- [`ffmpeg`](https://ffmpeg.org/download.html) (version 4.4 or newer, including `ffprobe`) — for audio quality analysis and cover art tagging
 
 ## Installation
 
@@ -87,6 +87,23 @@ Inspect any audio file without downloading:
 
 ```bash
 fetch-track verify "Boris Brejcha - Space X.m4a"
+```
+
+### 5. Verify Installed Dependencies
+
+Verify that `yt-dlp`, `ffmpeg`, and `ffprobe` are installed and meet minimum version requirements:
+
+```bash
+fetch-track dependencies
+```
+
+Sample Output:
+```
+yt-dlp: 2026.07.04 (min 2024.08.01) [OK]
+ffmpeg: 8.1.2 (min 4.4) [OK]
+ffprobe: 8.1.2 (min 4.4) [OK]
+
+All dependencies met.
 ```
 
 ## Options & Flags
