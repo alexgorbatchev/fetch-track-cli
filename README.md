@@ -18,7 +18,7 @@
 ## How It Works
 
 - **Parallel Search**: Queries **YouTube** and **SoundCloud** (configurable) concurrently for original and extended mixes.
-- **Candidate Evaluation**: Fuzzy-matches titles/artists and ranks candidate tracks by duration, keywords, and relevance.
+- **Track Selection & Ranking**: Ranks search candidates using Unicode fuzzy matching to enforce title/artist identity, scoring full Extended/Original Mixes (4.0m–13.0m) higher while penalizing short radio edits (< 4.0m) and filtering out preview snippets (< 2.0m) or continuous album mixes.
 - **Stream Extraction**: Downloads native high-bitrate audio streams directly to disk without lossy re-encoding.
 - **Spectrum & Loudness Analysis**: Runs Goertzel PCM spectral transform to detect low-bitrate rips and calculates Gain Offset.
 - **Metadata & Artwork Enrichment**: Resolves official track metadata via iTunes and MusicBrainz APIs and embeds 1400x1400 cover art.
