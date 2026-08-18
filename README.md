@@ -5,7 +5,7 @@
 
 `fetch-track` is a CLI tool for acquiring, inspecting, and enriching high-fidelity single tracks for amateur and bedroom DJ setups (Engine DJ / Denon, Pioneer Rekordbox, Serato DJ, Traktor). It does not depend on proprietary record pools or specific DJ software—it produces clean, high-fidelity `.m4a` audio files with embedded metadata and artwork that import directly into any DJ software or hardware deck.
 
-It searches configured sources (**YouTube, SoundCloud, Bandcamp**) in parallel for full/extended DJ mixes. When given a direct URL or search query, it extracts search terms, evaluates audio candidates concurrently across all sources for frequency response and track length, downloads native audio streams, performs spectral bandwidth & loudness analysis, resolves metadata with multi-tiered API fallbacks, and embeds 1400x1400 cover art compatible with Engine DJ hardware decks, DJ software, and macOS Finder QuickLook previews.
+It searches configured sources (**YouTube, SoundCloud**) in parallel for full/extended DJ mixes. When given a direct URL or search query, it extracts search terms, evaluates audio candidates concurrently across all sources for frequency response and track length, downloads native audio streams, performs spectral bandwidth & loudness analysis, resolves metadata with multi-tiered API fallbacks, and embeds 1400x1400 cover art compatible with Engine DJ hardware decks, DJ software, and macOS Finder QuickLook previews.
 
 ---
 
@@ -63,7 +63,7 @@ Metadata and high-resolution cover art are fetched without commercial API keys u
 ## Features
 
 - **Single-Track DJ Acquisition:** Takes a search query or direct URL and automates search term extraction, parallel multi-source candidate evaluation, downloading, verification, and tagging in one step.
-- **Parallel Multi-Source Search:** Queries configured sources (**YouTube, SoundCloud, Bandcamp**) concurrently in parallel by default (configurable via `-s`).
+- **Parallel Multi-Source Search:** Queries configured sources (**YouTube, SoundCloud**) concurrently in parallel by default (configurable via `-s`).
 - **Direct URL Search Term Extraction:** If given a direct URL (e.g. a YouTube or SoundCloud link), `fetch-track` probes its metadata to extract artist and track title, pools the direct URL with parallel search results across all configured sources, and guarantees selecting the best full Extended/Original DJ Mix track.
 - **LLM Agent Mode (`AGENT=1`):** When `AGENT=1` environment variable is set, outputs compact, token-conservative key-value text designed for LLM agents and fast human reading.
 - **Full DJ Mix Candidate Ranking:** Evaluates search candidates across sources and ranks full extended/original DJ mixes (4.5 to 13 minutes) while filtering out short radio edits and continuous album mixes.
@@ -113,7 +113,7 @@ just install
 
 ### 1. Parallel Multi-Source Acquisition
 
-Search YouTube, SoundCloud, and Bandcamp in parallel:
+Search YouTube and SoundCloud in parallel:
 
 ```bash
 just run "Boris Brejcha - Space X"
@@ -122,9 +122,9 @@ just run "Boris Brejcha - Space X"
 
 Sample Output:
 ```
+searching: youtube, soundcloud
 candidates:
   - "Boris Brejcha - Space X (Radio Edit)" [youtube 3:15]
-  - "Boris Brejcha - Space X (Original Mix)" [bandcamp 7:45]
   - "Boris Brejcha - Space X (Extended Mix)" [soundcloud 8:23]
 selected: "Boris Brejcha - Space X (Extended Mix)" [soundcloud 8:23] score=150
 
@@ -217,7 +217,7 @@ just verify "tracks/Boris Brejcha - Space X.m4a"
 `fetch-track` preserves original source audio quality by using stream copying during tagging and in-memory decoding during quality analysis:
 
 1. **Source Stream Extraction (`yt-dlp`):**  
-   Searches and requests native M4A/AAC streams (`-f "140/bestaudio[ext=m4a]/bestaudio/best"`). Extracts the stream directly to disk as `.m4a` without transcoding.
+   Searches and requests native high-bitrate audio streams (`-f "bestaudio/best"`). Extracts the stream directly to disk without transcoding.
 
 2. **In-Memory Spectral Analysis (`ffmpeg`):**  
    Decodes a 30-second audio snippet directly to a 32-bit float PCM memory buffer (`pipe:1`) for Goertzel frequency analysis and Peak/RMS loudness measurement. Decoded PCM data is analyzed in memory and is never written to disk.
