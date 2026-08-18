@@ -1,6 +1,6 @@
 ---
 created_on: 2026-08-14 21:25
-last_modified: 2026-08-16 08:55
+last_modified: 2026-08-18 04:40
 status: current
 ---
 
@@ -27,7 +27,7 @@ Go CLI tool for searching, verifying, downloading, and managing high-fidelity si
 - **Filename Sanitization:** Clean output filenames (`<outDir>/<Artist> - <Title>.<ext>`). Stripped of YouTube IDs or brackets `[...]`.
 - **Hermetic Unit Tests:** All unit tests (`just test`) MUST remain 100% offline, hermetic, and deterministic. All HTTP network calls in tests use local `mockTransport` HTTP mocks, all audio operations use local synthetic files in `t.TempDir()`, and zero unit tests depend on or call the live internet.
 - **Output Formatting:** All CLI output must be plain text without emojis across all modes and logs. In interactive non-AGENT mode, a bottom-line braille terminal spinner (`⠏ working... <action>`) indicates active background tasks while candidate results print above it in real time as they arrive (`PrintAbove`).
-- **Gain Staging & Gain Offset:** Measures peak levels and RMS loudness to calculate channel gain offsets before playing tracks.
+- **Release Notes:** All GitHub releases MUST include comprehensive release notes detailing user-visible changes, performance improvements, and notable commits in the tag range.
 - **Metadata Fallback Chain:**
   1. iTunes Search API (1400x1400 artwork)
   2. MusicBrainz API + Cover Art Archive
