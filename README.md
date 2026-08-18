@@ -5,11 +5,19 @@
 > **⚠️ Intended Audience & Legal Disclaimer:**  
 > `fetch-track` is strictly intended for **amateur and bedroom DJs** practicing at home or playing non-commercial sets who are not seeking to become professional DJs. **Working professional DJs and commercial performers must source music from legitimate sources** (such as Beatport, Bandcamp purchases, Juno Download, iTunes, or authorized record pools).
 
-The tool produces clean, high-fidelity `.m4a` audio files with embedded metadata and artwork.
+## What It Does
+
+`fetch-track` automates single-track acquisition for home DJ setups:
+
+- **Full DJ Mix Acquisition**: Searches YouTube and SoundCloud in parallel for Extended, Original, Club, or Dub Mixes with beatmatchable intro/outro sections.
+- **Zero-Loss Quality**: Downloads native high-bitrate audio streams directly without lossy-to-lossy re-encoding.
+- **Spectral & Loudness Analysis**: Runs Goertzel PCM frequency analysis up to 20 kHz and calculates channel Gain Offset for seamless DJ level-matching.
+- **Metadata & 1400x1400 Artwork**: Enriches files with official iTunes/MusicBrainz tags and embeds 1400x1400 cover art compatible with Engine DJ decks, Pioneer Rekordbox, Serato DJ, Traktor, and macOS Finder.
+- **Clean File Organization**: Saves tracks in `./tracks/` using standardized `<Artist> - <Title>.<ext>` filenames, stripped of video IDs and brackets.
 
 ## How It Works
 
-- **Parallel Search**: Queries configured sources (**YouTube, SoundCloud**) concurrently for Original and Extended DJ Mixes.
+- **Parallel Search**: Queries **YouTube** and **SoundCloud** (configurable) concurrently for original and extended mixes.
 - **Candidate Evaluation**: Fuzzy-matches titles/artists and ranks candidate tracks by duration, keywords, and relevance.
 - **Stream Extraction**: Downloads native high-bitrate audio streams directly to disk without lossy re-encoding.
 - **Spectrum & Loudness Analysis**: Runs Goertzel PCM spectral transform to detect low-bitrate rips and calculates Gain Offset.
