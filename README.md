@@ -1,11 +1,19 @@
 # fetch-track
 
+`fetch-track` is a CLI tool for acquiring high-fidelity music tracks for amateur and bedroom DJ collections. 
+
 > **⚠️ Intended Audience & Legal Disclaimer:**  
 > `fetch-track` is strictly intended for **amateur and bedroom DJs** practicing at home or playing non-commercial sets who are not seeking to become professional DJs. **Working professional DJs and commercial performers must source music from legitimate sources** (such as Beatport, Bandcamp purchases, Juno Download, iTunes, or authorized record pools).
 
-`fetch-track` is a CLI tool for acquiring, inspecting, and enriching high-fidelity single tracks for amateur and bedroom DJ setups (Engine DJ / Denon, Pioneer Rekordbox, Serato DJ, Traktor). It does not depend on proprietary record pools or specific DJ software—it produces clean, high-fidelity `.m4a` audio files with embedded metadata and artwork that import directly into any DJ software or hardware deck.
+The tool produces clean, high-fidelity `.m4a` audio files with embedded metadata and artwork.
 
-It searches configured sources (**YouTube, SoundCloud**) in parallel for full/extended DJ mixes. When given a direct URL or search query, it extracts search terms, evaluates audio candidates concurrently across all sources for frequency response and track length, downloads native audio streams, performs spectral bandwidth & loudness analysis, resolves metadata with multi-tiered API fallbacks, and embeds 1400x1400 cover art compatible with Engine DJ hardware decks, DJ software, and macOS Finder QuickLook previews.
+## How It Works
+
+- **Parallel Search**: Queries configured sources (**YouTube, SoundCloud**) concurrently for Original and Extended DJ Mixes.
+- **Candidate Evaluation**: Fuzzy-matches titles/artists and ranks candidate tracks by duration, keywords, and relevance.
+- **Stream Extraction**: Downloads native high-bitrate audio streams directly to disk without lossy re-encoding.
+- **Spectrum & Loudness Analysis**: Runs Goertzel PCM spectral transform to detect low-bitrate rips and calculates Gain Offset.
+- **Metadata & Artwork Enrichment**: Resolves official track metadata via iTunes and MusicBrainz APIs and embeds 1400x1400 cover art.
 
 ---
 
