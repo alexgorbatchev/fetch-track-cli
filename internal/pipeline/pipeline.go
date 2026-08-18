@@ -32,7 +32,7 @@ func IsAgentMode() bool {
 // Run executes the full single-track acquisition pipeline.
 func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 	if opts.OutDir == "" {
-		opts.OutDir = "tracks"
+		opts.OutDir = "."
 	}
 	if len(opts.Sources) == 0 {
 		opts.Sources = []string{"youtube", "soundcloud"}

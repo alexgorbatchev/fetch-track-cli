@@ -69,7 +69,7 @@ performs spectral bandwidth & loudness analysis, and enriches files with 1400x14
 
 	rootCmd.SetVersionTemplate("{{.Version}}\n")
 
-	rootCmd.Flags().StringVarP(&outDir, "out-dir", "o", "tracks", "Output directory for acquired tracks (default: tracks)")
+	rootCmd.Flags().StringVarP(&outDir, "out-dir", "o", ".", "Output directory for downloaded tracks (default: current working directory)")
 	rootCmd.Flags().StringVarP(&sourcesFlag, "sources", "s", "youtube,soundcloud", "Comma-separated list of sources to search in parallel")
 	rootCmd.Flags().BoolVar(&skipVerify, "skip-verify", false, "Skip DJ audio quality and spectrum inspection")
 	rootCmd.Flags().BoolVar(&skipMetadata, "skip-metadata", false, "Skip metadata lookup and high-res cover art tagging")

@@ -1,6 +1,6 @@
 ---
 created_on: 2026-08-14 21:25
-last_modified: 2026-08-18 04:40
+last_modified: 2026-08-18 05:30
 status: current
 ---
 
@@ -18,7 +18,7 @@ Go CLI tool for searching, verifying, downloading, and managing high-fidelity si
 
 ## Setup & Environment
 - **Prerequisites:** Go 1.26+, `yt-dlp`, `ffmpeg`, `ffprobe`, `just`.
-- **Output Directory:** Master tracks are stored in `./tracks/` with clean sanitized filenames. `.m4a` is preferred when native AAC streams are available; native formats (`.mp3`, `.flac`) are preserved zero-loss when downloaded from sources like SoundCloud.
+- **Output Directory:** Default output directory is the current working directory (`.`). Use `-o <dir>` / `--out-dir` to specify a custom destination directory.
 - **Temporary Files:** Temporary file operations use `.tmp/` within the project root.
 
 ## Conventions
