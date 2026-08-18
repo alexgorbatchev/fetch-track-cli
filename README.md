@@ -48,21 +48,18 @@ Acquired tracks are saved in standard `.m4a` format with embedded 1400x1400 artw
 
 ## Installation
 
-Download the latest pre-compiled binary for your computer using GitHub CLI or direct download:
+1. Go to the [GitHub Latest Release Page](https://github.com/alexgorbatchev/fetch-track-cli/releases/latest).
+2. Download the pre-compiled archive for your operating system:
+   - **macOS**: `fetch-track_1.0.0_darwin_arm64.tar.gz` (Apple Silicon) or `fetch-track_1.0.0_darwin_amd64.tar.gz` (Intel)
+   - **Linux**: `fetch-track_1.0.0_linux_amd64.tar.gz` or `fetch-track_1.0.0_linux_arm64.tar.gz`
+   - **Windows**: `fetch-track_1.0.0_windows_amd64.zip` or `fetch-track_1.0.0_windows_arm64.zip`
+3. Extract the downloaded archive and move the `fetch-track` executable into a folder in your system `PATH` (such as `/usr/local/bin` on macOS/Linux).
+
+Alternatively, if you have Go installed:
 
 ```bash
-# macOS (Apple Silicon / ARM64)
-gh release download --repo alexgorbatchev/fetch-track-cli --pattern "*darwin_arm64*.tar.gz" --clobber
-tar -xzf fetch-track*.tar.gz
-sudo mv fetch-track /usr/local/bin/
-
-# Linux (AMD64)
-gh release download --repo alexgorbatchev/fetch-track-cli --pattern "*linux_amd64*.tar.gz" --clobber
-tar -xzf fetch-track*.tar.gz
-sudo mv fetch-track /usr/local/bin/
+go install github.com/dj/fetch-track-cli/cmd/fetch-track@latest
 ```
-
-Or download directly from [GitHub Releases Latest](https://github.com/alexgorbatchev/fetch-track-cli/releases/latest).
 
 ---
 
