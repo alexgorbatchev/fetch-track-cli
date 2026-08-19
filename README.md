@@ -81,7 +81,15 @@ Search YouTube only or SoundCloud only:
 fetch-track -s "youtube" "Boris Brejcha - Space X"
 ```
 
-### 4. Check an Existing Local Track File
+### 4. Interactive Track Candidate Approval
+
+Approve or choose a different search result candidate interactively before downloading:
+
+```bash
+fetch-track -i "Boris Brejcha - Space X"
+```
+
+### 5. Check an Existing Local Track File
 
 Inspect any audio file without downloading:
 
@@ -89,7 +97,7 @@ Inspect any audio file without downloading:
 fetch-track verify "Boris Brejcha - Space X.m4a"
 ```
 
-### 5. Verify Installed Dependencies
+### 6. Verify Installed Dependencies
 
 Verify that `yt-dlp`, `ffmpeg`, and `ffprobe` are installed and meet minimum version requirements:
 
@@ -112,6 +120,7 @@ All dependencies met.
 | :--- | :--- | :--- | :--- |
 | `--out-dir` | `-o` | `.` | Folder where tracks are saved |
 | `--sources` | `-s` | `youtube,soundcloud` | Comma-separated list of [supported search sources](#supported-search-sources) |
+| `--interactive` | `-i` | `false` | Interactively approve or choose track candidate before downloading |
 | `--skip-verify` | | `false` | Skip audio frequency and loudness check |
 | `--skip-metadata` | | `false` | Skip fetching album artwork and track details |
 | `--verbose` | `-v` | `false` | Show extra detailed progress logs |
