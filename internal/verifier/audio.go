@@ -22,6 +22,7 @@ type TrackMetadata struct {
 	DurationSeconds float64 `json:"durationSeconds"`
 	Format          string  `json:"format"`
 	SourceURLOrPath string  `json:"sourceUrlOrPath"`
+	Cached          bool    `json:"cached,omitempty"`
 }
 
 // VerificationReport contains full structural and audio quality diagnostics.
@@ -59,6 +60,7 @@ func FetchURLMetadata(ctx context.Context, url string, c ...*cache.Cache) (*Trac
 
 	var cachedMeta TrackMetadata
 	if cacheInst != nil && cacheInst.Get("url_meta", url, &cachedMeta) {
+		cachedMeta.Cached = true
 		return &cachedMeta, nil
 	}
 

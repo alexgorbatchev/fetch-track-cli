@@ -286,6 +286,9 @@ func (c *Client) ResolveTrackMetadata(ctx context.Context, searchQuery, fallback
 		if isVerbose {
 			fmt.Printf("metadata cache hit for %q\n", searchQuery)
 		}
+		if !strings.HasSuffix(cachedRes.Source, "[cached]") {
+			cachedRes.Source = cachedRes.Source + " [cached]"
+		}
 		return cachedRes
 	}
 

@@ -84,7 +84,11 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 			}
 
 			if !opts.IsAgent {
-				fmt.Printf("  URL Title: \"%s\" (Uploader: %s)\n", meta.Title, meta.Uploader)
+				cachedTag := ""
+				if meta.Cached {
+					cachedTag = " [cached]"
+				}
+				fmt.Printf("  URL Title: \"%s\" (Uploader: %s)%s\n", meta.Title, meta.Uploader, cachedTag)
 			}
 
 			// Include direct URL as candidate in pool

@@ -56,6 +56,11 @@ func SearchSourcesInParallel(ctx context.Context, sources []string, artist, titl
 	if c != nil && c.Get("searches", cacheKey, &cachedList) && len(cachedList) > 0 {
 		if isVerbose {
 			fmt.Printf("search cache hit for %q\n", rawQuery)
+		} else if !isAgentMode() {
+			fmt.Printf("candidates: [cached]\n")
+			for _, cand := range cachedList {
+				fmt.Printf("  - %q [%s %s]\n", cand.Title, cand.Source, verifier.FormatDuration(cand.Duration))
+			}
 		}
 		return cachedList, nil
 	}
