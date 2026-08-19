@@ -50,7 +50,7 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 	cacheInst, _ := cache.New(!opts.NoCache)
 
 	if !opts.SkipDepCheck {
-		if err := deps.CheckDependencies(ctx); err != nil {
+		if err := deps.CheckDependencies(ctx, cacheInst); err != nil {
 			if opts.IsAgent {
 				fmt.Printf("target: %s\nstatus: error\nerror: %v\n", urlOrQuery, err)
 			}

@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/dj/fetch-track-cli/internal/cache"
@@ -72,13 +73,22 @@ type DependencyReport struct {
 }
 
 // CheckDependencies verifies all required external binary tools are installed and meet minimum version requirements.
-func CheckDependencies(ctx context.Context) error {
-	return CheckDependenciesWithRunner(ctx, DefaultRunner, RequiredDependencies...)
+func CheckDependencies(ctx context.Context, cacheInst ...*cache.Cache) error {
+	var c *cache.Cache
+	if len(cacheInst) > 0 {
+		c = cacheInst[0]
+	} else {
+		c, _ = cache.New(true)
+	}
+	return CheckDependenciesWithRunner(ctx, DefaultRunner, c, RequiredDependencies...)
 }
 
 // CheckDependenciesWithRunner checks dependencies using a provided CommandRunner.
-func CheckDependenciesWithRunner(ctx context.Context, runner CommandRunner, deps ...Dependency) error {
-	_, err := VerifyDependenciesWithRunner(ctx, runner, nil, deps...)
+func CheckDependenciesWithRunner(ctx context.Context, runner CommandRunner, c *cache.Cache, deps ...Dependency) error {
+	if len(deps) == 0 {
+		deps = RequiredDependencies
+	}
+	_, err := VerifyDependenciesWithRunner(ctx, runner, c, deps...)
 	return err
 }
 
@@ -101,77 +111,88 @@ func VerifyDependencies(ctx context.Context, cacheInst ...*cache.Cache) ([]Depen
 
 // VerifyDependenciesWithRunner inspects dependencies using a provided CommandRunner.
 func VerifyDependenciesWithRunner(ctx context.Context, runner CommandRunner, c *cache.Cache, deps ...Dependency) ([]DependencyReport, error) {
-	var reports []DependencyReport
+	reports := make([]DependencyReport, len(deps))
+	var mu sync.Mutex
 	var firstErr error
 
-	for _, dep := range deps {
-		report := DependencyReport{
-			Name:       dep.Name,
-			MinVersion: dep.MinVersion,
-		}
+	var wg sync.WaitGroup
 
-		var out []byte
-		var err error
+	for i, dep := range deps {
+		wg.Add(1)
+		go func(idx int, dep Dependency) {
+			defer wg.Done()
 
-		var cachedStr string
-		if c != nil && c.Get("deps", dep.Name, &cachedStr) && cachedStr != "" {
-			out = []byte(cachedStr)
-		} else {
-			var versionArgs []string
-			if dep.Name == "yt-dlp" {
-				versionArgs = []string{"--version"}
+			report := DependencyReport{
+				Name:       dep.Name,
+				MinVersion: dep.MinVersion,
+			}
+
+			var out []byte
+			var err error
+
+			var cachedStr string
+			if c != nil && c.Get("deps", dep.Name, &cachedStr) && cachedStr != "" {
+				out = []byte(cachedStr)
 			} else {
-				versionArgs = []string{"-version"}
-			}
-
-			out, err = runner(ctx, dep.Name, versionArgs...)
-			if err == nil && len(out) > 0 && c != nil {
-				_ = c.Put("deps", dep.Name, string(out), 10*time.Minute)
-			}
-		}
-
-		isAgent := IsAgentMode()
-
-		if err != nil {
-			if isNotFound(err) {
-				report.Installed = false
-				report.Satisfied = false
-				if isAgent {
-					report.Error = fmt.Sprintf("%s is missing in $PATH. Ask user for confirmation to install %s version %s or newer.", dep.Name, dep.Name, dep.MinVersion)
+				var versionArgs []string
+				if dep.Name == "yt-dlp" {
+					versionArgs = []string{"--version"}
 				} else {
-					report.Error = fmt.Sprintf("%s is missing in $PATH, install version %s or newer", dep.Name, dep.MinVersion)
+					versionArgs = []string{"-version"}
+				}
+
+				out, err = runner(ctx, dep.Name, versionArgs...)
+				if err == nil && len(out) > 0 && c != nil {
+					_ = c.Put("deps", dep.Name, string(out), 10*time.Minute)
+				}
+			}
+
+			isAgent := IsAgentMode()
+
+			if err != nil {
+				if isNotFound(err) {
+					report.Installed = false
+					report.Satisfied = false
+					if isAgent {
+						report.Error = fmt.Sprintf("%s is missing in $PATH. Ask user for confirmation to install %s version %s or newer.", dep.Name, dep.Name, dep.MinVersion)
+					} else {
+						report.Error = fmt.Sprintf("%s is missing in $PATH, install version %s or newer", dep.Name, dep.MinVersion)
+					}
+				} else {
+					report.Installed = false
+					report.Satisfied = false
+					report.Error = fmt.Sprintf("failed to check %s version: %v", dep.Name, err)
 				}
 			} else {
-				report.Installed = false
-				report.Satisfied = false
-				report.Error = fmt.Sprintf("failed to check %s version: %v", dep.Name, err)
-			}
-		} else {
-			report.Installed = true
-			versionStr := ParseVersionOutput(dep.Name, string(out))
-			report.DetectedVersion = versionStr
+				report.Installed = true
+				versionStr := ParseVersionOutput(dep.Name, string(out))
+				report.DetectedVersion = versionStr
 
-			if versionStr == "" {
-				report.Satisfied = false
-				report.Error = fmt.Sprintf("could not parse %s version output", dep.Name)
-			} else if compErr := CompareVersions(versionStr, dep.MinVersion); compErr != nil {
-				report.Satisfied = false
-				if isAgent {
-					report.Error = fmt.Sprintf("%s version %s in $PATH is outdated. Ask user for confirmation to update %s to version %s or newer.", dep.Name, versionStr, dep.Name, dep.MinVersion)
+				if versionStr == "" {
+					report.Satisfied = false
+					report.Error = fmt.Sprintf("could not parse %s version output", dep.Name)
+				} else if compErr := CompareVersions(versionStr, dep.MinVersion); compErr != nil {
+					report.Satisfied = false
+					if isAgent {
+						report.Error = fmt.Sprintf("%s version %s in $PATH is outdated. Ask user for confirmation to update %s to version %s or newer.", dep.Name, versionStr, dep.Name, dep.MinVersion)
+					} else {
+						report.Error = fmt.Sprintf("%s in $PATH must be version %s or newer", dep.Name, dep.MinVersion)
+					}
 				} else {
-					report.Error = fmt.Sprintf("%s in $PATH must be version %s or newer", dep.Name, dep.MinVersion)
+					report.Satisfied = true
 				}
-			} else {
-				report.Satisfied = true
 			}
-		}
 
-		reports = append(reports, report)
-		if !report.Satisfied && firstErr == nil {
-			firstErr = errors.New(report.Error)
-		}
+			mu.Lock()
+			reports[idx] = report
+			if !report.Satisfied && firstErr == nil {
+				firstErr = errors.New(report.Error)
+			}
+			mu.Unlock()
+		}(i, dep)
 	}
 
+	wg.Wait()
 	return reports, firstErr
 }
 

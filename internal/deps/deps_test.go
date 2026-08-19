@@ -147,7 +147,7 @@ func TestCheckDependenciesWithRunner(t *testing.T) {
 			}
 		}
 
-		err := CheckDependenciesWithRunner(ctx, mockRunner, RequiredDependencies...)
+		err := CheckDependenciesWithRunner(ctx, mockRunner, nil, RequiredDependencies...)
 		if err != nil {
 			t.Fatalf("expected no error, got: %v", err)
 		}
@@ -160,7 +160,7 @@ func TestCheckDependenciesWithRunner(t *testing.T) {
 			return nil, &exec.Error{Name: name, Err: exec.ErrNotFound}
 		}
 
-		err := CheckDependenciesWithRunner(ctx, mockRunnerMissing, Dependency{Name: "yt-dlp", MinVersion: "2024.08.01"})
+		err := CheckDependenciesWithRunner(ctx, mockRunnerMissing, nil, Dependency{Name: "yt-dlp", MinVersion: "2024.08.01"})
 		if err == nil || !strings.Contains(err.Error(), "yt-dlp is missing in $PATH. Ask user for confirmation to install yt-dlp version 2024.08.01 or newer.") {
 			t.Errorf("unexpected agent missing error: %v", err)
 		}
@@ -169,7 +169,7 @@ func TestCheckDependenciesWithRunner(t *testing.T) {
 			return []byte("2023.03.04"), nil
 		}
 
-		err = CheckDependenciesWithRunner(ctx, mockRunnerOutdated, Dependency{Name: "yt-dlp", MinVersion: "2024.08.01"})
+		err = CheckDependenciesWithRunner(ctx, mockRunnerOutdated, nil, Dependency{Name: "yt-dlp", MinVersion: "2024.08.01"})
 		if err == nil || !strings.Contains(err.Error(), "yt-dlp version 2023.03.04 in $PATH is outdated. Ask user for confirmation to update yt-dlp to version 2024.08.01 or newer.") {
 			t.Errorf("unexpected agent outdated error: %v", err)
 		}
@@ -184,7 +184,7 @@ func TestCheckDependenciesWithRunner(t *testing.T) {
 			return []byte("2026.07.04"), nil
 		}
 
-		err := CheckDependenciesWithRunner(ctx, mockRunner, RequiredDependencies...)
+		err := CheckDependenciesWithRunner(ctx, mockRunner, nil, RequiredDependencies...)
 		if err == nil {
 			t.Fatal("expected error for missing ffmpeg, got nil")
 		}
@@ -202,7 +202,7 @@ func TestCheckDependenciesWithRunner(t *testing.T) {
 			return []byte("ffmpeg version 8.1.2"), nil
 		}
 
-		err := CheckDependenciesWithRunner(ctx, mockRunner, RequiredDependencies...)
+		err := CheckDependenciesWithRunner(ctx, mockRunner, nil, RequiredDependencies...)
 		if err == nil {
 			t.Fatal("expected error for outdated yt-dlp, got nil")
 		}
