@@ -118,6 +118,7 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 	if searchErr == nil {
 		candidatePool = append(candidatePool, foundCandidates...)
 	}
+	candidatePool = downloader.DeduplicateCandidates(candidatePool)
 
 	var selectedCandidate *downloader.Candidate
 

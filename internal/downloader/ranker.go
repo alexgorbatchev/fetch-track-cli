@@ -1,6 +1,7 @@
 package downloader
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 	"unicode"
@@ -45,8 +46,52 @@ func NormalizeUnicode(input string) string {
 	return res
 }
 
+// DeduplicateCandidates removes duplicate candidates based on WebpageURL, ID, or matching Source+Title+Duration.
+func DeduplicateCandidates(candidates []Candidate) []Candidate {
+	if len(candidates) <= 1 {
+		return candidates
+	}
+
+	seenURL := make(map[string]bool)
+	seenID := make(map[string]bool)
+	seenKey := make(map[string]bool)
+
+	var unique []Candidate
+
+	for _, c := range candidates {
+		normURL := strings.ToLower(strings.TrimSpace(c.WebpageURL))
+		if normURL != "" {
+			if seenURL[normURL] {
+				continue
+			}
+			seenURL[normURL] = true
+		}
+
+		if c.ID != "" {
+			idKey := fmt.Sprintf("%s:%s", strings.ToLower(c.Source), strings.ToLower(c.ID))
+			if seenID[idKey] {
+				continue
+			}
+			seenID[idKey] = true
+		}
+
+		durSec := int(c.Duration)
+		titleNorm := NormalizeUnicode(c.Title)
+		compositeKey := fmt.Sprintf("%s:%s:%d", strings.ToLower(c.Source), titleNorm, durSec)
+		if seenKey[compositeKey] {
+			continue
+		}
+		seenKey[compositeKey] = true
+
+		unique = append(unique, c)
+	}
+
+	return unique
+}
+
 // RankAllCandidates ranks and scores all candidates in-place and returns the scored slice.
 func RankAllCandidates(candidates []Candidate, artist, title string) []Candidate {
+	candidates = DeduplicateCandidates(candidates)
 	if len(candidates) == 0 {
 		return nil
 	}

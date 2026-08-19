@@ -87,6 +87,24 @@ func TestEvaluateAndInspectCandidatesInParallel_Empty(t *testing.T) {
 	}
 }
 
+func TestDeduplicateCandidates(t *testing.T) {
+	candidates := []Candidate{
+		{ID: "1", Title: "DJ Blyatman - Gopnik", Duration: 192, Source: "soundcloud", WebpageURL: "https://soundcloud.com/djblyatman/gopnik"},
+		{ID: "1", Title: "DJ Blyatman - Gopnik", Duration: 192, Source: "soundcloud", WebpageURL: "https://soundcloud.com/djblyatman/gopnik"}, // Exact URL duplicate
+		{ID: "2", Title: "DJ Blyatman - Gopnik", Duration: 192, Source: "soundcloud", WebpageURL: "https://soundcloud.com/djblyatman/gopnik-track"}, // Title + Source + Duration duplicate
+		{ID: "3", Title: "DJ BLYATMAN - GOPNIK (Official Audio)", Duration: 193, Source: "youtube", WebpageURL: "https://youtube.com/watch?v=3"}, // Unique candidate
+	}
+
+	unique := DeduplicateCandidates(candidates)
+	if len(unique) != 2 {
+		t.Fatalf("expected 2 unique candidates, got %d", len(unique))
+	}
+
+	if unique[0].ID != "1" || unique[1].ID != "3" {
+		t.Errorf("unexpected unique candidate IDs: %+v", unique)
+	}
+}
+
 func TestSearchSourcesInParallel_EmptySources(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // cancel context immediately to avoid external yt-dlp execution
