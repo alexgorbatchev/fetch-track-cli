@@ -122,6 +122,8 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 	var selectedCandidate *downloader.Candidate
 
 	if len(candidatePool) > 0 {
+		downloader.RankAllCandidates(candidatePool, artist, title)
+
 		bestCandidate, evalErr := downloader.EvaluateAndInspectCandidatesInParallel(ctx, candidatePool, artist, title, opts.Verbose)
 		if evalErr == nil && bestCandidate != nil {
 			selectedCandidate = bestCandidate

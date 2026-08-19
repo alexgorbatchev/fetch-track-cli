@@ -45,8 +45,8 @@ func NormalizeUnicode(input string) string {
 	return res
 }
 
-// RankCandidates scores and ranks candidates across all sources to select the best full/extended DJ mix.
-func RankCandidates(candidates []Candidate, artist, title string) *Candidate {
+// RankAllCandidates ranks and scores all candidates in-place and returns the scored slice.
+func RankAllCandidates(candidates []Candidate, artist, title string) []Candidate {
 	if len(candidates) == 0 {
 		return nil
 	}
@@ -61,11 +61,8 @@ func RankCandidates(candidates []Candidate, artist, title string) *Candidate {
 	cleanTitle = strings.TrimSpace(cleanTitle)
 	cleanTitleNorm := NormalizeUnicode(cleanTitle)
 
-	scored := make([]Candidate, len(candidates))
-	copy(scored, candidates)
-
-	for i := range scored {
-		cand := &scored[i]
+	for i := range candidates {
+		cand := &candidates[i]
 		score := 0
 		candTitleLower := strings.ToLower(cand.Title)
 		candTitleNorm := NormalizeUnicode(cand.Title)
@@ -128,12 +125,20 @@ func RankCandidates(candidates []Candidate, artist, title string) *Candidate {
 		cand.Score = score
 	}
 
-	sort.SliceStable(scored, func(i, j int) bool {
-		return scored[i].Score > scored[j].Score
+	sort.SliceStable(candidates, func(i, j int) bool {
+		return candidates[i].Score > candidates[j].Score
 	})
 
-	best := scored[0]
-	return &best
+	return candidates
+}
+
+// RankCandidates scores and ranks candidates across all sources to select the best full/extended DJ mix.
+func RankCandidates(candidates []Candidate, artist, title string) *Candidate {
+	ranked := RankAllCandidates(candidates, artist, title)
+	if len(ranked) == 0 {
+		return nil
+	}
+	return &ranked[0]
 }
 
 // Deprecated alias for backwards compatibility with earlier tests.
