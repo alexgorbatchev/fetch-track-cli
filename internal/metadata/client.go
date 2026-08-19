@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dj/fetch-track-cli/internal/cache"
 	"github.com/dj/fetch-track-cli/internal/downloader"
 )
 
@@ -31,14 +32,20 @@ type HTTPClient interface {
 // Client wraps HTTP capabilities for metadata lookup.
 type Client struct {
 	httpClient HTTPClient
+	Cache      *cache.Cache
 }
 
 // NewClient creates a new Client with a default HTTP client timeout.
-func NewClient() *Client {
+func NewClient(cacheInst ...*cache.Cache) *Client {
+	var c *cache.Cache
+	if len(cacheInst) > 0 {
+		c = cacheInst[0]
+	}
 	return &Client{
 		httpClient: &http.Client{
 			Timeout: 15 * time.Second,
 		},
+		Cache: c,
 	}
 }
 
@@ -273,6 +280,15 @@ func (c *Client) FetchFromMusicBrainz(ctx context.Context, query, expectedTitle 
 func (c *Client) ResolveTrackMetadata(ctx context.Context, searchQuery, fallbackArtist, fallbackTitle string, verbose ...bool) TrackMetadataResult {
 	isVerbose := len(verbose) > 0 && verbose[0]
 
+	cacheKey := fmt.Sprintf("%s:%s:%s", searchQuery, fallbackArtist, fallbackTitle)
+	var cachedRes TrackMetadataResult
+	if c.Cache != nil && c.Cache.Get("metadata", cacheKey, &cachedRes) {
+		if isVerbose {
+			fmt.Printf("metadata cache hit for %q\n", searchQuery)
+		}
+		return cachedRes
+	}
+
 	expectedTitle := fallbackTitle
 	if expectedTitle == "" {
 		expectedTitle = searchQuery
@@ -290,6 +306,9 @@ func (c *Client) ResolveTrackMetadata(ctx context.Context, searchQuery, fallback
 				fmt.Printf("itunes artwork: %s\n", res.CoverArtURL)
 			}
 		}
+		if c.Cache != nil {
+			_ = c.Cache.Put("metadata", cacheKey, *res, 7*24*time.Hour)
+		}
 		return *res
 	} else if isVerbose {
 		fmt.Printf("itunes: no match\nmusicbrainz: searching\n")
@@ -301,6 +320,9 @@ func (c *Client) ResolveTrackMetadata(ctx context.Context, searchQuery, fallback
 			if res.CoverArtURL != "" {
 				fmt.Printf("coverart archive: %s\n", res.CoverArtURL)
 			}
+		}
+		if c.Cache != nil {
+			_ = c.Cache.Put("metadata", cacheKey, *res, 7*24*time.Hour)
 		}
 		return *res
 	} else if isVerbose {

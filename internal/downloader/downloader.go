@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dj/fetch-track-cli/internal/cache"
 	"github.com/dj/fetch-track-cli/internal/verifier"
 	"github.com/lithammer/fuzzysearch/fuzzy"
 )
@@ -40,7 +41,7 @@ func MapSourceSearchPrefix(source string) string {
 }
 
 // SearchSourcesInParallel searches all configured sources concurrently for track candidates.
-func SearchSourcesInParallel(ctx context.Context, sources []string, artist, title, rawQuery string, verbose ...bool) ([]Candidate, error) {
+func SearchSourcesInParallel(ctx context.Context, sources []string, artist, title, rawQuery string, c *cache.Cache, verbose ...bool) ([]Candidate, error) {
 	isVerbose := len(verbose) > 0 && verbose[0]
 	if isVerbose {
 		fmt.Printf("search: %s\n", strings.Join(sources, ", "))
@@ -48,6 +49,15 @@ func SearchSourcesInParallel(ctx context.Context, sources []string, artist, titl
 
 	if len(sources) == 0 {
 		sources = []string{"youtube", "soundcloud"}
+	}
+
+	cacheKey := fmt.Sprintf("%s:%s:%s", strings.Join(sources, ","), artist, rawQuery)
+	var cachedList []Candidate
+	if c != nil && c.Get("searches", cacheKey, &cachedList) && len(cachedList) > 0 {
+		if isVerbose {
+			fmt.Printf("search cache hit for %q\n", rawQuery)
+		}
+		return cachedList, nil
 	}
 
 	cleanTitle := title
@@ -174,6 +184,10 @@ func SearchSourcesInParallel(ctx context.Context, sources []string, artist, titl
 		candidateList = append(candidateList, c)
 	}
 
+	if c != nil {
+		_ = c.Put("searches", cacheKey, candidateList, 12*time.Hour)
+	}
+
 	return candidateList, nil
 }
 
@@ -193,7 +207,7 @@ func EvaluateAndInspectCandidatesInParallel(ctx context.Context, candidates []Ca
 
 // SearchAndSelectBestCandidate coordinates searching across sources in parallel and evaluating top candidates.
 func SearchAndSelectBestCandidate(ctx context.Context, sources []string, artist, title, rawQuery string) (*Candidate, error) {
-	candidates, err := SearchSourcesInParallel(ctx, sources, artist, title, rawQuery)
+	candidates, err := SearchSourcesInParallel(ctx, sources, artist, title, rawQuery, nil)
 	if err != nil {
 		return nil, err
 	}

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/dj/fetch-track-cli/internal/cache"
 	"github.com/dj/fetch-track-cli/internal/deps"
 	"github.com/dj/fetch-track-cli/internal/downloader"
 	"github.com/dj/fetch-track-cli/internal/metadata"
@@ -23,6 +24,7 @@ type Options struct {
 	SkipMetadata bool
 	SkipDepCheck bool
 	Interactive  bool
+	NoCache      bool
 	Verbose      bool
 	IsAgent      bool
 }
@@ -44,6 +46,8 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 	if IsAgentMode() {
 		opts.IsAgent = true
 	}
+
+	cacheInst, _ := cache.New(!opts.NoCache)
 
 	if !opts.SkipDepCheck {
 		if err := deps.CheckDependencies(ctx); err != nil {
@@ -67,7 +71,7 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 		if !opts.IsAgent {
 			fmt.Println("\nInspecting provided URL metadata & extracting track search terms...")
 		}
-		meta, err := verifier.FetchURLMetadata(ctx, urlOrQuery)
+		meta, err := verifier.FetchURLMetadata(ctx, urlOrQuery, cacheInst)
 		if err == nil && meta != nil && meta.Title != "" {
 			title = meta.Title
 			artist = meta.Uploader
@@ -111,7 +115,7 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 		}
 	}
 
-	foundCandidates, searchErr := downloader.SearchSourcesInParallel(ctx, opts.Sources, artist, title, rawSearchQuery, opts.Verbose)
+	foundCandidates, searchErr := downloader.SearchSourcesInParallel(ctx, opts.Sources, artist, title, rawSearchQuery, cacheInst, opts.Verbose)
 
 	var candidatePool []downloader.Candidate
 	candidatePool = append(candidatePool, initialCandidates...)
@@ -242,7 +246,7 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 			title = strings.TrimSpace(parts[1])
 		}
 
-		metaClient := metadata.NewClient()
+		metaClient := metadata.NewClient(cacheInst)
 		metaRes := metaClient.ResolveTrackMetadata(ctx, cleanTitle, artist, title, opts.Verbose)
 		metaResult = &metaRes
 
@@ -255,7 +259,7 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 			fmt.Printf("  Source: %s\n", metaRes.Source)
 		}
 
-		taggedPath, tagErr := metadata.ApplyMetadataToLocalTrack(ctx, downloadedPath, metaRes, opts.OutDir, opts.Verbose)
+		taggedPath, tagErr := metadata.ApplyMetadataToLocalTrack(ctx, downloadedPath, metaRes, opts.OutDir, opts.Verbose, cacheInst)
 		if sp != nil {
 			sp.Stop()
 		}

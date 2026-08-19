@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dj/fetch-track-cli/internal/cache"
 	ffmpeg "github.com/u2takey/ffmpeg-go"
 )
 
@@ -19,8 +20,18 @@ func init() {
 
 // ApplyMetadataToLocalTrack embeds metadata and high-res cover art into the M4A file
 // using ffmpeg and renames the file to <outDir>/<SanitizedArtist - SanitizedTitle>.m4a.
-func ApplyMetadataToLocalTrack(ctx context.Context, filePath string, metadata TrackMetadataResult, outDir string, verbose ...bool) (string, error) {
-	isVerbose := len(verbose) > 0 && verbose[0]
+func ApplyMetadataToLocalTrack(ctx context.Context, filePath string, metadata TrackMetadataResult, outDir string, verboseAndCache ...interface{}) (string, error) {
+	isVerbose := false
+	var cacheInst *cache.Cache
+
+	for _, v := range verboseAndCache {
+		switch val := v.(type) {
+		case bool:
+			isVerbose = val
+		case *cache.Cache:
+			cacheInst = val
+		}
+	}
 
 	if err := os.MkdirAll(outDir, 0755); err != nil {
 		return filePath, fmt.Errorf("creating output directory %s: %w", outDir, err)
@@ -41,22 +52,41 @@ func ApplyMetadataToLocalTrack(ctx context.Context, filePath string, metadata Tr
 
 	var coverTempPath string
 	if metadata.CoverArtURL != "" {
-		dlCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		req, err := http.NewRequestWithContext(dlCtx, http.MethodGet, metadata.CoverArtURL, nil)
-		if err == nil {
-			resp, err := http.DefaultClient.Do(req)
-			if err == nil && resp.StatusCode == http.StatusOK {
-				cPath := filepath.Join(tmpDir, fmt.Sprintf("cover_%d.jpg", time.Now().UnixNano()))
-				outFile, err := os.Create(cPath)
-				if err == nil {
-					_, _ = io.Copy(outFile, resp.Body)
-					_ = outFile.Close()
-					coverTempPath = cPath
-				}
-				_ = resp.Body.Close()
+		if cacheInst != nil {
+			if cachedPath, found := cacheInst.GetFile("artworks", metadata.CoverArtURL, 30*24*time.Hour); found {
+				coverTempPath = cachedPath
 			}
 		}
-		cancel()
+
+		if coverTempPath == "" {
+			dlCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+			req, err := http.NewRequestWithContext(dlCtx, http.MethodGet, metadata.CoverArtURL, nil)
+			if err == nil {
+				resp, err := http.DefaultClient.Do(req)
+				if err == nil && resp.StatusCode == http.StatusOK {
+					imgBytes, errRead := io.ReadAll(resp.Body)
+					_ = resp.Body.Close()
+
+					if errRead == nil && len(imgBytes) > 0 {
+						if cacheInst != nil {
+							if savedPath, errPut := cacheInst.PutFile("artworks", metadata.CoverArtURL, imgBytes); errPut == nil {
+								coverTempPath = savedPath
+							}
+						}
+
+						if coverTempPath == "" {
+							cPath := filepath.Join(tmpDir, fmt.Sprintf("cover_%d.jpg", time.Now().UnixNano()))
+							if errWrite := os.WriteFile(cPath, imgBytes, 0644); errWrite == nil {
+								coverTempPath = cPath
+							}
+						}
+					}
+				} else if resp != nil {
+					_ = resp.Body.Close()
+				}
+			}
+			cancel()
+		}
 	}
 
 	defer func() {

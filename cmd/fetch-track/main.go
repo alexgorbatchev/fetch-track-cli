@@ -24,6 +24,7 @@ var (
 	skipVerify   bool
 	skipMetadata bool
 	interactive  bool
+	noCache      bool
 	verbose      bool
 )
 
@@ -63,6 +64,7 @@ performs spectral bandwidth & loudness analysis, and enriches files with 1400x14
 				SkipVerify:   skipVerify,
 				SkipMetadata: skipMetadata,
 				Interactive:  interactive,
+				NoCache:      noCache,
 				Verbose:      verbose,
 				IsAgent:      pipeline.IsAgentMode(),
 			}
@@ -77,6 +79,7 @@ performs spectral bandwidth & loudness analysis, and enriches files with 1400x14
 	rootCmd.Flags().BoolVar(&skipVerify, "skip-verify", false, "Skip DJ audio quality and spectrum inspection")
 	rootCmd.Flags().BoolVar(&skipMetadata, "skip-metadata", false, "Skip metadata lookup and high-res cover art tagging")
 	rootCmd.Flags().BoolVarP(&interactive, "interactive", "i", false, "Interactively approve or choose track candidate before downloading")
+	rootCmd.Flags().BoolVar(&noCache, "no-cache", false, "Disable local caching for search queries, metadata, and artwork")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output logging")
 
 	verifyCmd := &cobra.Command{

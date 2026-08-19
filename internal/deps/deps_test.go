@@ -110,7 +110,7 @@ func TestVerifyDependenciesWithRunner(t *testing.T) {
 			}
 		}
 
-		reports, err := VerifyDependenciesWithRunner(ctx, mockRunner, RequiredDependencies...)
+		reports, err := VerifyDependenciesWithRunner(ctx, mockRunner, nil, RequiredDependencies...)
 		if err == nil {
 			t.Fatal("expected error due to missing ffprobe")
 		}

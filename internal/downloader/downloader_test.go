@@ -109,7 +109,7 @@ func TestSearchSourcesInParallel_EmptySources(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // cancel context immediately to avoid external yt-dlp execution
 
-	_, err := SearchSourcesInParallel(ctx, []string{}, "Artist", "Title", "Query")
+	_, err := SearchSourcesInParallel(ctx, []string{}, "Artist", "Title", "Query", nil)
 	if err == nil {
 		t.Error("expected error for canceled context in search")
 	}

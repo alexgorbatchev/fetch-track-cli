@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/dj/fetch-track-cli/internal/cache"
 )
 
 // TrackMetadata holds probed information about a track.
@@ -49,7 +51,17 @@ func IsYouTubeURL(input string) bool {
 }
 
 // FetchURLMetadata fetches metadata for any supported URL via yt-dlp dump-json.
-func FetchURLMetadata(ctx context.Context, url string) (*TrackMetadata, error) {
+func FetchURLMetadata(ctx context.Context, url string, c ...*cache.Cache) (*TrackMetadata, error) {
+	var cacheInst *cache.Cache
+	if len(c) > 0 && c[0] != nil {
+		cacheInst = c[0]
+	}
+
+	var cachedMeta TrackMetadata
+	if cacheInst != nil && cacheInst.Get("url_meta", url, &cachedMeta) {
+		return &cachedMeta, nil
+	}
+
 	cmdCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
@@ -95,13 +107,19 @@ func FetchURLMetadata(ctx context.Context, url string) (*TrackMetadata, error) {
 		format = "m4a"
 	}
 
-	return &TrackMetadata{
+	res := &TrackMetadata{
 		Title:           title,
 		Uploader:        uploader,
 		DurationSeconds: rawData.Duration,
 		Format:          format,
 		SourceURLOrPath: url,
-	}, nil
+	}
+
+	if cacheInst != nil {
+		_ = cacheInst.Put("url_meta", url, res, 24*time.Hour)
+	}
+
+	return res, nil
 }
 
 // FetchYouTubeMetadata maintains backwards compatibility.

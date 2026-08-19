@@ -10,6 +10,9 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
+
+	"github.com/dj/fetch-track-cli/internal/cache"
 )
 
 // Dependency represents a required binary tool and its minimum version.
@@ -75,7 +78,7 @@ func CheckDependencies(ctx context.Context) error {
 
 // CheckDependenciesWithRunner checks dependencies using a provided CommandRunner.
 func CheckDependenciesWithRunner(ctx context.Context, runner CommandRunner, deps ...Dependency) error {
-	_, err := VerifyDependenciesWithRunner(ctx, runner, deps...)
+	_, err := VerifyDependenciesWithRunner(ctx, runner, nil, deps...)
 	return err
 }
 
@@ -86,12 +89,18 @@ func IsAgentMode() bool {
 }
 
 // VerifyDependencies inspects all required external binary tools and returns individual status reports and an error if any fail.
-func VerifyDependencies(ctx context.Context) ([]DependencyReport, error) {
-	return VerifyDependenciesWithRunner(ctx, DefaultRunner, RequiredDependencies...)
+func VerifyDependencies(ctx context.Context, cacheInst ...*cache.Cache) ([]DependencyReport, error) {
+	var c *cache.Cache
+	if len(cacheInst) > 0 {
+		c = cacheInst[0]
+	} else {
+		c, _ = cache.New(true)
+	}
+	return VerifyDependenciesWithRunner(ctx, DefaultRunner, c, RequiredDependencies...)
 }
 
 // VerifyDependenciesWithRunner inspects dependencies using a provided CommandRunner.
-func VerifyDependenciesWithRunner(ctx context.Context, runner CommandRunner, deps ...Dependency) ([]DependencyReport, error) {
+func VerifyDependenciesWithRunner(ctx context.Context, runner CommandRunner, c *cache.Cache, deps ...Dependency) ([]DependencyReport, error) {
 	var reports []DependencyReport
 	var firstErr error
 
@@ -101,14 +110,26 @@ func VerifyDependenciesWithRunner(ctx context.Context, runner CommandRunner, dep
 			MinVersion: dep.MinVersion,
 		}
 
-		var versionArgs []string
-		if dep.Name == "yt-dlp" {
-			versionArgs = []string{"--version"}
+		var out []byte
+		var err error
+
+		var cachedStr string
+		if c != nil && c.Get("deps", dep.Name, &cachedStr) && cachedStr != "" {
+			out = []byte(cachedStr)
 		} else {
-			versionArgs = []string{"-version"}
+			var versionArgs []string
+			if dep.Name == "yt-dlp" {
+				versionArgs = []string{"--version"}
+			} else {
+				versionArgs = []string{"-version"}
+			}
+
+			out, err = runner(ctx, dep.Name, versionArgs...)
+			if err == nil && len(out) > 0 && c != nil {
+				_ = c.Put("deps", dep.Name, string(out), 10*time.Minute)
+			}
 		}
 
-		out, err := runner(ctx, dep.Name, versionArgs...)
 		isAgent := IsAgentMode()
 
 		if err != nil {
@@ -156,7 +177,7 @@ func VerifyDependenciesWithRunner(ctx context.Context, runner CommandRunner, dep
 
 // CheckDependency checks a single dependency for existence and minimum version requirement.
 func CheckDependency(ctx context.Context, runner CommandRunner, dep Dependency) error {
-	_, err := VerifyDependenciesWithRunner(ctx, runner, dep)
+	_, err := VerifyDependenciesWithRunner(ctx, runner, nil, dep)
 	return err
 }
 
