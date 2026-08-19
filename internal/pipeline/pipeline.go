@@ -11,6 +11,7 @@ import (
 	"github.com/dj/fetch-track-cli/internal/downloader"
 	"github.com/dj/fetch-track-cli/internal/metadata"
 	"github.com/dj/fetch-track-cli/internal/spinner"
+	"github.com/dj/fetch-track-cli/internal/ui"
 	"github.com/dj/fetch-track-cli/internal/verifier"
 )
 
@@ -21,6 +22,7 @@ type Options struct {
 	SkipVerify   bool
 	SkipMetadata bool
 	SkipDepCheck bool
+	Interactive  bool
 	Verbose      bool
 	IsAgent      bool
 }
@@ -127,12 +129,23 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 			if sp != nil {
 				sp.Stop()
 			}
-			if !opts.IsAgent {
+			if !opts.IsAgent && !opts.Interactive {
 				if bestCandidate.Source == "direct_url" {
 					fmt.Printf("selected: %q [direct_url]\n", bestCandidate.Title)
 				} else {
 					fmt.Printf("selected: %q [%s %s] score=%d\n", bestCandidate.Title, bestCandidate.Source, verifier.FormatDuration(bestCandidate.Duration), bestCandidate.Score)
 				}
+			}
+		}
+
+		if opts.Interactive && !opts.IsAgent {
+			approved, err := ui.PromptCandidateSelection(candidatePool, selectedCandidate)
+			if err != nil {
+				return err
+			}
+			if approved != nil {
+				selectedCandidate = approved
+				targetURL = approved.WebpageURL
 			}
 		}
 	}

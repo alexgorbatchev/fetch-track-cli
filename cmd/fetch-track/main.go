@@ -23,6 +23,7 @@ var (
 	sourcesFlag  string
 	skipVerify   bool
 	skipMetadata bool
+	interactive  bool
 	verbose      bool
 )
 
@@ -61,6 +62,7 @@ performs spectral bandwidth & loudness analysis, and enriches files with 1400x14
 				Sources:      sources,
 				SkipVerify:   skipVerify,
 				SkipMetadata: skipMetadata,
+				Interactive:  interactive,
 				Verbose:      verbose,
 				IsAgent:      pipeline.IsAgentMode(),
 			}
@@ -74,6 +76,7 @@ performs spectral bandwidth & loudness analysis, and enriches files with 1400x14
 	rootCmd.Flags().StringVarP(&sourcesFlag, "sources", "s", "youtube,soundcloud", "Comma-separated list of sources to search in parallel")
 	rootCmd.Flags().BoolVar(&skipVerify, "skip-verify", false, "Skip DJ audio quality and spectrum inspection")
 	rootCmd.Flags().BoolVar(&skipMetadata, "skip-metadata", false, "Skip metadata lookup and high-res cover art tagging")
+	rootCmd.Flags().BoolVarP(&interactive, "interactive", "i", false, "Interactively approve or choose track candidate before downloading")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output logging")
 
 	verifyCmd := &cobra.Command{
