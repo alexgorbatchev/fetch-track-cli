@@ -148,12 +148,12 @@ func RankAllCandidates(candidates []Candidate, artist, title string) []Candidate
 			}
 		}
 
-		// 4. Duration Scoring (Prefer full-length DJ mixes 4m - 13m; heavily penalize < 2m preview clips)
+		// 4. Duration Scoring (Prefer full-length DJ mixes 4m - 13m; continuous bonus for track length)
 		switch {
 		case cand.Duration >= 240 && cand.Duration <= 780:
-			score += 50 // Ideal 4m - 13m full mix length
+			score += 50 + int(cand.Duration) // Ideal 4m - 13m full mix length
 		case cand.Duration >= 150 && cand.Duration < 240:
-			score += 20 // Acceptable single length (2.5m - 4m)
+			score += 20 + int(cand.Duration) // Acceptable single length (2.5m - 4m)
 		case cand.Duration < 120:
 			score -= 300 // Heavy penalty for < 2 minute short preview clips / snippets
 		case cand.Duration < 150:
@@ -171,21 +171,7 @@ func RankAllCandidates(candidates []Candidate, artist, title string) []Candidate
 	}
 
 	sort.SliceStable(candidates, func(i, j int) bool {
-		if candidates[i].Score != candidates[j].Score {
-			return candidates[i].Score > candidates[j].Score
-		}
-		// Tie-breaker 1: Prefer longer duration (fuller mix)
-		if candidates[i].Duration != candidates[j].Duration {
-			return candidates[i].Duration > candidates[j].Duration
-		}
-		// Tie-breaker 2: Prefer SoundCloud audio over YouTube if score and duration are equal
-		if strings.ToLower(candidates[i].Source) == "soundcloud" && strings.ToLower(candidates[j].Source) != "soundcloud" {
-			return true
-		}
-		if strings.ToLower(candidates[j].Source) == "soundcloud" && strings.ToLower(candidates[i].Source) != "soundcloud" {
-			return false
-		}
-		return false
+		return candidates[i].Score > candidates[j].Score
 	})
 
 	return candidates
