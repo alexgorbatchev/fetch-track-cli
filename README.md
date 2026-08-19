@@ -121,6 +121,7 @@ All dependencies met.
 | `--out-dir` | `-o` | `.` | Folder where tracks are saved |
 | `--sources` | `-s` | `youtube,soundcloud` | Comma-separated list of [supported search sources](#supported-search-sources) |
 | `--interactive` | `-i` | `false` | Interactively approve or choose track candidate before downloading |
+| `--no-cache` | | `false` | Disable local caching for search queries, metadata, and artwork |
 | `--skip-verify` | | `false` | Skip audio frequency and loudness check |
 | `--skip-metadata` | | `false` | Skip fetching album artwork and track details |
 | `--verbose` | `-v` | `false` | Show extra detailed progress logs |
