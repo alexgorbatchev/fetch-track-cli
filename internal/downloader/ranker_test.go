@@ -50,6 +50,16 @@ func TestRankCandidates(t *testing.T) {
 			wantID: "high2",
 		},
 		{
+			name: "tie-break equal scores by longer duration",
+			candidates: []Candidate{
+				{ID: "sc_shorter", Title: "DJ Blyatman - Gopnik", Duration: 192, Source: "soundcloud"},
+				{ID: "yt_longer", Title: "DJ BLYATMAN - GOPNIK (Official Music Video)", Duration: 193, Source: "youtube"},
+			},
+			artist: "DJ BLYATMAN",
+			title:  "GOPNIK",
+			wantID: "yt_longer",
+		},
+		{
 			name: "non-english diacritics and umlauts match",
 			candidates: []Candidate{
 				{ID: "noacc", Title: "Motley Crue - Bose", Duration: 300, Source: "youtube"},

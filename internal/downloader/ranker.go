@@ -171,7 +171,21 @@ func RankAllCandidates(candidates []Candidate, artist, title string) []Candidate
 	}
 
 	sort.SliceStable(candidates, func(i, j int) bool {
-		return candidates[i].Score > candidates[j].Score
+		if candidates[i].Score != candidates[j].Score {
+			return candidates[i].Score > candidates[j].Score
+		}
+		// Tie-breaker 1: Prefer longer duration (fuller mix)
+		if candidates[i].Duration != candidates[j].Duration {
+			return candidates[i].Duration > candidates[j].Duration
+		}
+		// Tie-breaker 2: Prefer SoundCloud audio over YouTube if score and duration are equal
+		if strings.ToLower(candidates[i].Source) == "soundcloud" && strings.ToLower(candidates[j].Source) != "soundcloud" {
+			return true
+		}
+		if strings.ToLower(candidates[j].Source) == "soundcloud" && strings.ToLower(candidates[i].Source) != "soundcloud" {
+			return false
+		}
+		return false
 	})
 
 	return candidates
