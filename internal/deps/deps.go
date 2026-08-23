@@ -63,7 +63,7 @@ var RequiredDependencies = []Dependency{
 		InstallURL:   "https://github.com/yt-dlp/yt-dlp#installation",
 		VersionArgs:  []string{"--version"},
 		ParseVersion: ParseVersionOutput,
-		Installer:    godeps.YtDlp(),
+		Installer:    &ytDlpInstaller{},
 	},
 	{
 		Name:         "ffmpeg",
@@ -71,7 +71,7 @@ var RequiredDependencies = []Dependency{
 		InstallURL:   "https://ffmpeg.org/download.html",
 		VersionArgs:  []string{"-version"},
 		ParseVersion: ParseVersionOutput,
-		Installer:    godeps.SystemPackageManager("ffmpeg"),
+		Installer:    &pkgInstaller{pkgName: "ffmpeg"},
 	},
 	{
 		Name:         "ffprobe",
@@ -79,8 +79,30 @@ var RequiredDependencies = []Dependency{
 		InstallURL:   "https://ffmpeg.org/download.html",
 		VersionArgs:  []string{"-version"},
 		ParseVersion: ParseVersionOutput,
-		Installer:    godeps.SystemPackageManager("ffmpeg"),
+		Installer:    &pkgInstaller{pkgName: "ffmpeg"},
 	},
+}
+
+type ytDlpInstaller struct{}
+
+func (y *ytDlpInstaller) Install(ctx context.Context, targetDir string) error {
+	return godeps.InstallYtDlp(ctx, targetDir)
+}
+
+func (y *ytDlpInstaller) Update(ctx context.Context, targetDir string) error {
+	return godeps.UpdateYtDlp(ctx, getRunner(), targetDir)
+}
+
+type pkgInstaller struct {
+	pkgName string
+}
+
+func (p *pkgInstaller) Install(ctx context.Context, targetDir string) error {
+	return godeps.InstallPackage(ctx, p.pkgName, getRunner())
+}
+
+func (p *pkgInstaller) Update(ctx context.Context, targetDir string) error {
+	return godeps.InstallPackage(ctx, p.pkgName, getRunner())
 }
 
 // cacheAdapter adapts internal/cache.Cache to godeps.Cache.
@@ -92,21 +114,28 @@ func (a *cacheAdapter) Get(key string, target any) bool {
 	if a == nil || a.cache == nil {
 		return false
 	}
-	return a.cache.Get("deps", key, target)
+	cleanKey := strings.TrimPrefix(key, "godeps_")
+	cleanKey = strings.TrimSuffix(cleanKey, ".json")
+	return a.cache.Get("deps", cleanKey, target) || a.cache.Get("deps", key, target)
 }
 
 func (a *cacheAdapter) Put(key string, val any) error {
 	if a == nil || a.cache == nil {
 		return nil
 	}
-	return a.cache.Put("deps", key, val, 10*time.Minute)
+	cleanKey := strings.TrimPrefix(key, "godeps_")
+	cleanKey = strings.TrimSuffix(cleanKey, ".json")
+	return a.cache.Put("deps", cleanKey, val, 10*time.Minute)
 }
 
 func (a *cacheAdapter) Delete(key string) error {
 	if a == nil || a.cache == nil {
 		return nil
 	}
-	return a.cache.Delete("deps", key)
+	cleanKey := strings.TrimPrefix(key, "godeps_")
+	cleanKey = strings.TrimSuffix(cleanKey, ".json")
+	_ = a.cache.Delete("deps", key)
+	return a.cache.Delete("deps", cleanKey)
 }
 
 // NewManager creates a configured godeps.Manager instance for fetch-track.
