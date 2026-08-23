@@ -26,12 +26,6 @@ type Candidate struct {
 	QualityScore int     `json:"quality_score,omitempty"`
 }
 
-var normTransformer = transform.Chain(
-	norm.NFD,
-	runes.Remove(runes.In(unicode.Mn)),
-	norm.NFC,
-)
-
 // NormalizeUnicode performs full Unicode NFD decomposition, strips all non-spacing combining
 // diacritics/accents via golang.org/x/text, maps Cyrillic Yo, and returns a clean lowercase string.
 func NormalizeUnicode(input string) string {
@@ -39,7 +33,13 @@ func NormalizeUnicode(input string) string {
 	// Map Cyrillic Yo (ё -> е) for Cyrillic search compatibility
 	s = strings.ReplaceAll(s, "ё", "е")
 
-	res, _, err := transform.String(normTransformer, s)
+	t := transform.Chain(
+		norm.NFD,
+		runes.Remove(runes.In(unicode.Mn)),
+		norm.NFC,
+	)
+
+	res, _, err := transform.String(t, s)
 	if err != nil {
 		return s
 	}
