@@ -80,6 +80,15 @@ func InitManagedPath() error {
 
 var defaultBaseURL = "https://github.com"
 
+// SetDefaultBaseURL overrides the default GitHub base URL and returns a restore cleanup function.
+func SetDefaultBaseURL(baseURL string) func() {
+	orig := defaultBaseURL
+	defaultBaseURL = baseURL
+	return func() {
+		defaultBaseURL = orig
+	}
+}
+
 // ResolveLatestTag queries the latest release tag for a GitHub repository without using the GitHub API.
 func ResolveLatestTag(ctx context.Context, owner, repo string) (string, error) {
 	return ResolveLatestTagWithBaseURL(ctx, defaultBaseURL, owner, repo)
@@ -452,7 +461,7 @@ func InstallDependencyWithRunner(ctx context.Context, runner CommandRunner, depN
 // InstallDependency downloads or installs a single dependency into the managed bin directory.
 func InstallDependency(ctx context.Context, depName string) error {
 	c, _ := cache.New(true)
-	return InstallDependencyWithRunner(ctx, DefaultRunner, depName, defaultBaseURL, "", c)
+	return InstallDependencyWithRunner(ctx, defaultRunner, depName, defaultBaseURL, "", c)
 }
 
 // UpdateDependencyWithRunner updates a single dependency using custom runner and baseURL.
@@ -494,7 +503,7 @@ func UpdateDependencyWithRunner(ctx context.Context, runner CommandRunner, depNa
 // UpdateDependency updates a single dependency.
 func UpdateDependency(ctx context.Context, depName string) error {
 	c, _ := cache.New(true)
-	return UpdateDependencyWithRunner(ctx, DefaultRunner, depName, defaultBaseURL, "", c)
+	return UpdateDependencyWithRunner(ctx, defaultRunner, depName, defaultBaseURL, "", c)
 }
 
 // InstallMissingDependenciesWithRunner checks and installs missing dependencies using custom runner and baseURL.
@@ -530,7 +539,7 @@ func InstallMissingDependenciesWithRunner(ctx context.Context, runner CommandRun
 // InstallMissingDependencies checks and installs all missing or unsatisfied dependencies.
 func InstallMissingDependencies(ctx context.Context) ([]string, error) {
 	c, _ := cache.New(true)
-	return InstallMissingDependenciesWithRunner(ctx, DefaultRunner, c, defaultBaseURL, "")
+	return InstallMissingDependenciesWithRunner(ctx, defaultRunner, c, defaultBaseURL, "")
 }
 
 // UpdateAllDependenciesWithRunner updates all supported dependencies to their latest versions using custom runner and baseURL.
@@ -563,5 +572,5 @@ func UpdateAllDependenciesWithRunner(ctx context.Context, runner CommandRunner, 
 // UpdateAllDependencies updates all supported dependencies to their latest versions.
 func UpdateAllDependencies(ctx context.Context) ([]string, error) {
 	c, _ := cache.New(true)
-	return UpdateAllDependenciesWithRunner(ctx, DefaultRunner, defaultBaseURL, "", c)
+	return UpdateAllDependenciesWithRunner(ctx, defaultRunner, defaultBaseURL, "", c)
 }

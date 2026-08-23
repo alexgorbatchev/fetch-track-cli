@@ -3,6 +3,7 @@ package deps
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os/exec"
 	"strings"
 	"testing"
@@ -314,11 +315,21 @@ func TestCheckDependencies_Cached(t *testing.T) {
 	}
 }
 
+func TestSetDefaultRunner(t *testing.T) {
+	cleanup := SetDefaultRunner(func(ctx context.Context, name string, args ...string) ([]byte, error) {
+		return []byte("test"), nil
+	})
+	defer cleanup()
+}
+
 func TestCheckDependencies_DefaultRunner(t *testing.T) {
 	ctx := context.Background()
 	origRunner := defaultRunner
 	defaultRunner = func(ctx context.Context, name string, args ...string) ([]byte, error) {
-		return []byte("1.0.0"), nil
+		if name == "yt-dlp" {
+			return []byte("2026.08.01"), nil
+		}
+		return []byte(fmt.Sprintf("%s version 8.1.2", name)), nil
 	}
 	defer func() { defaultRunner = origRunner }()
 

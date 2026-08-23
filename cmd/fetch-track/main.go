@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"strings"
@@ -33,20 +34,7 @@ var (
 	autoInstall    bool
 )
 
-func main() {
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-
-	// Handle second Ctrl+C for forced immediate exit
-	go func() {
-		<-ctx.Done()
-		sigChan := make(chan os.Signal, 1)
-		signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-		<-sigChan
-		fmt.Fprintln(os.Stderr, "\nForced termination requested. Exiting.")
-		os.Exit(130)
-	}()
-
+func newRootCommand() *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use:          "fetch-track <youtube_url_or_search_query>",
 		Short:        "Fetch and verify high-quality single tracks for DJ collections",
@@ -338,7 +326,32 @@ performs spectral bandwidth & loudness analysis, and enriches files with 1400x14
 	rootCmd.AddCommand(depsCmd)
 	rootCmd.AddCommand(upgradeCmd)
 
-	if err := rootCmd.ExecuteContext(ctx); err != nil {
+	return rootCmd
+}
+
+var stdinReader = io.Reader(os.Stdin)
+
+func run(ctx context.Context, args []string) error {
+	rootCmd := newRootCommand()
+	rootCmd.SetArgs(args)
+	return rootCmd.ExecuteContext(ctx)
+}
+
+func main() {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	// Handle second Ctrl+C for forced immediate exit
+	go func() {
+		<-ctx.Done()
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+		<-sigChan
+		fmt.Fprintln(os.Stderr, "\nForced termination requested. Exiting.")
+		os.Exit(130)
+	}()
+
+	if err := run(ctx, os.Args[1:]); err != nil {
 		if ctx.Err() != nil {
 			fmt.Fprintln(os.Stderr, "Operation canceled by user.")
 			os.Exit(130)
@@ -374,7 +387,7 @@ func ensureDependencies(ctx context.Context) error {
 	}
 
 	if !deps.IsAgentMode() {
-		reader := bufio.NewReader(os.Stdin)
+		reader := bufio.NewReader(stdinReader)
 		fmt.Printf("\nMissing required dependencies: %s\nWould you like to auto-install them to managed directory? [Y/n]: ", strings.Join(missing, ", "))
 		ans, _ := reader.ReadString('\n')
 		ans = strings.TrimSpace(strings.ToLower(ans))

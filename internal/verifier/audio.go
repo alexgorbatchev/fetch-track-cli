@@ -53,8 +53,42 @@ func IsYouTubeURL(input string) bool {
 	return IsURL(input)
 }
 
+// CommandRunner abstracts command execution for testability.
+type CommandRunner func(ctx context.Context, name string, args ...string) ([]byte, error)
+
+func defaultRunner(ctx context.Context, name string, args ...string) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, name, args...)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	if err != nil {
+		if stderr.Len() > 0 {
+			return nil, fmt.Errorf("%w: %s", err, strings.TrimSpace(stderr.String()))
+		}
+		return nil, err
+	}
+	return stdout.Bytes(), nil
+}
+
+var defaultRunnerVar = defaultRunner
+
+// SetDefaultRunner overrides the default command runner and returns a restore cleanup function.
+func SetDefaultRunner(runner CommandRunner) func() {
+	orig := defaultRunnerVar
+	defaultRunnerVar = runner
+	return func() {
+		defaultRunnerVar = orig
+	}
+}
+
 // FetchURLMetadata fetches metadata for any supported URL via yt-dlp dump-json.
 func FetchURLMetadata(ctx context.Context, url string, c ...*cache.Cache) (*TrackMetadata, error) {
+	return FetchURLMetadataWithRunner(ctx, defaultRunnerVar, url, c...)
+}
+
+// FetchURLMetadataWithRunner fetches metadata using a provided CommandRunner.
+func FetchURLMetadataWithRunner(ctx context.Context, runner CommandRunner, url string, c ...*cache.Cache) (*TrackMetadata, error) {
 	var cacheInst *cache.Cache
 	if len(c) > 0 && c[0] != nil {
 		cacheInst = c[0]
@@ -66,21 +100,25 @@ func FetchURLMetadata(ctx context.Context, url string, c ...*cache.Cache) (*Trac
 		return &cachedMeta, nil
 	}
 
+	if runner == nil {
+		runner = defaultRunner
+	}
+
 	cmdCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(cmdCtx, "yt-dlp",
+	stdout, err := runner(cmdCtx, "yt-dlp",
 		"--dump-json",
 		"--no-warnings",
 		"--quiet",
 		"--js-runtimes", "node",
 		url,
 	)
-
-	var stdout bytes.Buffer
-	cmd.Stdout = &stdout
-	if err := cmd.Run(); err != nil || stdout.Len() == 0 {
-		return nil, fmt.Errorf("fetching URL metadata for %s: %w", url, err)
+	if err != nil || len(stdout) == 0 {
+		if err != nil {
+			return nil, fmt.Errorf("fetching URL metadata for %s: %w", url, err)
+		}
+		return nil, fmt.Errorf("fetching URL metadata for %s: empty output", url)
 	}
 
 	var rawData struct {
@@ -91,7 +129,7 @@ func FetchURLMetadata(ctx context.Context, url string, c ...*cache.Cache) (*Trac
 		Ext      string  `json:"ext"`
 	}
 
-	if err := json.Unmarshal(stdout.Bytes(), &rawData); err != nil {
+	if err := json.Unmarshal(stdout, &rawData); err != nil {
 		return nil, fmt.Errorf("parsing URL metadata JSON: %w", err)
 	}
 
@@ -202,6 +240,11 @@ func FetchLocalMetadata(ctx context.Context, filePath string) (*TrackMetadata, e
 
 // VerifyAudioTrack analyzes a local audio file or remote URL for mix structure and bandwidth.
 func VerifyAudioTrack(ctx context.Context, target string, verbose ...bool) (*VerificationReport, error) {
+	return VerifyAudioTrackWithRunner(ctx, defaultRunnerVar, target, verbose...)
+}
+
+// VerifyAudioTrackWithRunner analyzes audio track using a provided CommandRunner.
+func VerifyAudioTrackWithRunner(ctx context.Context, runner CommandRunner, target string, verbose ...bool) (*VerificationReport, error) {
 	isVerbose := len(verbose) > 0 && verbose[0]
 	isURL := IsURL(target)
 	var metadata *TrackMetadata
@@ -211,8 +254,12 @@ func VerifyAudioTrack(ctx context.Context, target string, verbose ...bool) (*Ver
 		fmt.Printf("verify: %s\n", target)
 	}
 
+	if runner == nil {
+		runner = defaultRunner
+	}
+
 	if isURL {
-		metadata, err = FetchURLMetadata(ctx, target)
+		metadata, err = FetchURLMetadataWithRunner(ctx, runner, target)
 	} else {
 		metadata, err = FetchLocalMetadata(ctx, target)
 	}
@@ -255,7 +302,7 @@ func VerifyAudioTrack(ctx context.Context, target string, verbose ...bool) (*Ver
 		}
 
 		dlCtx, cancel := context.WithTimeout(ctx, 3*time.Minute)
-		cmd := exec.CommandContext(dlCtx, "yt-dlp",
+		_, dlErr := runner(dlCtx, "yt-dlp",
 			"--no-warnings",
 			"--quiet",
 			"--js-runtimes", "node",
@@ -265,7 +312,6 @@ func VerifyAudioTrack(ctx context.Context, target string, verbose ...bool) (*Ver
 			"-o", localAudioPath,
 			target,
 		)
-		dlErr := cmd.Run()
 		cancel()
 		if dlErr != nil {
 			return nil, fmt.Errorf("downloading audio sample for verification from %s: %w", target, dlErr)

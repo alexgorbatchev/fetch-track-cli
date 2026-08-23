@@ -16,10 +16,26 @@ var (
 		Foreground(lipgloss.Color("86"))
 )
 
+// FormRunner abstracts executing the interactive terminal form for testability.
+type FormRunner func(form *huh.Form) error
+
+func defaultFormRunner(form *huh.Form) error {
+	return form.Run()
+}
+
 // PromptCandidateSelection displays an interactive Lip Gloss & Huh terminal prompt allowing the user to approve or change the selected candidate.
 func PromptCandidateSelection(candidates []downloader.Candidate, current *downloader.Candidate) (*downloader.Candidate, error) {
+	return PromptCandidateSelectionWithRunner(candidates, current, defaultFormRunner)
+}
+
+// PromptCandidateSelectionWithRunner displays the prompt using a provided FormRunner.
+func PromptCandidateSelectionWithRunner(candidates []downloader.Candidate, current *downloader.Candidate, runner FormRunner) (*downloader.Candidate, error) {
 	if len(candidates) == 0 {
 		return nil, downloader.ErrNoCandidateFound
+	}
+
+	if runner == nil {
+		runner = defaultFormRunner
 	}
 
 	// Sort candidates by score highest first
@@ -64,7 +80,7 @@ func PromptCandidateSelection(candidates []downloader.Candidate, current *downlo
 		),
 	).WithShowHelp(false)
 
-	err := form.Run()
+	err := runner(form)
 	if err != nil {
 		return nil, fmt.Errorf("candidate selection canceled: %w", err)
 	}

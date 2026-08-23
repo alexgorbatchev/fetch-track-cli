@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -29,12 +30,17 @@ func New(enabled bool) (*Cache, error) {
 		return &Cache{enabled: false}, nil
 	}
 
-	userCache, err := os.UserCacheDir()
-	if err != nil {
-		userCache = os.TempDir()
+	var baseDir string
+	if xdg := strings.TrimSpace(os.Getenv("XDG_CACHE_HOME")); xdg != "" {
+		baseDir = filepath.Join(xdg, "fetch-track")
+	} else {
+		userCache, err := os.UserCacheDir()
+		if err != nil {
+			userCache = os.TempDir()
+		}
+		baseDir = filepath.Join(userCache, "fetch-track")
 	}
 
-	baseDir := filepath.Join(userCache, "fetch-track")
 	if err := os.MkdirAll(baseDir, 0755); err != nil {
 		return &Cache{enabled: false}, nil
 	}

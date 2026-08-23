@@ -64,6 +64,15 @@ func DefaultRunner(ctx context.Context, name string, args ...string) ([]byte, er
 
 var defaultRunner = DefaultRunner
 
+// SetDefaultRunner overrides the default command runner and returns a restore cleanup function.
+func SetDefaultRunner(runner CommandRunner) func() {
+	orig := defaultRunner
+	defaultRunner = runner
+	return func() {
+		defaultRunner = orig
+	}
+}
+
 // DependencyReport describes the verification status of a single dependency.
 type DependencyReport struct {
 	Name            string `json:"name"`

@@ -157,6 +157,11 @@ func TestEnsureManagedBinDir(t *testing.T) {
 	})
 }
 
+func TestSetDefaultBaseURL(t *testing.T) {
+	cleanup := SetDefaultBaseURL("http://example.com")
+	defer cleanup()
+}
+
 func TestResolveLatestTag(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/owner/repo/releases/latest" {

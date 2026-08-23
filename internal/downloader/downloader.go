@@ -26,6 +26,35 @@ var (
 	ErrDownloadFailed = errors.New("failed to download audio stream across client fallbacks")
 )
 
+// CommandRunner abstracts execution of external commands for testability.
+type CommandRunner func(ctx context.Context, name string, args ...string) ([]byte, error)
+
+func defaultRunner(ctx context.Context, name string, args ...string) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, name, args...)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	if err != nil {
+		if stderr.Len() > 0 {
+			return nil, fmt.Errorf("%w: %s", err, strings.TrimSpace(stderr.String()))
+		}
+		return nil, err
+	}
+	return stdout.Bytes(), nil
+}
+
+var defaultRunnerVar = defaultRunner
+
+// SetDefaultRunner overrides the default command runner and returns a restore cleanup function.
+func SetDefaultRunner(runner CommandRunner) func() {
+	orig := defaultRunnerVar
+	defaultRunnerVar = runner
+	return func() {
+		defaultRunnerVar = orig
+	}
+}
+
 // MapSourceSearchPrefix returns the yt-dlp search prefix for a given source name.
 func MapSourceSearchPrefix(source string) string {
 	switch strings.ToLower(strings.TrimSpace(source)) {
@@ -42,9 +71,18 @@ func MapSourceSearchPrefix(source string) string {
 
 // SearchSourcesInParallel searches all configured sources concurrently for track candidates.
 func SearchSourcesInParallel(ctx context.Context, sources []string, artist, title, rawQuery string, c *cache.Cache, verbose ...bool) ([]Candidate, error) {
+	return SearchSourcesInParallelWithRunner(ctx, defaultRunnerVar, sources, artist, title, rawQuery, c, verbose...)
+}
+
+// SearchSourcesInParallelWithRunner searches all configured sources concurrently using a provided CommandRunner.
+func SearchSourcesInParallelWithRunner(ctx context.Context, runner CommandRunner, sources []string, artist, title, rawQuery string, c *cache.Cache, verbose ...bool) ([]Candidate, error) {
 	isVerbose := len(verbose) > 0 && verbose[0]
 	if isVerbose {
 		fmt.Printf("search: %s\n", strings.Join(sources, ", "))
+	}
+
+	if runner == nil {
+		runner = defaultRunner
 	}
 
 	if len(sources) == 0 {
@@ -101,7 +139,7 @@ func SearchSourcesInParallel(ctx context.Context, sources []string, artist, titl
 			cmdCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
 			defer cancel()
 
-			cmd := exec.CommandContext(cmdCtx, "yt-dlp",
+			stdoutBytes, err := runner(cmdCtx, "yt-dlp",
 				"--flat-playlist",
 				"--dump-json",
 				"--no-warnings",
@@ -109,12 +147,11 @@ func SearchSourcesInParallel(ctx context.Context, sources []string, artist, titl
 				"--js-runtimes", "node",
 				fmt.Sprintf("%s:%s", searchPrefix, queryStr),
 			)
+			if err != nil || len(stdoutBytes) == 0 {
+				return
+			}
 
-			var stdout bytes.Buffer
-			cmd.Stdout = &stdout
-			_ = cmd.Run() // ignore individual query errors
-
-			scanner := bufio.NewScanner(&stdout)
+			scanner := bufio.NewScanner(bytes.NewReader(stdoutBytes))
 			for scanner.Scan() {
 				line := scanner.Text()
 				if strings.TrimSpace(line) == "" {
@@ -210,9 +247,9 @@ func EvaluateAndInspectCandidatesInParallel(ctx context.Context, candidates []Ca
 	return best, nil
 }
 
-// SearchAndSelectBestCandidate coordinates searching across sources in parallel and evaluating top candidates.
-func SearchAndSelectBestCandidate(ctx context.Context, sources []string, artist, title, rawQuery string) (*Candidate, error) {
-	candidates, err := SearchSourcesInParallel(ctx, sources, artist, title, rawQuery, nil)
+// SearchAndSelectBestCandidateWithRunner coordinates searching across sources in parallel and evaluating top candidates using a provided runner.
+func SearchAndSelectBestCandidateWithRunner(ctx context.Context, runner CommandRunner, sources []string, artist, title, rawQuery string) (*Candidate, error) {
+	candidates, err := SearchSourcesInParallelWithRunner(ctx, runner, sources, artist, title, rawQuery, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -220,17 +257,32 @@ func SearchAndSelectBestCandidate(ctx context.Context, sources []string, artist,
 	return EvaluateAndInspectCandidatesInParallel(ctx, candidates, artist, title)
 }
 
-// SearchYouTubeCandidates maintains backward compatibility with single-source YouTube calls.
-func SearchYouTubeCandidates(ctx context.Context, artist, title, rawQuery string) (string, error) {
-	best, err := SearchAndSelectBestCandidate(ctx, []string{"youtube"}, artist, title, rawQuery)
+// SearchAndSelectBestCandidate coordinates searching across sources in parallel and evaluating top candidates.
+func SearchAndSelectBestCandidate(ctx context.Context, sources []string, artist, title, rawQuery string) (*Candidate, error) {
+	return SearchAndSelectBestCandidateWithRunner(ctx, defaultRunnerVar, sources, artist, title, rawQuery)
+}
+
+// SearchYouTubeCandidatesWithRunner maintains backward compatibility with single-source YouTube calls using custom runner.
+func SearchYouTubeCandidatesWithRunner(ctx context.Context, runner CommandRunner, artist, title, rawQuery string) (string, error) {
+	best, err := SearchAndSelectBestCandidateWithRunner(ctx, runner, []string{"youtube"}, artist, title, rawQuery)
 	if err != nil {
 		return "", err
 	}
 	return best.WebpageURL, nil
 }
 
+// SearchYouTubeCandidates maintains backward compatibility with single-source YouTube calls.
+func SearchYouTubeCandidates(ctx context.Context, artist, title, rawQuery string) (string, error) {
+	return SearchYouTubeCandidatesWithRunner(ctx, defaultRunnerVar, artist, title, rawQuery)
+}
+
 // DownloadAudioStream downloads the audio stream from targetURL into outDir.
 func DownloadAudioStream(ctx context.Context, targetURL, outDir string, verbose ...bool) (string, error) {
+	return DownloadAudioStreamWithRunner(ctx, defaultRunnerVar, targetURL, outDir, verbose...)
+}
+
+// DownloadAudioStreamWithRunner downloads audio stream using a provided CommandRunner.
+func DownloadAudioStreamWithRunner(ctx context.Context, runner CommandRunner, targetURL, outDir string, verbose ...bool) (string, error) {
 	isVerbose := len(verbose) > 0 && verbose[0]
 
 	if err := os.MkdirAll(outDir, 0755); err != nil {
@@ -239,6 +291,10 @@ func DownloadAudioStream(ctx context.Context, targetURL, outDir string, verbose 
 
 	if isVerbose {
 		fmt.Printf("downloading: %s\n", targetURL)
+	}
+
+	if runner == nil {
+		runner = defaultRunner
 	}
 
 	initialFiles, err := listAudioFiles(outDir)
@@ -280,8 +336,7 @@ func DownloadAudioStream(ctx context.Context, targetURL, outDir string, verbose 
 		}
 		args = append(args, targetURL)
 
-		cmd := exec.CommandContext(cmdCtx, "yt-dlp", args...)
-		err := cmd.Run()
+		_, err := runner(cmdCtx, "yt-dlp", args...)
 		cancel()
 
 		if err == nil {

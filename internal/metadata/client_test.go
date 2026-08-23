@@ -326,4 +326,97 @@ func TestResolveTrackMetadata_ITunesAndYouTubeFallback(t *testing.T) {
 	if !strings.Contains(resCached.Source, "[cached]") {
 		t.Errorf("expected [cached] source, got %q", resCached.Source)
 	}
+
+	// 4. Test YouTube Fallback with empty fallbackArtist
+	resEmptyArtist := clientFallback.ResolveTrackMetadata(context.Background(), "Fallback Track", "", "Fallback Track", false)
+	if resEmptyArtist.Artist != "Unknown Artist" {
+		t.Errorf("expected 'Unknown Artist', got %q", resEmptyArtist.Artist)
+	}
+}
+
+func TestFetchFromITunes_AdditionalBranches(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("empty_expected_title_matches_first", func(t *testing.T) {
+		client := newMockClient(func(req *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body: io.NopCloser(bytes.NewBufferString(`{
+					"results": [
+						{"trackName": "First Track", "artistName": "Artist", "releaseDate": "2024"}
+					]
+				}`)),
+			}, nil
+		})
+
+		res, err := client.FetchFromITunes(ctx, "First Track", "")
+		if err != nil || res.Title != "First Track" {
+			t.Fatalf("unexpected result: res=%v, err=%v", res, err)
+		}
+	})
+
+	t.Run("incomplete_data_error", func(t *testing.T) {
+		client := newMockClient(func(req *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body: io.NopCloser(bytes.NewBufferString(`{
+					"results": [
+						{"trackName": "Track", "artistName": ""}
+					]
+				}`)),
+			}, nil
+		})
+
+		_, err := client.FetchFromITunes(ctx, "Track", "Track")
+		if err == nil {
+			t.Fatal("expected error for incomplete data")
+		}
+	})
+}
+
+func TestFetchFromMusicBrainz_AdditionalBranches(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("empty_expected_title_and_4digit_date", func(t *testing.T) {
+		client := newMockClient(func(req *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body: io.NopCloser(bytes.NewBufferString(`{
+					"recordings": [
+						{
+							"title": "First MB Track",
+							"artist-credit": [{"name": "MB Artist"}],
+							"releases": [{"id": "r1", "title": "Album", "date": "2021"}]
+						}
+					]
+				}`)),
+			}, nil
+		})
+
+		res, err := client.FetchFromMusicBrainz(ctx, "Track", "")
+		if err != nil || res.Title != "First MB Track" {
+			t.Fatalf("unexpected result: res=%v, err=%v", res, err)
+		}
+		if res.ReleaseYear != "2021" {
+			t.Errorf("expected 2021, got %q", res.ReleaseYear)
+		}
+	})
+
+	t.Run("incomplete_musicbrainz_recording", func(t *testing.T) {
+		client := newMockClient(func(req *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body: io.NopCloser(bytes.NewBufferString(`{
+					"recordings": [
+						{"title": "", "artist-credit": []}
+					]
+				}`)),
+			}, nil
+		})
+
+		_, err := client.FetchFromMusicBrainz(ctx, "Track", "Track")
+		if err == nil {
+			t.Fatal("expected error for incomplete recording")
+		}
+	})
 }

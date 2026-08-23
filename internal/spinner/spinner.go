@@ -9,7 +9,8 @@ import (
 
 // Spinner wraps github.com/briandowns/spinner for consistent CLI terminal progress.
 type Spinner struct {
-	sp *bspinner.Spinner
+	sp     *bspinner.Spinner
+	active bool
 }
 
 var brailleFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
@@ -25,7 +26,8 @@ func New(msg string) *Spinner {
 
 // Start begins animating the braille spinner.
 func (s *Spinner) Start() {
-	if s != nil && s.sp != nil && !s.sp.Active() {
+	if s != nil && s.sp != nil && !s.active {
+		s.active = true
 		s.sp.Start()
 	}
 }
@@ -40,7 +42,7 @@ func (s *Spinner) Update(msg string) {
 // PrintAbove clears the current spinner line, prints the provided message above,
 // and lets the spinner redraw on the bottom line.
 func (s *Spinner) PrintAbove(msg string) {
-	if s != nil && s.sp != nil && s.sp.Active() {
+	if s != nil && s.sp != nil && s.active {
 		fmt.Printf("\r\033[K%s\n", msg)
 	} else {
 		fmt.Println(msg)
@@ -49,7 +51,8 @@ func (s *Spinner) PrintAbove(msg string) {
 
 // Stop stops the spinner animation and clears the line.
 func (s *Spinner) Stop() {
-	if s != nil && s.sp != nil && s.sp.Active() {
+	if s != nil && s.sp != nil && s.active {
+		s.active = false
 		s.sp.Stop()
 	}
 }

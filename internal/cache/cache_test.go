@@ -269,19 +269,33 @@ func TestCache_Delete(t *testing.T) {
 }
 
 func TestNew(t *testing.T) {
-	c, err := New(true)
-	if err != nil {
-		t.Fatalf("New(true) failed: %v", err)
-	}
-	if !c.Enabled() {
-		t.Error("New(true) expected enabled cache")
-	}
+	t.Run("enabled_with_xdg", func(t *testing.T) {
+		t.Setenv("XDG_CACHE_HOME", t.TempDir())
+		c, err := New(true)
+		if err != nil || !c.Enabled() {
+			t.Fatalf("New(true) with XDG failed: %v", err)
+		}
+	})
 
-	disabled, err := New(false)
-	if err != nil {
-		t.Fatalf("New(false) failed: %v", err)
-	}
-	if disabled.Enabled() {
-		t.Error("New(false) expected disabled cache")
-	}
+	t.Run("enabled_without_xdg", func(t *testing.T) {
+		orig := os.Getenv("XDG_CACHE_HOME")
+		_ = os.Unsetenv("XDG_CACHE_HOME")
+		defer func() {
+			if orig != "" {
+				_ = os.Setenv("XDG_CACHE_HOME", orig)
+			}
+		}()
+
+		c, err := New(true)
+		if err != nil || !c.Enabled() {
+			t.Fatalf("New(true) without XDG failed: %v", err)
+		}
+	})
+
+	t.Run("disabled", func(t *testing.T) {
+		disabled, err := New(false)
+		if err != nil || disabled.Enabled() {
+			t.Fatalf("New(false) failed: %v", err)
+		}
+	})
 }
