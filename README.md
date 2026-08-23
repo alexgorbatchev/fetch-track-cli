@@ -97,12 +97,19 @@ Inspect any audio file without downloading:
 fetch-track verify "Boris Brejcha - Space X.m4a"
 ```
 
-### 6. Verify Installed Dependencies
+### 6. Manage Dependencies
 
-Verify that `yt-dlp`, `ffmpeg`, and `ffprobe` are installed and meet minimum version requirements:
+Verify, auto-install, or update external dependencies (`yt-dlp`, `ffmpeg`, `ffprobe`):
 
 ```bash
+# Verify dependencies
 fetch-track dependencies
+
+# Auto-install missing dependencies to ~/.local/share/fetch-track/bin
+fetch-track deps install
+
+# Update dependencies to their latest versions
+fetch-track deps update
 ```
 
 Sample Output:
@@ -114,11 +121,20 @@ ffprobe: 8.1.2 (min 4.4) [OK]
 All dependencies met.
 ```
 
+### 7. Self-Upgrade
+
+Upgrade the `fetch-track` binary in-place to the latest GitHub release without using the GitHub API:
+
+```bash
+fetch-track upgrade
+```
+
 ## Options & Flags
 
 | Flag | Short | Default | Description |
 | :--- | :--- | :--- | :--- |
 | `--out-dir` | `-o` | `.` | Folder where tracks are saved |
+| `--auto-install` | | `false` | Automatically install missing dependencies without prompting |
 | `--sources` | `-s` | `youtube,soundcloud` | Comma-separated list of [supported search sources](#supported-search-sources) |
 | `--interactive` | `-i` | `false` | Interactively approve or choose track candidate before downloading |
 | `--no-cache` | | `false` | Disable local caching for search queries, metadata, and artwork |

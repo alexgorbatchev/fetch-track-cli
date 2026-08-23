@@ -34,6 +34,9 @@ Go CLI tool for searching, verifying, downloading, and managing high-fidelity si
   1. iTunes Search API (1400x1400 artwork)
   2. MusicBrainz API + Cover Art Archive
   3. YouTube / Local Filename Raw Fallback
+- **Origin Date & Provenance Preservation:** Always preserve full release date (`YYYY-MM-DD` when available) in file date tags and embed source provenance (audio source URL, metadata provider, and acquisition date) in track comment tags (`Source: <url> | Metadata: <provider> | Fetched: <date>`) without re-encoding.
+- **Dependency Management & Auto-Installation:** Use `fetch-track dependencies` (`deps`), `fetch-track deps install [dep...]`, `fetch-track deps update [dep...]`, or the `--auto-install` flag to check, install, or update required external tools (`yt-dlp`, `ffmpeg`, `ffprobe`) in `$XDG_DATA_HOME/fetch-track/bin` (or `~/.local/share/fetch-track/bin`).
+- **Self-Upgrade:** Use `fetch-track upgrade` (aliases: `self-update`, `update-self`) to check for newer GitHub releases and upgrade the running `fetch-track` binary in-place without using GitHub API.
 
 ## Gotchas
 - **Zero-Reencoding Tagging:** When embedding artwork and tags via `ffmpeg`, always pass `-c:a copy` (plus `-id3v2_version 3` for MP3) to avoid triggering unintended audio transcoding.
