@@ -35,8 +35,10 @@ Go CLI tool for searching, verifying, downloading, and managing high-fidelity si
   2. MusicBrainz API + Cover Art Archive
   3. YouTube / Local Filename Raw Fallback
 - **Origin Date & Provenance Preservation:** Always preserve full release date (`YYYY-MM-DD` when available) in file date tags and embed source provenance (audio source URL, metadata provider, and acquisition date) in track comment tags (`Source: <url> | Metadata: <provider> | Fetched: <date>`) without re-encoding.
-- **Dependency Management & Auto-Installation:** Use `fetch-track dependencies` (`deps`), `fetch-track deps install [dep...]`, `fetch-track deps update [dep...]`, or the `--auto-install` flag to check, install, or update required external tools (`yt-dlp`, `ffmpeg`, `ffprobe`) in `$XDG_DATA_HOME/fetch-track/bin` (or `~/.local/share/fetch-track/bin`).
-- **Self-Upgrade:** Use `fetch-track upgrade` (aliases: `self-update`, `update-self`) to check for newer GitHub releases and upgrade the running `fetch-track` binary in-place without using GitHub API.
+- **Dependency Management & Auto-Installation:** Use `fetch-track dependencies` (`deps`), `fetch-track deps install [dep...]`, `fetch-track deps update [dep...]`, or the `--auto-install` flag to check, install, or update required external tools (`yt-dlp`, `ffmpeg`, `ffprobe`) in `$XDG_DATA_HOME/fetch-track/bin` (or `~/.local/share/fetch-track/bin`) powered by `github.com/alexgorbatchev/godeps`.
+- **Required Dependencies Messages:** Dependency verification and error messages must always show the required minimum version, and if a dependency is already installed but outdated, clearly display which old version is currently available.
+- **No Stack Traces in Output:** User-facing output and error messages must never expose raw stack traces, Python tracebacks, Go panic dumps, or internal runtime frames from dependencies; errors from external tools must always be cleaned to concise user-actionable messages using `godeps.SanitizeStderr`.
+- **Self-Upgrade:** Use `fetch-track upgrade` (aliases: `self-update`, `update-self`) to check for newer GitHub releases and upgrade the running `fetch-track` binary in-place without using GitHub API via `godeps.UpgradeSelf`.
 
 ## Gotchas
 - **Zero-Reencoding Tagging:** When embedding artwork and tags via `ffmpeg`, always pass `-c:a copy` (plus `-id3v2_version 3` for MP3) to avoid triggering unintended audio transcoding.

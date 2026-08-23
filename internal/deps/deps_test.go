@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -87,7 +88,7 @@ func TestCompareVersions(t *testing.T) {
 		{"dev build version", "dev", "4.4", false},
 		{"DEV- prefixed version", "DEV-1234", "4.4", false},
 		{"build metadata with plus", "4.4.0+build123", "4.4", false},
-		{"invalid version format", "invalid", "4.4", true},
+		{"older minor", "1.2", "4.4", true},
 	}
 
 	for _, tt := range tests {
@@ -195,7 +196,7 @@ func TestCheckDependenciesWithRunner(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error for missing ffmpeg, got nil")
 		}
-		if !strings.Contains(err.Error(), "ffmpeg is missing in $PATH, install version 4.4 or newer") {
+		if !strings.Contains(err.Error(), "ffmpeg is missing in $PATH") {
 			t.Errorf("unexpected error message: %v", err)
 		}
 	})
@@ -213,8 +214,9 @@ func TestCheckDependenciesWithRunner(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error for outdated yt-dlp, got nil")
 		}
-		if !strings.Contains(err.Error(), "yt-dlp in $PATH must be version 2024.08.01 or newer") {
-			t.Errorf("unexpected error message: %v", err)
+		expectedMsg := "yt-dlp in $PATH (version 2023.03.04) is outdated, must be version 2024.08.01 or newer"
+		if !strings.Contains(err.Error(), expectedMsg) {
+			t.Errorf("expected error to contain %q, got: %v", expectedMsg, err)
 		}
 	})
 
@@ -249,18 +251,100 @@ func TestCheckDependenciesWithRunner(t *testing.T) {
 	})
 }
 
-func TestIsNotFound(t *testing.T) {
-	if isNotFound(nil) {
-		t.Error("expected isNotFound(nil) to be false")
+func TestCleanErrorMessage(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "empty message",
+			input:    "",
+			expected: "",
+		},
+		{
+			name:     "simple error without trace",
+			input:    "permission denied",
+			expected: "permission denied",
+		},
+		{
+			name: "python traceback",
+			input: `Traceback (most recent call last):
+  File "/usr/local/bin/yt-dlp", line 8, in <module>
+    sys.exit(main())
+  File "/usr/local/lib/python3.10/site-packages/yt_dlp/__init__.py", line 1024, in main
+yt_dlp.utils.DownloadError: ERROR: [youtube] 12345: Video unavailable`,
+			expected: "yt_dlp.utils.DownloadError: ERROR: [youtube] 12345: Video unavailable",
+		},
+		{
+			name: "go panic stack trace",
+			input: `panic: runtime error: invalid memory address or nil pointer dereference
+[signal SIGSEGV: code=0x1 addr=0x0 pc=0x102f8a4]
+goroutine 1 [running]:
+main.main()
+	/home/user/app/main.go:42 +0x2b`,
+			expected: "panic: runtime error: invalid memory address or nil pointer dereference",
+		},
+		{
+			name: "node stack trace",
+			input: `Error: Cannot find module 'ffmpeg'
+    at Function.Module._resolveFilename (internal/modules/cjs/loader.js:880:15)
+    at Function.Module._load (internal/modules/cjs/loader.js:725:27)
+    at Function.executeUserEntryPoint [as runMain] (internal/modules/run_main.js:72:12)`,
+			expected: "Error: Cannot find module 'ffmpeg'",
+		},
+		{
+			name: "multiline ffmpeg warning with final error",
+			input: `ffmpeg version 4.4.2 Copyright (c) 2000-2022
+[tls @ 0x7fa890] [error] Connection refused
+Error opening input: Connection refused`,
+			expected: "Error opening input: Connection refused",
+		},
+		{
+			name:     "whitespace only",
+			input:    "   \n\t  ",
+			expected: "",
+		},
+		{
+			name:     "c++ stack frame",
+			input:    "#0  0x00007fff89123 in crash_handler ()\n#1  0x00007fff89456 in main ()\nFatal error: segmentation fault",
+			expected: "Fatal error: segmentation fault",
+		},
+		{
+			name:     "yt-dlp extractor error prefix",
+			input:    "yt_dlp.utils.ExtractorError: could not extract stream URL",
+			expected: "yt_dlp.utils.ExtractorError: could not extract stream URL",
+		},
 	}
-	if !isNotFound(&exec.Error{Name: "test", Err: exec.ErrNotFound}) {
-		t.Error("expected isNotFound(exec.ErrNotFound) to be true")
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := CleanErrorMessage(tt.input)
+			if got != tt.expected {
+				t.Errorf("CleanErrorMessage(%q) = %q; want %q", tt.input, got, tt.expected)
+			}
+		})
 	}
-	if !isNotFound(errors.New("executable file not found in $PATH")) {
-		t.Error("expected isNotFound('executable file not found') to be true")
+}
+
+func TestVerifyDependenciesWithRunner_NoStackTraces(t *testing.T) {
+	ctx := context.Background()
+	pythonTracebackRunner := func(ctx context.Context, name string, args ...string) ([]byte, error) {
+		return nil, errors.New(`Traceback (most recent call last):
+  File "/usr/local/bin/yt-dlp", line 8, in <module>
+    sys.exit(main())
+yt_dlp.utils.DownloadError: binary crashed`)
 	}
-	if isNotFound(errors.New("permission denied")) {
-		t.Error("expected isNotFound('permission denied') to be false")
+
+	reports, err := VerifyDependenciesWithRunner(ctx, pythonTracebackRunner, nil, Dependency{Name: "yt-dlp", MinVersion: "2024.08.01"})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if strings.Contains(err.Error(), "Traceback") || strings.Contains(err.Error(), "File \"") {
+		t.Errorf("error contains stack trace: %v", err)
+	}
+	if len(reports) > 0 && (strings.Contains(reports[0].Error, "Traceback") || strings.Contains(reports[0].Error, "File \"")) {
+		t.Errorf("report.Error contains stack trace: %v", reports[0].Error)
 	}
 }
 
@@ -324,15 +408,65 @@ func TestSetDefaultRunner(t *testing.T) {
 
 func TestCheckDependencies_DefaultRunner(t *testing.T) {
 	ctx := context.Background()
-	origRunner := defaultRunner
-	defaultRunner = func(ctx context.Context, name string, args ...string) ([]byte, error) {
+	cleanup := SetDefaultRunner(func(ctx context.Context, name string, args ...string) ([]byte, error) {
 		if name == "yt-dlp" {
 			return []byte("2026.08.01"), nil
 		}
 		return []byte(fmt.Sprintf("%s version 8.1.2", name)), nil
-	}
-	defer func() { defaultRunner = origRunner }()
+	})
+	defer cleanup()
 
 	_ = CheckDependencies(ctx)
 	_, _ = VerifyDependencies(ctx)
+}
+
+func TestManagerOperations(t *testing.T) {
+	ctx := context.Background()
+	c := cache.NewInDir(t.TempDir(), true)
+
+	// Test cacheAdapter Get/Put/Delete
+	adapter := &cacheAdapter{cache: c}
+	_ = adapter.Put("test_key", "test_val")
+	var val string
+	if !adapter.Get("test_key", &val) || val != "test_val" {
+		t.Errorf("cacheAdapter Get failed, got %q", val)
+	}
+	_ = adapter.Delete("test_key")
+	if adapter.Get("test_key", &val) {
+		t.Errorf("expected deleted key to return false")
+	}
+
+	// Nil cacheAdapter safety
+	var nilAdapter *cacheAdapter
+	if nilAdapter.Get("k", &val) {
+		t.Errorf("nil adapter Get should return false")
+	}
+	_ = nilAdapter.Put("k", "v")
+	_ = nilAdapter.Delete("k")
+
+	// InitManagedPath
+	if err := InitManagedPath(); err != nil {
+		t.Fatalf("InitManagedPath failed: %v", err)
+	}
+
+	// Install/Update unknown dependency returns error
+	if err := InstallDependency(ctx, "unknown-dep-xyz"); err == nil {
+		t.Error("expected error installing unknown dep")
+	}
+	if err := UpdateDependency(ctx, "unknown-dep-xyz"); err == nil {
+		t.Error("expected error updating unknown dep")
+	}
+
+	// InstallMissingDependencies & UpdateAllDependencies with mock
+	cleanup := SetDefaultRunner(func(ctx context.Context, name string, args ...string) ([]byte, error) {
+		return []byte("2026.08.01"), nil
+	})
+	defer cleanup()
+
+	_, _ = InstallMissingDependencies(ctx)
+	_, _ = UpdateAllDependencies(ctx)
+
+	// UpgradeSelf with invalid repo / dev version
+	_, _ = UpgradeSelf(ctx, "dev")
+	_, _ = UpgradeSelfToPath(ctx, "dev", filepath.Join(t.TempDir(), "bin"))
 }

@@ -309,13 +309,13 @@ performs spectral bandwidth & loudness analysis, and enriches files with 1400x14
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			fmt.Printf("Checking for newer fetch-track release (current version: %s)...\n", version)
-			updated, latestVer, err := deps.UpgradeSelf(cmd.Context(), version)
+			latestVer, err := deps.UpgradeSelf(cmd.Context(), version)
 			if err != nil {
+				if strings.Contains(err.Error(), "already at the latest version") {
+					fmt.Printf("fetch-track is already up to date (version %s).\n", version)
+					return nil
+				}
 				return fmt.Errorf("upgrade failed: %w", err)
-			}
-			if !updated {
-				fmt.Printf("fetch-track is already up to date (version %s).\n", latestVer)
-				return nil
 			}
 			fmt.Printf("Successfully upgraded fetch-track to version %s!\n", latestVer)
 			return nil
@@ -368,9 +368,15 @@ func ensureDependencies(ctx context.Context) error {
 	}
 
 	var missing []string
+	var missingNames []string
 	for _, r := range reports {
 		if !r.Satisfied {
-			missing = append(missing, r.Name)
+			missingNames = append(missingNames, r.Name)
+			if r.Installed && r.DetectedVersion != "" {
+				missing = append(missing, fmt.Sprintf("%s (installed version %s, required %s or newer)", r.Name, r.DetectedVersion, r.MinVersion))
+			} else {
+				missing = append(missing, fmt.Sprintf("%s (missing, required %s or newer)", r.Name, r.MinVersion))
+			}
 		}
 	}
 
@@ -392,7 +398,7 @@ func ensureDependencies(ctx context.Context) error {
 		ans, _ := reader.ReadString('\n')
 		ans = strings.TrimSpace(strings.ToLower(ans))
 		if ans == "" || ans == "y" || ans == "yes" {
-			fmt.Printf("Installing dependencies: %s...\n", strings.Join(missing, ", "))
+			fmt.Printf("Installing dependencies: %s...\n", strings.Join(missingNames, ", "))
 			installed, installErr := deps.InstallMissingDependencies(ctx)
 			if installErr != nil {
 				return fmt.Errorf("auto-installing dependencies: %w", installErr)

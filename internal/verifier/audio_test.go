@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/dj/fetch-track-cli/internal/cache"
@@ -229,6 +230,14 @@ func TestDefaultRunner_Verifier(t *testing.T) {
 	_, err := defaultRunner(ctx, "sh", "-c", "echo error message >&2; exit 1")
 	if err == nil {
 		t.Fatal("expected error from defaultRunner")
+	}
+
+	_, err = defaultRunner(ctx, "sh", "-c", "echo 'goroutine 1 [running]:\nmain.main()\n\tmain.go:10 +0x1\npanic: fail' >&2; exit 1")
+	if err == nil {
+		t.Fatal("expected error from defaultRunner")
+	}
+	if strings.Contains(err.Error(), "goroutine 1") || strings.Contains(err.Error(), "+0x1") {
+		t.Errorf("expected stack trace to be stripped from defaultRunner error, got: %v", err)
 	}
 
 	_, _ = defaultRunner(ctx, "echo", "hello")

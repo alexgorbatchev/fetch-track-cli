@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/dj/fetch-track-cli/internal/cache"
+	"github.com/dj/fetch-track-cli/internal/deps"
 )
 
 // TrackMetadata holds probed information about a track.
@@ -64,6 +65,10 @@ func defaultRunner(ctx context.Context, name string, args ...string) ([]byte, er
 	err := cmd.Run()
 	if err != nil {
 		if stderr.Len() > 0 {
+			cleanErr := deps.CleanErrorMessage(stderr.String())
+			if cleanErr != "" {
+				return nil, fmt.Errorf("%w: %s", err, cleanErr)
+			}
 			return nil, fmt.Errorf("%w: %s", err, strings.TrimSpace(stderr.String()))
 		}
 		return nil, err

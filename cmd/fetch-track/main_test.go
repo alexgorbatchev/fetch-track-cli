@@ -1,14 +1,10 @@
 package main
 
 import (
-	"archive/tar"
 	"bytes"
-	"compress/gzip"
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -21,33 +17,6 @@ import (
 	"github.com/dj/fetch-track-cli/internal/downloader"
 	"github.com/dj/fetch-track-cli/internal/metadata"
 )
-
-func createTestTarGz(t *testing.T, binName, content string) []byte {
-	t.Helper()
-	var buf bytes.Buffer
-	gw := gzip.NewWriter(&buf)
-	tw := tar.NewWriter(gw)
-
-	data := []byte(content)
-	hdr := &tar.Header{
-		Name: binName,
-		Mode: 0755,
-		Size: int64(len(data)),
-	}
-	if err := tw.WriteHeader(hdr); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := tw.Write(data); err != nil {
-		t.Fatal(err)
-	}
-	if err := tw.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if err := gw.Close(); err != nil {
-		t.Fatal(err)
-	}
-	return buf.Bytes()
-}
 
 func createTestAudio(t *testing.T, dir, filename string) string {
 	t.Helper()
@@ -140,6 +109,33 @@ func TestDepsCommand_NonAgent(t *testing.T) {
 	err := cmd.Execute()
 	if err != nil {
 		t.Fatalf("dependencies command error = %v", err)
+	}
+}
+
+func TestDepsCommand_NonAgentOutdated(t *testing.T) {
+	tempCacheDir, cleanupEnv := setupMainTestEnv(t)
+	defer cleanupEnv()
+	t.Setenv("AGENT", "0")
+
+	c := cache.NewInDir(filepath.Join(tempCacheDir, "fetch-track"), true)
+	_ = c.Delete("deps", "yt-dlp")
+	outdatedRunner := func(ctx context.Context, name string, args ...string) ([]byte, error) {
+		if name == "yt-dlp" {
+			return []byte("2020.01.01"), nil
+		}
+		return []byte(fmt.Sprintf("%s version 8.1.2", name)), nil
+	}
+	cleanupOutdated := deps.SetDefaultRunner(outdatedRunner)
+	defer cleanupOutdated()
+
+	cmd := newRootCommand()
+	cmd.SetArgs([]string{"dependencies"})
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected error for outdated dependency in non-agent mode")
+	}
+	if !strings.Contains(err.Error(), "yt-dlp in $PATH (version 2020.01.01) is outdated, must be version 2024.08.01 or newer") {
+		t.Errorf("unexpected error message: %v", err)
 	}
 }
 
@@ -277,38 +273,33 @@ func TestUpgradeCommand(t *testing.T) {
 	defer cleanupEnv()
 	_ = tempCacheDir
 
-	// 1. Up to date (when dev version or same version)
+	// 1. Up to date (when already at latest version)
+	cleanupUpToDate := deps.SetUpgradeSelfFunc(func(ctx context.Context, owner, repo, currentVersion string) (string, error) {
+		return "", fmt.Errorf("already at the latest version (%s)", currentVersion)
+	})
 	cmd := newRootCommand()
 	cmd.SetArgs([]string{"upgrade"})
-	_ = cmd.Execute()
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("expected nil on already up to date, got: %v", err)
+	}
+	cleanupUpToDate()
 
-	// 2. Upgraded successfully with mock server
-	tarGzData := createTestTarGz(t, "fetch-track", "#!/bin/sh\necho 99.0.0\n")
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, "/releases/latest") {
-			http.Redirect(w, r, "/alexgorbatchev/fetch-track-cli/releases/tag/v99.0.0", http.StatusFound)
-			return
-		}
-		w.Header().Set("Content-Type", "application/gzip")
-		_, _ = w.Write(tarGzData)
-	}))
-	defer ts.Close()
-
-	origBaseURL := deps.SetDefaultBaseURL(ts.URL)
-	defer origBaseURL()
-
+	// 2. Upgraded successfully
+	cleanupSuccess := deps.SetUpgradeSelfFunc(func(ctx context.Context, owner, repo, currentVersion string) (string, error) {
+		return "1.5.0", nil
+	})
 	cmd2 := newRootCommand()
 	cmd2.SetArgs([]string{"upgrade"})
-	_ = cmd2.Execute()
+	if err := cmd2.Execute(); err != nil {
+		t.Fatalf("expected nil on successful upgrade, got: %v", err)
+	}
+	cleanupSuccess()
 
-	// 3. Upgrade failure with 404 server
-	tsFail := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.NotFound(w, r)
-	}))
-	defer tsFail.Close()
-
-	origBaseURL2 := deps.SetDefaultBaseURL(tsFail.URL)
-	defer origBaseURL2()
+	// 3. Upgrade failure
+	cleanupFail := deps.SetUpgradeSelfFunc(func(ctx context.Context, owner, repo, currentVersion string) (string, error) {
+		return "", errors.New("network failure")
+	})
+	defer cleanupFail()
 
 	cmd3 := newRootCommand()
 	cmd3.SetArgs([]string{"upgrade"})
@@ -498,4 +489,23 @@ func TestEnsureDependencies_Branches(t *testing.T) {
 	_ = c.Delete("deps", "ffprobe")
 	stdinReader = strings.NewReader("yes\n")
 	_ = ensureDependencies(ctx)
+
+	// 7. Outdated dependency prompt formatting
+	_ = c.Delete("deps", "yt-dlp")
+	outdatedRunner := func(ctx context.Context, name string, args ...string) ([]byte, error) {
+		if name == "yt-dlp" {
+			return []byte("2020.01.01"), nil
+		}
+		return []byte(fmt.Sprintf("%s version 8.1.2", name)), nil
+	}
+	cleanupOutdated := deps.SetDefaultRunner(outdatedRunner)
+	defer cleanupOutdated()
+	stdinReader = strings.NewReader("n\n")
+	errOutdated := ensureDependencies(ctx)
+	if errOutdated == nil {
+		t.Fatal("expected error when user declines install on outdated dependency")
+	}
+	if !strings.Contains(errOutdated.Error(), "yt-dlp in $PATH (version 2020.01.01) is outdated, must be version 2024.08.01 or newer") {
+		t.Errorf("unexpected error from ensureDependencies: %v", errOutdated)
+	}
 }

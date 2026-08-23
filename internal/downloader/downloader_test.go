@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/dj/fetch-track-cli/internal/cache"
@@ -233,6 +234,15 @@ func TestDownloader_AdditionalErrorBranches(t *testing.T) {
 		t.Fatal("expected error from defaultRunner")
 	}
 
+	// 1b. defaultRunner error with python traceback
+	_, err = defaultRunner(ctx, "sh", "-c", "echo 'Traceback (most recent call last):\n  File \"yt_dlp.py\", line 1\nRuntimeError: download fail' >&2; exit 1")
+	if err == nil {
+		t.Fatal("expected error from defaultRunner")
+	}
+	if strings.Contains(err.Error(), "Traceback") || strings.Contains(err.Error(), "File \"") {
+		t.Errorf("expected stack trace to be stripped from defaultRunner error, got: %v", err)
+	}
+
 	// 2. DownloadAudioStreamWithRunner mkdir error
 	blockerFile := filepath.Join(tempDir, "blocker")
 	_ = os.WriteFile(blockerFile, []byte("file"), 0644)
@@ -284,9 +294,8 @@ func TestConvenienceFunctions(t *testing.T) {
 		return []byte(jsonLine), nil
 	}
 
-	origRunner := defaultRunnerVar
-	defaultRunnerVar = mockRunner
-	defer func() { defaultRunnerVar = origRunner }()
+	cleanup := SetDefaultRunner(mockRunner)
+	defer cleanup()
 
 	// Test SearchSourcesInParallel
 	results, err := SearchSourcesInParallel(ctx, []string{"soundcloud"}, "Boris Brejcha", "Space X", "Boris Brejcha Space X", nil)
