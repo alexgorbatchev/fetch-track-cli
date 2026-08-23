@@ -62,6 +62,8 @@ func DefaultRunner(ctx context.Context, name string, args ...string) ([]byte, er
 	return stdout.Bytes(), nil
 }
 
+var defaultRunner = DefaultRunner
+
 // DependencyReport describes the verification status of a single dependency.
 type DependencyReport struct {
 	Name            string `json:"name"`
@@ -80,7 +82,7 @@ func CheckDependencies(ctx context.Context, cacheInst ...*cache.Cache) error {
 	} else {
 		c, _ = cache.New(true)
 	}
-	return CheckDependenciesWithRunner(ctx, DefaultRunner, c, RequiredDependencies...)
+	return CheckDependenciesWithRunner(ctx, defaultRunner, c, RequiredDependencies...)
 }
 
 // CheckDependenciesWithRunner checks dependencies using a provided CommandRunner.
@@ -106,7 +108,7 @@ func VerifyDependencies(ctx context.Context, cacheInst ...*cache.Cache) ([]Depen
 	} else {
 		c, _ = cache.New(true)
 	}
-	return VerifyDependenciesWithRunner(ctx, DefaultRunner, c, RequiredDependencies...)
+	return VerifyDependenciesWithRunner(ctx, defaultRunner, c, RequiredDependencies...)
 }
 
 // VerifyDependenciesWithRunner inspects dependencies using a provided CommandRunner.
@@ -240,7 +242,7 @@ func ParseVersionOutput(depName, output string) string {
 
 // CompareVersions checks if actual version meets or exceeds minVersion.
 func CompareVersions(actualStr, minStr string) error {
-	if strings.HasPrefix(actualStr, "N-") || strings.HasPrefix(actualStr, "git-") || strings.HasPrefix(actualStr, "DEV-") {
+	if actualStr == "dev" || strings.HasPrefix(actualStr, "N-") || strings.HasPrefix(actualStr, "git-") || strings.HasPrefix(actualStr, "DEV-") {
 		return nil
 	}
 

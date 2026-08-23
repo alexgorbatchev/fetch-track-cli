@@ -6,6 +6,9 @@ import (
 	"os/exec"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/dj/fetch-track-cli/internal/cache"
 )
 
 func TestParseVersionOutput(t *testing.T) {
@@ -80,6 +83,9 @@ func TestCompareVersions(t *testing.T) {
 		{"ffmpeg older minor", "4.3.2", "4.4", true},
 		{"ffmpeg nightly build N-", "N-112345", "4.4", false},
 		{"ffmpeg git build", "git-2023-01-01", "4.4", false},
+		{"dev build version", "dev", "4.4", false},
+		{"DEV- prefixed version", "DEV-1234", "4.4", false},
+		{"build metadata with plus", "4.4.0+build123", "4.4", false},
 		{"invalid version format", "invalid", "4.4", true},
 	}
 
@@ -242,6 +248,39 @@ func TestCheckDependenciesWithRunner(t *testing.T) {
 	})
 }
 
+func TestIsNotFound(t *testing.T) {
+	if isNotFound(nil) {
+		t.Error("expected isNotFound(nil) to be false")
+	}
+	if !isNotFound(&exec.Error{Name: "test", Err: exec.ErrNotFound}) {
+		t.Error("expected isNotFound(exec.ErrNotFound) to be true")
+	}
+	if !isNotFound(errors.New("executable file not found in $PATH")) {
+		t.Error("expected isNotFound('executable file not found') to be true")
+	}
+	if isNotFound(errors.New("permission denied")) {
+		t.Error("expected isNotFound('permission denied') to be false")
+	}
+}
+
+func TestCheckDependencies_Variants(t *testing.T) {
+	ctx := context.Background()
+	c, _ := cache.New(false)
+	mockRunner := func(ctx context.Context, name string, args ...string) ([]byte, error) {
+		return []byte("1.0.0"), nil
+	}
+	_ = CheckDependenciesWithRunner(ctx, mockRunner, c)
+	_, _ = VerifyDependenciesWithRunner(ctx, mockRunner, c)
+}
+
+func TestDefaultRunner_Stderr(t *testing.T) {
+	ctx := context.Background()
+	_, err := DefaultRunner(ctx, "sh", "-c", "echo error message >&2; exit 1")
+	if err == nil || !strings.Contains(err.Error(), "error message") {
+		t.Errorf("expected stderr in error message, got: %v", err)
+	}
+}
+
 func TestDefaultRunner(t *testing.T) {
 	ctx := context.Background()
 	// Run a common command like 'go' version
@@ -254,11 +293,35 @@ func TestDefaultRunner(t *testing.T) {
 	}
 }
 
-func TestCheckDependenciesLive(t *testing.T) {
+func TestCheckDependencies_Cached(t *testing.T) {
 	ctx := context.Background()
-	// Test CheckDependencies against host environment if dependencies are present
-	err := CheckDependencies(ctx)
+	c := cache.NewInDir(t.TempDir(), true)
+	_ = c.Put("deps", "yt-dlp", "2026.08.01", time.Hour)
+	_ = c.Put("deps", "ffmpeg", "ffmpeg version 8.1", time.Hour)
+	_ = c.Put("deps", "ffprobe", "ffprobe version 8.1", time.Hour)
+
+	err := CheckDependencies(ctx, c)
 	if err != nil {
-		t.Logf("CheckDependencies returned: %v (this is expected if dependencies are missing in the test runner)", err)
+		t.Fatalf("CheckDependencies with cache error = %v", err)
 	}
+
+	reports, err := VerifyDependencies(ctx, c)
+	if err != nil {
+		t.Fatalf("VerifyDependencies with cache error = %v", err)
+	}
+	if len(reports) != 3 {
+		t.Fatalf("expected 3 reports, got %d", len(reports))
+	}
+}
+
+func TestCheckDependencies_DefaultRunner(t *testing.T) {
+	ctx := context.Background()
+	origRunner := defaultRunner
+	defaultRunner = func(ctx context.Context, name string, args ...string) ([]byte, error) {
+		return []byte("1.0.0"), nil
+	}
+	defer func() { defaultRunner = origRunner }()
+
+	_ = CheckDependencies(ctx)
+	_, _ = VerifyDependencies(ctx)
 }

@@ -236,6 +236,38 @@ func TestCache_Disabled(t *testing.T) {
 	}
 }
 
+func TestCache_Delete(t *testing.T) {
+	tempDir := t.TempDir()
+	c := NewInDir(tempDir, true)
+
+	key := "delete_me"
+	namespace := "test_ns"
+	data := TestData{Name: "data", Count: 10}
+
+	if err := c.Put(namespace, key, data, time.Hour); err != nil {
+		t.Fatalf("failed to Put item: %v", err)
+	}
+
+	var fetched TestData
+	if !c.Get(namespace, key, &fetched) {
+		t.Fatal("expected cache hit before delete")
+	}
+
+	if err := c.Delete(namespace, key); err != nil {
+		t.Fatalf("Delete failed: %v", err)
+	}
+
+	if c.Get(namespace, key, &fetched) {
+		t.Error("expected cache miss after delete")
+	}
+
+	// Test disabled cache Delete
+	disabledCache := NewInDir(tempDir, false)
+	if err := disabledCache.Delete(namespace, key); err != nil {
+		t.Errorf("disabled cache Delete returned error: %v", err)
+	}
+}
+
 func TestNew(t *testing.T) {
 	c, err := New(true)
 	if err != nil {

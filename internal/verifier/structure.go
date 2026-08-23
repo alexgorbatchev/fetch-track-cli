@@ -20,7 +20,7 @@ type MixStructureReport struct {
 	IsRadioEditWarning      bool     `json:"isRadioEditWarning"`
 	IsOriginalOrExtendedMix bool     `json:"isOriginalOrExtendedMix"`
 	DurationFormatted       string   `json:"durationFormatted"`
-	MixTypeDescription     string   `json:"mixTypeDescription"`
+	MixTypeDescription      string   `json:"mixTypeDescription"`
 	DetectedKeywords        []string `json:"detectedKeywords"`
 	HasIntroBeats           bool     `json:"hasIntroBeats"`
 	HasOutroBeats           bool     `json:"hasOutroBeats"`
@@ -86,7 +86,7 @@ func AnalyzeMixStructure(title string, durationSec float64) MixStructureReport {
 		IsRadioEditWarning:      isRadioEditWarning,
 		IsOriginalOrExtendedMix: isOriginalOrExtendedMix,
 		DurationFormatted:       FormatDuration(durationSec),
-		MixTypeDescription:     mixTypeDescription,
+		MixTypeDescription:      mixTypeDescription,
 		DetectedKeywords:        allDetected,
 		HasIntroBeats:           durationSec >= MaxRadioEditDurationSeconds,
 		HasOutroBeats:           durationSec >= MaxRadioEditDurationSeconds,

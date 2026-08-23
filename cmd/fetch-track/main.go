@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"os"
@@ -29,11 +30,22 @@ var (
 	verbose        bool
 	progressTarget string
 	progressSocket string
+	autoInstall    bool
 )
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	// Handle second Ctrl+C for forced immediate exit
+	go func() {
+		<-ctx.Done()
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+		<-sigChan
+		fmt.Fprintln(os.Stderr, "\nForced termination requested. Exiting.")
+		os.Exit(130)
+	}()
 
 	rootCmd := &cobra.Command{
 		Use:          "fetch-track <youtube_url_or_search_query>",
@@ -49,6 +61,11 @@ performs spectral bandwidth & loudness analysis, and enriches files with 1400x14
 			if len(args) == 0 {
 				return cmd.Help()
 			}
+
+			if err := ensureDependencies(cmd.Context()); err != nil {
+				return err
+			}
+
 			target := strings.Join(args, " ")
 
 			var sources []string
@@ -88,6 +105,7 @@ performs spectral bandwidth & loudness analysis, and enriches files with 1400x14
 				NoCache:          noCache,
 				Verbose:          verbose,
 				IsAgent:          pipeline.IsAgentMode(),
+				AutoInstall:      autoInstall,
 				ProgressReporter: reporter,
 			}
 			return pipeline.Run(cmd.Context(), target, opts)
@@ -104,6 +122,7 @@ performs spectral bandwidth & loudness analysis, and enriches files with 1400x14
 	rootCmd.Flags().BoolVar(&noCache, "no-cache", false, "Disable local caching for search queries, metadata, and artwork")
 	rootCmd.Flags().StringVar(&progressTarget, "progress-target", "", "Target URI/address for streaming JSON progress events (e.g. unix:///path/to.sock, tcp://127.0.0.1:9099, fd://3, stdout, stderr)")
 	rootCmd.Flags().StringVar(&progressSocket, "progress-socket", "", "Shorthand alias for --progress-target")
+	rootCmd.Flags().BoolVar(&autoInstall, "auto-install", false, "Automatically install missing dependencies without prompting")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output logging")
 
 	verifyCmd := &cobra.Command{
@@ -118,7 +137,7 @@ performs spectral bandwidth & loudness analysis, and enriches files with 1400x14
 			target := strings.Join(args, " ")
 			isAgent := pipeline.IsAgentMode()
 
-			if err := deps.CheckDependencies(cmd.Context()); err != nil {
+			if err := ensureDependencies(cmd.Context()); err != nil {
 				if isAgent {
 					fmt.Printf("target: %s\nstatus: error\nerror: %v\n", target, err)
 				}
@@ -185,6 +204,8 @@ performs spectral bandwidth & loudness analysis, and enriches files with 1400x14
 		},
 	}
 
+	verifyCmd.Flags().BoolVar(&autoInstall, "auto-install", false, "Automatically install missing dependencies without prompting")
+
 	depsCmd := &cobra.Command{
 		Use:          "dependencies",
 		Aliases:      []string{"deps"},
@@ -230,10 +251,145 @@ performs spectral bandwidth & loudness analysis, and enriches files with 1400x14
 		},
 	}
 
+	depsInstallCmd := &cobra.Command{
+		Use:          "install [dependency...]",
+		Aliases:      []string{"add", "get"},
+		Short:        "Install missing external dependencies (yt-dlp, ffmpeg, ffprobe)",
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			_ = deps.InitManagedPath()
+			if len(args) > 0 {
+				for _, depName := range args {
+					fmt.Printf("Installing %s...\n", depName)
+					if err := deps.InstallDependency(cmd.Context(), depName); err != nil {
+						return fmt.Errorf("installing %s: %w", depName, err)
+					}
+					fmt.Printf("%s installed successfully.\n", depName)
+				}
+				return nil
+			}
+
+			fmt.Println("Checking and installing missing dependencies...")
+			installed, err := deps.InstallMissingDependencies(cmd.Context())
+			if err != nil {
+				return err
+			}
+			if len(installed) == 0 {
+				fmt.Println("All dependencies are already satisfied.")
+			} else {
+				fmt.Printf("Successfully installed: %s\n", strings.Join(installed, ", "))
+			}
+			return nil
+		},
+	}
+
+	depsUpdateCmd := &cobra.Command{
+		Use:          "update [dependency...]",
+		Aliases:      []string{"upgrade"},
+		Short:        "Update external dependencies to their latest versions",
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			_ = deps.InitManagedPath()
+			if len(args) > 0 {
+				for _, depName := range args {
+					fmt.Printf("Updating %s...\n", depName)
+					if err := deps.UpdateDependency(cmd.Context(), depName); err != nil {
+						return fmt.Errorf("updating %s: %w", depName, err)
+					}
+					fmt.Printf("%s updated successfully.\n", depName)
+				}
+				return nil
+			}
+
+			fmt.Println("Updating all dependencies to latest versions...")
+			updated, err := deps.UpdateAllDependencies(cmd.Context())
+			if err != nil {
+				return err
+			}
+			fmt.Printf("Successfully updated: %s\n", strings.Join(updated, ", "))
+			return nil
+		},
+	}
+
+	depsCmd.AddCommand(depsInstallCmd)
+	depsCmd.AddCommand(depsUpdateCmd)
+
+	upgradeCmd := &cobra.Command{
+		Use:          "upgrade",
+		Aliases:      []string{"self-update", "update-self"},
+		Short:        "Upgrade fetch-track CLI binary to the latest released version",
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			fmt.Printf("Checking for newer fetch-track release (current version: %s)...\n", version)
+			updated, latestVer, err := deps.UpgradeSelf(cmd.Context(), version)
+			if err != nil {
+				return fmt.Errorf("upgrade failed: %w", err)
+			}
+			if !updated {
+				fmt.Printf("fetch-track is already up to date (version %s).\n", latestVer)
+				return nil
+			}
+			fmt.Printf("Successfully upgraded fetch-track to version %s!\n", latestVer)
+			return nil
+		},
+	}
+
 	rootCmd.AddCommand(verifyCmd)
 	rootCmd.AddCommand(depsCmd)
+	rootCmd.AddCommand(upgradeCmd)
 
 	if err := rootCmd.ExecuteContext(ctx); err != nil {
+		if ctx.Err() != nil {
+			fmt.Fprintln(os.Stderr, "Operation canceled by user.")
+			os.Exit(130)
+		}
 		os.Exit(1)
 	}
+}
+
+func ensureDependencies(ctx context.Context) error {
+	_ = deps.InitManagedPath()
+	reports, err := deps.VerifyDependencies(ctx)
+	if err == nil {
+		return nil
+	}
+
+	var missing []string
+	for _, r := range reports {
+		if !r.Satisfied {
+			missing = append(missing, r.Name)
+		}
+	}
+
+	if autoInstall {
+		fmt.Printf("Auto-installing missing dependencies: %s...\n", strings.Join(missing, ", "))
+		installed, installErr := deps.InstallMissingDependencies(ctx)
+		if installErr != nil {
+			return fmt.Errorf("auto-installing dependencies: %w", installErr)
+		}
+		if len(installed) > 0 {
+			fmt.Printf("Successfully installed: %s\n", strings.Join(installed, ", "))
+		}
+		return nil
+	}
+
+	if !deps.IsAgentMode() {
+		reader := bufio.NewReader(os.Stdin)
+		fmt.Printf("\nMissing required dependencies: %s\nWould you like to auto-install them to managed directory? [Y/n]: ", strings.Join(missing, ", "))
+		ans, _ := reader.ReadString('\n')
+		ans = strings.TrimSpace(strings.ToLower(ans))
+		if ans == "" || ans == "y" || ans == "yes" {
+			fmt.Printf("Installing dependencies: %s...\n", strings.Join(missing, ", "))
+			installed, installErr := deps.InstallMissingDependencies(ctx)
+			if installErr != nil {
+				return fmt.Errorf("auto-installing dependencies: %w", installErr)
+			}
+			if len(installed) > 0 {
+				fmt.Printf("Successfully installed: %s\n\n", strings.Join(installed, ", "))
+			}
+			return nil
+		}
+	}
+
+	return err
 }

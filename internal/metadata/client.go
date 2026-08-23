@@ -15,13 +15,16 @@ import (
 
 // TrackMetadataResult contains normalized track metadata and artwork URL.
 type TrackMetadataResult struct {
-	Title       string `json:"title"`
-	Artist      string `json:"artist"`
-	Album       string `json:"album"`
-	Genre       string `json:"genre"`
-	ReleaseYear string `json:"releaseYear"`
-	CoverArtURL string `json:"coverArtUrl,omitempty"`
-	Source      string `json:"source"` // iTunes API, MusicBrainz API, YouTube Fallback
+	Title          string    `json:"title"`
+	Artist         string    `json:"artist"`
+	Album          string    `json:"album"`
+	Genre          string    `json:"genre"`
+	ReleaseDate    string    `json:"releaseDate,omitempty"`
+	ReleaseYear    string    `json:"releaseYear"`
+	CoverArtURL    string    `json:"coverArtUrl,omitempty"`
+	Source         string    `json:"source"` // iTunes API, MusicBrainz API, YouTube Fallback
+	AudioSourceURL string    `json:"audioSourceUrl,omitempty"`
+	FetchedAt      time.Time `json:"fetchedAt,omitempty"`
 }
 
 // HTTPClient interface for test mockability.
@@ -131,8 +134,13 @@ func (c *Client) FetchFromITunes(ctx context.Context, query, expectedTitle strin
 	if genre == "" {
 		genre = "Electronic"
 	}
+	releaseDate := ""
 	releaseYear := ""
-	if len(item.ReleaseDate) >= 4 {
+	if len(item.ReleaseDate) >= 10 {
+		releaseDate = item.ReleaseDate[:10]
+		releaseYear = item.ReleaseDate[:4]
+	} else if len(item.ReleaseDate) >= 4 {
+		releaseDate = item.ReleaseDate
 		releaseYear = item.ReleaseDate[:4]
 	}
 
@@ -141,6 +149,7 @@ func (c *Client) FetchFromITunes(ctx context.Context, query, expectedTitle strin
 		Artist:      item.ArtistName,
 		Album:       album,
 		Genre:       genre,
+		ReleaseDate: releaseDate,
 		ReleaseYear: releaseYear,
 		CoverArtURL: highResArtwork,
 		Source:      "iTunes API",
@@ -229,6 +238,7 @@ func (c *Client) FetchFromMusicBrainz(ctx context.Context, query, expectedTitle 
 	}
 
 	album := "DJ Collection"
+	releaseDate := ""
 	releaseYear := ""
 	var releaseID string
 
@@ -237,7 +247,11 @@ func (c *Client) FetchFromMusicBrainz(ctx context.Context, query, expectedTitle 
 		if rel.Title != "" {
 			album = rel.Title
 		}
-		if len(rel.Date) >= 4 {
+		if len(rel.Date) >= 10 {
+			releaseDate = rel.Date[:10]
+			releaseYear = rel.Date[:4]
+		} else if len(rel.Date) >= 4 {
+			releaseDate = rel.Date
 			releaseYear = rel.Date[:4]
 		}
 		releaseID = rel.ID
@@ -270,6 +284,7 @@ func (c *Client) FetchFromMusicBrainz(ctx context.Context, query, expectedTitle 
 		Artist:      artist,
 		Album:       album,
 		Genre:       "Electronic / Ambient",
+		ReleaseDate: releaseDate,
 		ReleaseYear: releaseYear,
 		CoverArtURL: coverArtURL,
 		Source:      "MusicBrainz API",
@@ -346,6 +361,7 @@ func (c *Client) ResolveTrackMetadata(ctx context.Context, searchQuery, fallback
 		Artist:      artist,
 		Album:       "DJ Collection",
 		Genre:       "Electronic",
+		ReleaseDate: fmt.Sprintf("%d", time.Now().Year()),
 		ReleaseYear: fmt.Sprintf("%d", time.Now().Year()),
 		Source:      "YouTube Fallback",
 	}

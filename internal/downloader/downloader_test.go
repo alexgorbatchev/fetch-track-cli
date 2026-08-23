@@ -90,9 +90,9 @@ func TestEvaluateAndInspectCandidatesInParallel_Empty(t *testing.T) {
 func TestDeduplicateCandidates(t *testing.T) {
 	candidates := []Candidate{
 		{ID: "1", Title: "DJ Blyatman - Gopnik", Duration: 192, Source: "soundcloud", WebpageURL: "https://soundcloud.com/djblyatman/gopnik"},
-		{ID: "1", Title: "DJ Blyatman - Gopnik", Duration: 192, Source: "soundcloud", WebpageURL: "https://soundcloud.com/djblyatman/gopnik"}, // Exact URL duplicate
+		{ID: "1", Title: "DJ Blyatman - Gopnik", Duration: 192, Source: "soundcloud", WebpageURL: "https://soundcloud.com/djblyatman/gopnik"},       // Exact URL duplicate
 		{ID: "2", Title: "DJ Blyatman - Gopnik", Duration: 192, Source: "soundcloud", WebpageURL: "https://soundcloud.com/djblyatman/gopnik-track"}, // Title + Source + Duration duplicate
-		{ID: "3", Title: "DJ BLYATMAN - GOPNIK (Official Audio)", Duration: 193, Source: "youtube", WebpageURL: "https://youtube.com/watch?v=3"}, // Unique candidate
+		{ID: "3", Title: "DJ BLYATMAN - GOPNIK (Official Audio)", Duration: 193, Source: "youtube", WebpageURL: "https://youtube.com/watch?v=3"},    // Unique candidate
 	}
 
 	unique := DeduplicateCandidates(candidates)

@@ -128,6 +128,16 @@ func (c *Cache) Put(namespace, key string, item interface{}, ttl time.Duration) 
 	return os.WriteFile(filePath, entryData, 0644)
 }
 
+// Delete removes a cached item from local storage.
+func (c *Cache) Delete(namespace, key string) error {
+	if !c.Enabled() {
+		return nil
+	}
+
+	filePath := filepath.Join(c.baseDir, namespace, KeyHash(namespace, key)+".json")
+	return os.Remove(filePath)
+}
+
 // GetFile retrieves a cached raw binary file (e.g. artwork image) if valid.
 func (c *Cache) GetFile(namespace, key string, ttl time.Duration) (string, bool) {
 	if !c.Enabled() {

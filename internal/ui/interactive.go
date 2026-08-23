@@ -12,8 +12,8 @@ import (
 
 var (
 	selectedStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("86"))
+		Bold(true).
+		Foreground(lipgloss.Color("86"))
 )
 
 // PromptCandidateSelection displays an interactive Lip Gloss & Huh terminal prompt allowing the user to approve or change the selected candidate.

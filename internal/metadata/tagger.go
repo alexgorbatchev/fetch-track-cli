@@ -117,17 +117,40 @@ func ApplyMetadataToLocalTrack(ctx context.Context, filePath string, metadata Tr
 
 	tmpTaggedPath := filepath.Join(tmpDir, fmt.Sprintf("tagged_%d%s", time.Now().UnixNano(), ext))
 
+	dateTag := metadata.ReleaseDate
+	if dateTag == "" {
+		dateTag = metadata.ReleaseYear
+	}
+
+	var commentParts []string
+	if metadata.AudioSourceURL != "" {
+		commentParts = append(commentParts, fmt.Sprintf("Source: %s", metadata.AudioSourceURL))
+	}
+	if metadata.Source != "" {
+		commentParts = append(commentParts, fmt.Sprintf("Metadata: %s", metadata.Source))
+	}
+	if !metadata.FetchedAt.IsZero() {
+		commentParts = append(commentParts, fmt.Sprintf("Fetched: %s", metadata.FetchedAt.Format("2006-01-02")))
+	}
+
+	metaList := []string{
+		fmt.Sprintf("title=%s", metadata.Title),
+		fmt.Sprintf("artist=%s", metadata.Artist),
+		fmt.Sprintf("album=%s", metadata.Album),
+		fmt.Sprintf("genre=%s", metadata.Genre),
+	}
+	if dateTag != "" {
+		metaList = append(metaList, fmt.Sprintf("date=%s", dateTag))
+	}
+	if len(commentParts) > 0 {
+		metaList = append(metaList, fmt.Sprintf("comment=%s", strings.Join(commentParts, " | ")))
+	}
+
 	kwArgs := ffmpeg.KwArgs{
 		"v":           "quiet",
 		"hide_banner": "",
 		"y":           "",
-		"metadata": []string{
-			fmt.Sprintf("title=%s", metadata.Title),
-			fmt.Sprintf("artist=%s", metadata.Artist),
-			fmt.Sprintf("album=%s", metadata.Album),
-			fmt.Sprintf("genre=%s", metadata.Genre),
-			fmt.Sprintf("date=%s", metadata.ReleaseYear),
-		},
+		"metadata":    metaList,
 	}
 
 	if ext == ".mp3" {

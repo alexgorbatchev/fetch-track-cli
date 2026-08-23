@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/dj/fetch-track-cli/internal/cache"
 	"github.com/dj/fetch-track-cli/internal/deps"
@@ -28,6 +29,7 @@ type Options struct {
 	NoCache          bool
 	Verbose          bool
 	IsAgent          bool
+	AutoInstall      bool
 	ProgressReporter *progress.Reporter
 }
 
@@ -49,6 +51,7 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 		opts.IsAgent = true
 	}
 
+	_ = deps.InitManagedPath()
 	cacheInst, _ := cache.New(!opts.NoCache)
 
 	if !opts.SkipDepCheck {
@@ -60,15 +63,21 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 			Message:    "checking required external binary dependencies",
 		})
 		if err := deps.CheckDependencies(ctx, cacheInst); err != nil {
-			_ = opts.ProgressReporter.Emit(progress.Event{
-				Type:  progress.EventError,
-				Phase: "dependencies",
-				Error: err.Error(),
-			})
-			if opts.IsAgent {
-				fmt.Printf("target: %s\nstatus: error\nerror: %v\n", urlOrQuery, err)
+			if opts.AutoInstall {
+				_, _ = deps.InstallMissingDependencies(ctx)
+				err = deps.CheckDependencies(ctx, cacheInst)
 			}
-			return err
+			if err != nil {
+				_ = opts.ProgressReporter.Emit(progress.Event{
+					Type:  progress.EventError,
+					Phase: "dependencies",
+					Error: err.Error(),
+				})
+				if opts.IsAgent {
+					fmt.Printf("target: %s\nstatus: error\nerror: %v\n", urlOrQuery, err)
+				}
+				return err
+			}
 		}
 	}
 
@@ -330,6 +339,8 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 
 		metaClient := metadata.NewClient(cacheInst)
 		metaRes := metaClient.ResolveTrackMetadata(ctx, cleanTitle, artist, title, opts.Verbose)
+		metaRes.AudioSourceURL = targetURL
+		metaRes.FetchedAt = time.Now().UTC()
 		metaResult = &metaRes
 
 		if sp != nil {

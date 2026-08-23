@@ -21,6 +21,8 @@ type TrackMetadata struct {
 	Uploader        string  `json:"uploader"`
 	DurationSeconds float64 `json:"durationSeconds"`
 	Format          string  `json:"format"`
+	Date            string  `json:"date,omitempty"`
+	Comment         string  `json:"comment,omitempty"`
 	SourceURLOrPath string  `json:"sourceUrlOrPath"`
 	Cached          bool    `json:"cached,omitempty"`
 }
@@ -153,8 +155,12 @@ func FetchLocalMetadata(ctx context.Context, filePath string) (*TrackMetadata, e
 			Duration   string `json:"duration"`
 			FormatName string `json:"format_name"`
 			Tags       struct {
-				Title  string `json:"title"`
-				Artist string `json:"artist"`
+				Title       string `json:"title"`
+				Artist      string `json:"artist"`
+				Date        string `json:"date"`
+				Year        string `json:"year"`
+				Comment     string `json:"comment"`
+				Description string `json:"description"`
 			} `json:"tags"`
 		} `json:"format"`
 	}
@@ -174,12 +180,22 @@ func FetchLocalMetadata(ctx context.Context, filePath string) (*TrackMetadata, e
 	if uploader == "" {
 		uploader = "Local File"
 	}
+	dateVal := rawData.Format.Tags.Date
+	if dateVal == "" {
+		dateVal = rawData.Format.Tags.Year
+	}
+	commentVal := rawData.Format.Tags.Comment
+	if commentVal == "" {
+		commentVal = rawData.Format.Tags.Description
+	}
 
 	return &TrackMetadata{
 		Title:           title,
 		Uploader:        uploader,
 		DurationSeconds: durationSec,
 		Format:          rawData.Format.FormatName,
+		Date:            dateVal,
+		Comment:         commentVal,
 		SourceURLOrPath: filePath,
 	}, nil
 }
