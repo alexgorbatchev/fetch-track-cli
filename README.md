@@ -122,9 +122,17 @@ All dependencies met.
 | `--sources` | `-s` | `youtube,soundcloud` | Comma-separated list of [supported search sources](#supported-search-sources) |
 | `--interactive` | `-i` | `false` | Interactively approve or choose track candidate before downloading |
 | `--no-cache` | | `false` | Disable local caching for search queries, metadata, and artwork |
+| `--progress-target` | | `""` | Target URI for streaming NDJSON progress events (`unix:///path.sock`, `tcp://127.0.0.1:9099`, `fd://3`, `stdout`, `stderr`). See [PROGRESS.md](PROGRESS.md). |
+| `--progress-socket` | | `""` | Shorthand alias for `--progress-target`. See [PROGRESS.md](PROGRESS.md). |
 | `--skip-verify` | | `false` | Skip audio frequency and loudness check |
 | `--skip-metadata` | | `false` | Skip fetching album artwork and track details |
 | `--verbose` | `-v` | `false` | Show extra detailed progress logs |
+
+## Progress & IPC Telemetry for Tools and Agents
+
+When executing `fetch-track` from another CLI tool, desktop GUI, or AI agent harness, use `--progress-target` or `--progress-socket` to stream structured real-time NDJSON events over a UNIX domain socket, TCP socket, or file descriptor.
+
+See [PROGRESS.md](PROGRESS.md) for full protocol specifications, event schemas, and integration code samples.
 
 ## Supported Search Sources
 

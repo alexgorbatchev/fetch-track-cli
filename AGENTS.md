@@ -12,6 +12,7 @@ Go CLI tool for searching, verifying, downloading, and managing high-fidelity si
 - **Build Local Binary:** `just build` (compiles to `bin/fetch-track`)
 - **Run Acquisition Pipeline:** `just run "<youtube_url_or_search_query>"`
 - **Inspect / Verify Audio Track:** `just verify "tracks/Artist - Title.m4a"`
+- **Run Out-of-Band Socket Progress Demo:** `just demo-progress "<query>"`
 - **Run Tests:** `just test` (`go test -v ./...`)
 - **Run Linter / Static Analysis:** `just vet` (`go vet ./...`)
 - **Format Source Code:** `just fmt` (`go fmt ./...`)
@@ -27,6 +28,7 @@ Go CLI tool for searching, verifying, downloading, and managing high-fidelity si
 - **Filename Sanitization:** Clean output filenames (`<outDir>/<Artist> - <Title>.<ext>`). Stripped of YouTube IDs or brackets `[...]`.
 - **Hermetic Unit Tests:** All unit tests (`just test`) MUST remain 100% offline, hermetic, and deterministic. All HTTP network calls in tests use local `mockTransport` HTTP mocks, all audio operations use local synthetic files in `t.TempDir()`, and zero unit tests depend on or call the live internet.
 - **Output Formatting:** All CLI output must be plain text without emojis across all modes and logs. In interactive non-AGENT mode, a bottom-line braille terminal spinner (`⠏ working... <action>`) indicates active background tasks while candidate results print above it in real time as they arrive (`PrintAbove`).
+- **Progress Socket / IPC Telemetry:** When executed by another CLI, agent orchestrator, or GUI, use `--progress-target <uri>` (or `--progress-socket <path>`, or `FETCH_TRACK_PROGRESS_TARGET` env var) to stream atomic NDJSON progress events (`phase_start`, `candidate_found`, `candidate_selected`, `progress`, `complete`, `error`) over a UNIX socket (`unix:///path/to.sock`), TCP address (`tcp://127.0.0.1:9099`), file descriptor (`fd://3`), or standard stream (`stdout`, `stderr`).
 - **Release Notes:** All GitHub releases MUST include comprehensive release notes detailing user-visible changes, performance improvements, and notable commits in the tag range.
 - **Metadata Fallback Chain:**
   1. iTunes Search API (1400x1400 artwork)
@@ -49,3 +51,4 @@ Go CLI tool for searching, verifying, downloading, and managing high-fidelity si
 
 ## References
 - `README.md` - Technical architecture, CLI usage, and processing pipeline.
+- `PROGRESS.md` - Out-of-band socket & IPC progress telemetry protocol specification and schemas.
