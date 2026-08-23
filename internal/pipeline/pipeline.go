@@ -11,6 +11,7 @@ import (
 	"github.com/dj/fetch-track-cli/internal/deps"
 	"github.com/dj/fetch-track-cli/internal/downloader"
 	"github.com/dj/fetch-track-cli/internal/metadata"
+	"github.com/dj/fetch-track-cli/internal/progress"
 	"github.com/dj/fetch-track-cli/internal/spinner"
 	"github.com/dj/fetch-track-cli/internal/ui"
 	"github.com/dj/fetch-track-cli/internal/verifier"
@@ -18,15 +19,16 @@ import (
 
 // Options configures the track acquisition pipeline execution.
 type Options struct {
-	OutDir       string
-	Sources      []string
-	SkipVerify   bool
-	SkipMetadata bool
-	SkipDepCheck bool
-	Interactive  bool
-	NoCache      bool
-	Verbose      bool
-	IsAgent      bool
+	OutDir           string
+	Sources          []string
+	SkipVerify       bool
+	SkipMetadata     bool
+	SkipDepCheck     bool
+	Interactive      bool
+	NoCache          bool
+	Verbose          bool
+	IsAgent          bool
+	ProgressReporter *progress.Reporter
 }
 
 // IsAgentMode checks if the environment variable AGENT=1 is set.
@@ -50,7 +52,19 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 	cacheInst, _ := cache.New(!opts.NoCache)
 
 	if !opts.SkipDepCheck {
+		_ = opts.ProgressReporter.Emit(progress.Event{
+			Type:       progress.EventPhaseStart,
+			Phase:      "dependencies",
+			Step:       1,
+			TotalSteps: 5,
+			Message:    "checking required external binary dependencies",
+		})
 		if err := deps.CheckDependencies(ctx, cacheInst); err != nil {
+			_ = opts.ProgressReporter.Emit(progress.Event{
+				Type:  progress.EventError,
+				Phase: "dependencies",
+				Error: err.Error(),
+			})
 			if opts.IsAgent {
 				fmt.Printf("target: %s\nstatus: error\nerror: %v\n", urlOrQuery, err)
 			}
@@ -119,6 +133,14 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 		}
 	}
 
+	_ = opts.ProgressReporter.Emit(progress.Event{
+		Type:       progress.EventPhaseStart,
+		Phase:      "search",
+		Step:       2,
+		TotalSteps: 5,
+		Message:    fmt.Sprintf("searching sources: %s", strings.Join(opts.Sources, ", ")),
+	})
+
 	foundCandidates, searchErr := downloader.SearchSourcesInParallel(ctx, opts.Sources, artist, title, rawSearchQuery, cacheInst, opts.Verbose)
 
 	var candidatePool []downloader.Candidate
@@ -127,6 +149,21 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 		candidatePool = append(candidatePool, foundCandidates...)
 	}
 	candidatePool = downloader.DeduplicateCandidates(candidatePool)
+
+	for _, cand := range candidatePool {
+		_ = opts.ProgressReporter.Emit(progress.Event{
+			Type:  progress.EventCandidateFound,
+			Phase: "search",
+			Candidate: &progress.CandidateInfo{
+				ID:         cand.ID,
+				Title:      cand.Title,
+				Source:     cand.Source,
+				Duration:   cand.Duration,
+				Score:      cand.Score,
+				WebpageURL: cand.WebpageURL,
+			},
+		})
+	}
 
 	var selectedCandidate *downloader.Candidate
 
@@ -147,6 +184,18 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 					fmt.Printf("selected: %q [%s %s] score=%d\n", bestCandidate.Title, bestCandidate.Source, verifier.FormatDuration(bestCandidate.Duration), bestCandidate.Score)
 				}
 			}
+			_ = opts.ProgressReporter.Emit(progress.Event{
+				Type:  progress.EventCandidateSelected,
+				Phase: "search",
+				Candidate: &progress.CandidateInfo{
+					ID:         bestCandidate.ID,
+					Title:      bestCandidate.Title,
+					Source:     bestCandidate.Source,
+					Duration:   bestCandidate.Duration,
+					Score:      bestCandidate.Score,
+					WebpageURL: bestCandidate.WebpageURL,
+				},
+			})
 		}
 
 		if opts.Interactive && !opts.IsAgent {
@@ -174,11 +223,24 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 		}
 	}
 
+	_ = opts.ProgressReporter.Emit(progress.Event{
+		Type:       progress.EventPhaseStart,
+		Phase:      "download",
+		Step:       3,
+		TotalSteps: 5,
+		Message:    fmt.Sprintf("downloading audio stream (%s)", targetURL),
+	})
+
 	downloadedPath, err := downloader.DownloadAudioStream(ctx, targetURL, opts.OutDir, opts.Verbose)
 	if sp != nil {
 		sp.Stop()
 	}
 	if err != nil {
+		_ = opts.ProgressReporter.Emit(progress.Event{
+			Type:  progress.EventError,
+			Phase: "download",
+			Error: err.Error(),
+		})
 		if opts.IsAgent {
 			fmt.Printf("target: %s\nstatus: error\nerror: %v\n", urlOrQuery, err)
 		}
@@ -200,6 +262,14 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 				sp.Start()
 			}
 		}
+
+		_ = opts.ProgressReporter.Emit(progress.Event{
+			Type:       progress.EventPhaseStart,
+			Phase:      "verify",
+			Step:       4,
+			TotalSteps: 5,
+			Message:    "running audio quality & spectrum inspection",
+		})
 
 		rep, err := verifier.VerifyAudioTrack(ctx, downloadedPath, opts.Verbose)
 		if sp != nil {
@@ -239,6 +309,14 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 				sp.Start()
 			}
 		}
+
+		_ = opts.ProgressReporter.Emit(progress.Event{
+			Type:       progress.EventPhaseStart,
+			Phase:      "metadata",
+			Step:       5,
+			TotalSteps: 5,
+			Message:    "enriching metadata & cover art via API fallback",
+		})
 		ext := filepath.Ext(downloadedFilename)
 		cleanTitle := strings.TrimSuffix(downloadedFilename, ext)
 
@@ -280,6 +358,36 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 
 	finalFilename := filepath.Base(finalPath)
 	outDisplayPath := filepath.Join(opts.OutDir, finalFilename)
+
+	var resultInfo *progress.ResultInfo
+	if metaResult != nil || report != nil {
+		rInfo := &progress.ResultInfo{
+			Path: outDisplayPath,
+		}
+		if metaResult != nil {
+			rInfo.Artist = metaResult.Artist
+			rInfo.Title = metaResult.Title
+			rInfo.Album = metaResult.Album
+			rInfo.ReleaseYear = metaResult.ReleaseYear
+		}
+		if report != nil {
+			rInfo.Duration = report.Metadata.DurationSeconds
+			rInfo.BandwidthHz = report.Quality.EstimatedBandwidthHz
+			rInfo.BandwidthRating = report.Quality.BandwidthRating
+			rInfo.SuggestedGainDb = report.Quality.SuggestedDJGainDb
+			rInfo.Status = report.SummaryStatus
+		}
+		resultInfo = rInfo
+	}
+
+	_ = opts.ProgressReporter.Emit(progress.Event{
+		Type:       progress.EventComplete,
+		Phase:      "complete",
+		Step:       5,
+		TotalSteps: 5,
+		Message:    "track acquisition complete",
+		Result:     resultInfo,
+	})
 
 	if opts.IsAgent {
 		fmt.Printf("target: %s\n", urlOrQuery)

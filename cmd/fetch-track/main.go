@@ -12,6 +12,7 @@ import (
 
 	"github.com/dj/fetch-track-cli/internal/deps"
 	"github.com/dj/fetch-track-cli/internal/pipeline"
+	"github.com/dj/fetch-track-cli/internal/progress"
 	"github.com/dj/fetch-track-cli/internal/spinner"
 	"github.com/dj/fetch-track-cli/internal/verifier"
 )
@@ -19,13 +20,15 @@ import (
 var (
 	version = "dev"
 
-	outDir       string
-	sourcesFlag  string
-	skipVerify   bool
-	skipMetadata bool
-	interactive  bool
-	noCache      bool
-	verbose      bool
+	outDir         string
+	sourcesFlag    string
+	skipVerify     bool
+	skipMetadata   bool
+	interactive    bool
+	noCache        bool
+	verbose        bool
+	progressTarget string
+	progressSocket string
 )
 
 func main() {
@@ -58,15 +61,34 @@ performs spectral bandwidth & loudness analysis, and enriches files with 1400x14
 				}
 			}
 
+			targetURI := progressTarget
+			if targetURI == "" {
+				targetURI = progressSocket
+			}
+			if targetURI == "" {
+				targetURI = os.Getenv("FETCH_TRACK_PROGRESS_TARGET")
+			}
+
+			var reporter *progress.Reporter
+			if strings.TrimSpace(targetURI) != "" {
+				var err error
+				reporter, err = progress.NewReporter(cmd.Context(), targetURI)
+				if err != nil {
+					return fmt.Errorf("initializing progress reporter for %q: %w", targetURI, err)
+				}
+				defer reporter.Close()
+			}
+
 			opts := pipeline.Options{
-				OutDir:       outDir,
-				Sources:      sources,
-				SkipVerify:   skipVerify,
-				SkipMetadata: skipMetadata,
-				Interactive:  interactive,
-				NoCache:      noCache,
-				Verbose:      verbose,
-				IsAgent:      pipeline.IsAgentMode(),
+				OutDir:           outDir,
+				Sources:          sources,
+				SkipVerify:       skipVerify,
+				SkipMetadata:     skipMetadata,
+				Interactive:      interactive,
+				NoCache:          noCache,
+				Verbose:          verbose,
+				IsAgent:          pipeline.IsAgentMode(),
+				ProgressReporter: reporter,
 			}
 			return pipeline.Run(cmd.Context(), target, opts)
 		},
@@ -80,6 +102,8 @@ performs spectral bandwidth & loudness analysis, and enriches files with 1400x14
 	rootCmd.Flags().BoolVar(&skipMetadata, "skip-metadata", false, "Skip metadata lookup and high-res cover art tagging")
 	rootCmd.Flags().BoolVarP(&interactive, "interactive", "i", false, "Interactively approve or choose track candidate before downloading")
 	rootCmd.Flags().BoolVar(&noCache, "no-cache", false, "Disable local caching for search queries, metadata, and artwork")
+	rootCmd.Flags().StringVar(&progressTarget, "progress-target", "", "Target URI/address for streaming JSON progress events (e.g. unix:///path/to.sock, tcp://127.0.0.1:9099, fd://3, stdout, stderr)")
+	rootCmd.Flags().StringVar(&progressSocket, "progress-socket", "", "Shorthand alias for --progress-target")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output logging")
 
 	verifyCmd := &cobra.Command{

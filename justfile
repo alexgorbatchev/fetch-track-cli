@@ -36,3 +36,7 @@ fmt:
 # Clean up build binaries and temporary files
 clean:
 	rm -rf bin fetch-track coverage.out .tmp
+
+# Run out-of-band socket progress demo
+demo-progress *ARGS:
+    ./scripts/demo-progress-socket.sh {{ARGS}}
