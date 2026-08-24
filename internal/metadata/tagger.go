@@ -1,6 +1,7 @@
 package metadata
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -11,13 +12,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alexgorbatchev/godeps"
 	"github.com/dj/fetch-track-cli/internal/cache"
-	ffmpeg "github.com/u2takey/ffmpeg-go"
 )
-
-func init() {
-	ffmpeg.LogCompiledCommand = false
-}
 
 // NormalizeCoverArtToSquare center-crops and scales any input image to a 1:1 square (1400x1400) JPEG.
 func NormalizeCoverArtToSquare(ctx context.Context, inputImagePath, outDir string) (string, error) {
@@ -50,8 +47,8 @@ func NormalizeCoverArtToSquare(ctx context.Context, inputImagePath, outDir strin
 	return inputImagePath, nil
 }
 
-// ApplyMetadataToLocalTrack embeds metadata and high-res cover art into the M4A file
-// using ffmpeg and renames the file to <outDir>/<SanitizedArtist - SanitizedTitle>.m4a.
+// ApplyMetadataToLocalTrack embeds metadata and high-res cover art into the audio file
+// using ffmpeg and renames the file to <outDir>/<SanitizedArtist - SanitizedTitle>.<ext>.
 func ApplyMetadataToLocalTrack(ctx context.Context, filePath string, metadata TrackMetadataResult, outDir string, verboseAndCache ...interface{}) (string, error) {
 	isVerbose := false
 	var cacheInst *cache.Cache
@@ -191,17 +188,6 @@ func ApplyMetadataToLocalTrack(ctx context.Context, filePath string, metadata Tr
 		metaList = append(metaList, fmt.Sprintf("comment=%s", strings.Join(commentParts, " | ")))
 	}
 
-	kwArgs := ffmpeg.KwArgs{
-		"v":           "quiet",
-		"hide_banner": "",
-		"y":           "",
-		"metadata":    metaList,
-	}
-
-	if ext == ".mp3" {
-		kwArgs["id3v2_version"] = "3"
-	}
-
 	cmdCtx, cancel := context.WithTimeout(ctx, 1*time.Minute)
 	defer cancel()
 
@@ -209,28 +195,54 @@ func ApplyMetadataToLocalTrack(ctx context.Context, filePath string, metadata Tr
 		fmt.Printf("ffmpeg: embedding tags + covr\n")
 	}
 
-	var err error
-	if finalCoverPath != "" {
-		audioStream := ffmpeg.Input(filePath)
-		coverStream := ffmpeg.Input(finalCoverPath)
-
-		kwArgs["map"] = []string{"0:a:0", "1:v:0"}
-		kwArgs["c:a"] = "copy"
-		kwArgs["c:v"] = "copy"
-		kwArgs["disposition:v"] = "attached_pic"
-
-		err = ffmpeg.OutputContext(cmdCtx, []*ffmpeg.Stream{audioStream, coverStream}, tmpTaggedPath, kwArgs).Run()
-	} else {
-		audioStream := ffmpeg.Input(filePath)
-
-		kwArgs["map"] = "0:a:0"
-		kwArgs["c:a"] = "copy"
-
-		err = ffmpeg.OutputContext(cmdCtx, []*ffmpeg.Stream{audioStream}, tmpTaggedPath, kwArgs).Run()
+	args := []string{
+		"-v", "quiet",
+		"-hide_banner",
+		"-y",
+		"-i", filePath,
 	}
 
+	if finalCoverPath != "" && ext != ".opus" && ext != ".ogg" {
+		args = append(args,
+			"-i", finalCoverPath,
+			"-map", "0:a:0",
+			"-map", "1:0",
+			"-c:a", "copy",
+			"-c:v", "copy",
+		)
+		if ext == ".m4a" || ext == ".mp4" {
+			args = append(args, "-disposition:v", "attached_pic")
+		} else if ext == ".mp3" {
+			args = append(args,
+				"-id3v2_version", "3",
+				"-metadata:s:v", `title="Album cover"`,
+				"-metadata:s:v", `comment="Cover (front)"`,
+			)
+		}
+	} else {
+		args = append(args, "-map", "0:a:0", "-c:a", "copy")
+		if ext == ".mp3" {
+			args = append(args, "-id3v2_version", "3")
+		}
+	}
+
+	for _, m := range metaList {
+		args = append(args, "-metadata", m)
+	}
+
+	args = append(args, tmpTaggedPath)
+
+	var stderr bytes.Buffer
+	cmd := exec.CommandContext(cmdCtx, "ffmpeg", args...)
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
 	if err != nil {
 		_ = os.Remove(tmpTaggedPath)
+		cleanErr := godeps.SanitizeStderr(stderr.String())
+		if cleanErr != "" {
+			return filePath, fmt.Errorf("ffmpeg metadata tagging failed for %s: %w (%s)", filePath, err, cleanErr)
+		}
 		return filePath, fmt.Errorf("ffmpeg metadata tagging failed for %s: %w", filePath, err)
 	}
 
@@ -250,11 +262,10 @@ func ApplyMetadataToLocalTrack(ctx context.Context, filePath string, metadata Tr
 		if errRead != nil {
 			return filePath, fmt.Errorf("reading temp tagged file: %w", errRead)
 		}
-		if errWrite := os.WriteFile(finalPath, input, 0644); errWrite == nil {
-			_ = os.Remove(tmpTaggedPath)
-		} else {
+		if errWrite := os.WriteFile(finalPath, input, 0644); errWrite != nil {
 			return filePath, fmt.Errorf("writing final tagged file: %w", errWrite)
 		}
+		_ = os.Remove(tmpTaggedPath)
 	}
 
 	return finalPath, nil

@@ -48,6 +48,7 @@ Go CLI tool for searching, verifying, downloading, and managing high-fidelity si
 
 ## Boundaries
 - **Always:** Automatically record all new instructions in the most appropriate `AGENTS.md` file immediately upon receipt (check with user if existing instructions conflict).
+- **Always:** Back up Engine DJ SQLite databases (`Database2/` and root `.db` files) before making any modifications or updates to the library database.
 - **Always:** Any time code is changed such that results from running that code are changed, a test file must be changed as well; 90% code coverage is required (the `scripts/` folder is explicitly excluded from this rule).
 - **Always:** Save all downloaded audio tracks into the `./tracks/` directory with clean filenames (no `[...]` video IDs) and embedded artwork.
 - **Always:** Run `just test` and `just vet` before committing changes.
