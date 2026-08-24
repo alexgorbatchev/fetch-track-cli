@@ -54,33 +54,6 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 	_ = deps.InitManagedPath()
 	cacheInst, _ := cache.New(!opts.NoCache)
 
-	if !opts.SkipDepCheck {
-		_ = opts.ProgressReporter.Emit(progress.Event{
-			Type:       progress.EventPhaseStart,
-			Phase:      "dependencies",
-			Step:       1,
-			TotalSteps: 5,
-			Message:    "checking required external binary dependencies",
-		})
-		if err := deps.CheckDependencies(ctx, cacheInst); err != nil {
-			if opts.AutoInstall {
-				_, _ = deps.InstallMissingDependencies(ctx)
-				err = deps.CheckDependencies(ctx, cacheInst)
-			}
-			if err != nil {
-				_ = opts.ProgressReporter.Emit(progress.Event{
-					Type:  progress.EventError,
-					Phase: "dependencies",
-					Error: err.Error(),
-				})
-				if opts.IsAgent {
-					fmt.Printf("target: %s\nstatus: error\nerror: %v\n", urlOrQuery, err)
-				}
-				return err
-			}
-		}
-	}
-
 	isURL := verifier.IsURL(urlOrQuery)
 	targetURL := urlOrQuery
 
@@ -88,13 +61,25 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 	title := urlOrQuery
 	rawSearchQuery := urlOrQuery
 
+	var sp *spinner.Spinner
+	if !opts.IsAgent && !opts.Verbose {
+		sp = spinner.New("working...")
+	}
+
 	var initialCandidates []downloader.Candidate
 
 	if isURL {
 		if !opts.IsAgent {
-			fmt.Println("\nInspecting provided URL metadata & extracting track search terms...")
+			fmt.Println("Inspecting provided URL metadata & extracting track search terms...")
+			if sp != nil {
+				sp.Update("working... inspecting URL metadata")
+				sp.Start()
+			}
 		}
 		meta, err := verifier.FetchURLMetadata(ctx, urlOrQuery, cacheInst)
+		if sp != nil {
+			sp.Stop()
+		}
 		if err == nil && meta != nil && meta.Title != "" {
 			title = meta.Title
 			artist = meta.Uploader
@@ -111,7 +96,7 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 				if meta.Cached {
 					cachedTag = " [cached]"
 				}
-				fmt.Printf("  URL Title: \"%s\" (Uploader: %s)%s\n", meta.Title, meta.Uploader, cachedTag)
+				fmt.Printf("  - url title: \"%s\" (uploader: %s)%s\n", meta.Title, meta.Uploader, cachedTag)
 			}
 
 			// Include direct URL as candidate in pool
@@ -123,7 +108,7 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 				WebpageURL: urlOrQuery,
 			})
 		} else if !opts.IsAgent {
-			fmt.Printf("  Warning: Could not probe direct URL metadata: %v. Proceeding with URL.\n", err)
+			fmt.Printf("  - warning: could not probe direct URL metadata: %v. Proceeding with URL.\n", err)
 		}
 	} else {
 		if strings.Contains(urlOrQuery, " - ") {
@@ -133,11 +118,14 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 		}
 	}
 
-	var sp *spinner.Spinner
 	if !opts.IsAgent {
-		fmt.Printf("\nsearching: %s\n", strings.Join(opts.Sources, ", "))
-		if !opts.Verbose {
-			sp = spinner.New("working...")
+		if isURL {
+			fmt.Printf("\nSearching: %s\n", strings.Join(opts.Sources, ", "))
+		} else {
+			fmt.Printf("Searching: %s\n", strings.Join(opts.Sources, ", "))
+		}
+		if sp != nil {
+			sp.Update("working...")
 			sp.Start()
 		}
 	}
@@ -188,9 +176,9 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 			}
 			if !opts.IsAgent && !opts.Interactive {
 				if bestCandidate.Source == "direct_url" {
-					fmt.Printf("selected: %q [direct_url]\n", bestCandidate.Title)
+					fmt.Printf("Selected: %q [direct_url]\n", bestCandidate.Title)
 				} else {
-					fmt.Printf("selected: %q [%s %s] score=%d\n", bestCandidate.Title, bestCandidate.Source, verifier.FormatDuration(bestCandidate.Duration), bestCandidate.Score)
+					fmt.Printf("Selected: %q [%s %s] score=%d\n", bestCandidate.Title, bestCandidate.Source, verifier.FormatDuration(bestCandidate.Duration), bestCandidate.Score)
 				}
 			}
 			_ = opts.ProgressReporter.Emit(progress.Event{
@@ -225,7 +213,7 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 
 	// Step 2: Download audio stream
 	if !opts.IsAgent {
-		fmt.Printf("\ndownloading audio stream & artwork (%s)\n", targetURL)
+		fmt.Printf("\nDownloading audio stream & artwork (%s)\n", targetURL)
 		if sp != nil {
 			sp.Update("working...")
 			sp.Start()
@@ -258,14 +246,14 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 
 	downloadedFilename := filepath.Base(downloadedPath)
 	if !opts.IsAgent {
-		fmt.Printf("  Saved: %s\n", downloadedFilename)
+		fmt.Printf("  - saved: %s\n", downloadedFilename)
 	}
 
 	// Step 3: Full Verification
 	var report *verifier.VerificationReport
 	if !opts.SkipVerify {
 		if !opts.IsAgent {
-			fmt.Println("\nrunning audio quality & spectrum inspection")
+			fmt.Println("\nRunning audio quality & spectrum inspection")
 			if sp != nil {
 				sp.Update("working...")
 				sp.Start()
@@ -286,20 +274,20 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 		}
 		if err != nil {
 			if !opts.IsAgent {
-				fmt.Printf("  Audio verification notice: %v\n", err)
+				fmt.Printf("  - notice: %v\n", err)
 			}
 		} else {
 			report = rep
 			if !opts.IsAgent {
-				fmt.Printf("  Duration: %s (%s)\n", report.MixStructure.DurationFormatted, report.MixStructure.MixTypeDescription)
-				fmt.Printf("  Bandwidth: %s (%d kHz)\n", report.Quality.BandwidthRating, report.Quality.EstimatedBandwidthHz/1000)
-				fmt.Printf("  Peak / RMS: %.2f dBFS / %.2f dBFS\n", report.Quality.PeakDbFS, report.Quality.RMSDbFS)
+				fmt.Printf("  - duration: %s (%s)\n", report.MixStructure.DurationFormatted, report.MixStructure.MixTypeDescription)
+				fmt.Printf("  - bandwidth: %s (%d kHz)\n", report.Quality.BandwidthRating, report.Quality.EstimatedBandwidthHz/1000)
+				fmt.Printf("  - peak / rms: %.2f dBFS / %.2f dBFS\n", report.Quality.PeakDbFS, report.Quality.RMSDbFS)
 				gainSign := ""
 				if report.Quality.SuggestedDJGainDb > 0 {
 					gainSign = "+"
 				}
-				fmt.Printf("  Gain Offset: %s%.1f dB\n", gainSign, report.Quality.SuggestedDJGainDb)
-				fmt.Printf("  %s\n", report.SummaryStatus)
+				fmt.Printf("  - gain offset: %s%.1f dB\n", gainSign, report.Quality.SuggestedDJGainDb)
+				fmt.Printf("  - status: %s\n", strings.TrimPrefix(report.SummaryStatus, "STATUS: "))
 			}
 		}
 	} else if !opts.IsAgent {
@@ -312,7 +300,7 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 
 	if !opts.SkipMetadata {
 		if !opts.IsAgent {
-			fmt.Println("\nenriching metadata & cover art via API fallback")
+			fmt.Println("\nEnriching metadata & cover art via API fallback")
 			if sp != nil {
 				sp.Update("working...")
 				sp.Start()
@@ -348,8 +336,8 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 		}
 
 		if !opts.IsAgent {
-			fmt.Printf("  Matched: \"%s - %s\" (%s, %s)\n", metaRes.Artist, metaRes.Title, metaRes.Album, metaRes.ReleaseYear)
-			fmt.Printf("  Source: %s\n", metaRes.Source)
+			fmt.Printf("  - matched: \"%s - %s\" (%s, %s)\n", metaRes.Artist, metaRes.Title, metaRes.Album, metaRes.ReleaseYear)
+			fmt.Printf("  - source: %s\n", metaRes.Source)
 		}
 
 		taggedPath, tagErr := metadata.ApplyMetadataToLocalTrack(ctx, downloadedPath, metaRes, opts.OutDir, opts.Verbose, cacheInst)
@@ -358,13 +346,13 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 		}
 		if tagErr != nil {
 			if !opts.IsAgent {
-				fmt.Printf("  Tagging notice: %v\n", tagErr)
+				fmt.Printf("  - notice: %v\n", tagErr)
 			}
 		} else {
 			finalPath = taggedPath
 		}
 	} else if !opts.IsAgent {
-		fmt.Println("\nStep 4: Skipped metadata & cover art enrichment (-skipMetadata)")
+		fmt.Println("\nStep 4: Skipped Metadata & Cover Art Enrichment (-skipMetadata)")
 	}
 
 	finalFilename := filepath.Base(finalPath)

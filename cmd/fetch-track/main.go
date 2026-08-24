@@ -12,6 +12,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/dj/fetch-track-cli/internal/cache"
 	"github.com/dj/fetch-track-cli/internal/deps"
 	"github.com/dj/fetch-track-cli/internal/pipeline"
 	"github.com/dj/fetch-track-cli/internal/progress"
@@ -362,7 +363,8 @@ func main() {
 
 func ensureDependencies(ctx context.Context) error {
 	_ = deps.InitManagedPath()
-	reports, err := deps.VerifyDependencies(ctx)
+	c, _ := cache.New(true)
+	reports, err := deps.VerifyDependencies(ctx, c)
 	if err == nil {
 		return nil
 	}

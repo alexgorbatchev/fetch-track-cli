@@ -1,5 +1,7 @@
 # fetch-track-cli justfile
 
+set positional-arguments
+
 # Default recipe: list available recipes
 default:
     @just --list
@@ -15,11 +17,15 @@ install:
 
 # Run single-track acquisition pipeline
 run *ARGS:
-    go run ./cmd/fetch-track {{ARGS}}
+    go run ./cmd/fetch-track "$@"
+
+# Run in agent-facing token-conservative mode
+run-ai *ARGS:
+    AGENT=1 go run ./cmd/fetch-track "$@"
 
 # Run stand-alone DJ audio quality verification
 verify *ARGS:
-    go run ./cmd/fetch-track verify {{ARGS}}
+    go run ./cmd/fetch-track verify "$@"
 
 # Run all unit tests
 test:
@@ -39,4 +45,4 @@ clean:
 
 # Run out-of-band socket progress demo
 demo-progress *ARGS:
-    ./scripts/demo-progress-socket.sh {{ARGS}}
+    ./scripts/demo-progress-socket.sh "$@"
