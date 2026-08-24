@@ -430,6 +430,61 @@ func TestFetchFromAcoustID(t *testing.T) {
 		}
 	})
 
+	t.Run("acoustid_cache_hit", func(t *testing.T) {
+		cacheDir := t.TempDir()
+		cacheInst := cache.NewInDir(cacheDir, true)
+
+		networkCalls := 0
+		client := newMockClient(func(req *http.Request) (*http.Response, error) {
+			networkCalls++
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body: io.NopCloser(bytes.NewBufferString(`{
+					"status": "ok",
+					"results": [
+						{
+							"score": 0.95,
+							"recordings": [
+								{
+									"id": "mbid-cached",
+									"title": "Cached AcoustID Track",
+									"artists": [{"name": "Cached Artist"}]
+								}
+							]
+						}
+					]
+				}`)),
+			}, nil
+		})
+		client.Cache = cacheInst
+		client.SetRunner(func(ctx context.Context, name string, args ...string) ([]byte, error) {
+			return syntheticPCM, nil
+		})
+
+		// First call hits network
+		res1, err := client.FetchFromAcoustID(ctx, dummyFile)
+		if err != nil || res1.Title != "Cached AcoustID Track" {
+			t.Fatalf("first call failed: %v", err)
+		}
+		if networkCalls != 1 {
+			t.Fatalf("expected 1 network call, got %d", networkCalls)
+		}
+
+		// Second call with different file path but same audio/fingerprint hits cache
+		dummyFile2 := filepath.Join(tempDir, "sample2.m4a")
+		if err := os.WriteFile(dummyFile2, []byte("dummy audio content 2"), 0644); err != nil {
+			t.Fatalf("writing dummy file 2: %v", err)
+		}
+
+		res2, err := client.FetchFromAcoustID(ctx, dummyFile2)
+		if err != nil || res2.Title != "Cached AcoustID Track" {
+			t.Fatalf("second call from cache failed: %v", err)
+		}
+		if networkCalls != 1 {
+			t.Fatalf("expected network call count to remain 1 on cache hit, got %d", networkCalls)
+		}
+	})
+
 	t.Run("acoustid_releases_fallback", func(t *testing.T) {
 		client := newMockClient(func(req *http.Request) (*http.Response, error) {
 			if strings.Contains(req.URL.Host, "acoustid.org") {

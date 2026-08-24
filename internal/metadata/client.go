@@ -150,6 +150,12 @@ func (c *Client) FetchFromAcoustID(ctx context.Context, filePath string) (*Track
 
 	duration := float64(len(samples)) / 11025.0
 
+	cacheKey := fmt.Sprintf("%d:%s", int(duration), fingerprint)
+	var cachedResult TrackMetadataResult
+	if c.Cache != nil && c.Cache.Get("acoustid", cacheKey, &cachedResult) {
+		return &cachedResult, nil
+	}
+
 	apiURL := fmt.Sprintf("https://api.acoustid.org/v2/lookup?client=HSqh_oejCAM&duration=%d&fingerprint=%s&meta=recordings+releasegroups+releases+compress",
 		int(duration), url.QueryEscape(fingerprint))
 
@@ -283,7 +289,7 @@ func (c *Client) FetchFromAcoustID(ctx context.Context, filePath string) (*Track
 		cCancel()
 	}
 
-	return &TrackMetadataResult{
+	res := &TrackMetadataResult{
 		Title:       bestRec.Title,
 		Artist:      artist,
 		Album:       album,
@@ -292,7 +298,13 @@ func (c *Client) FetchFromAcoustID(ctx context.Context, filePath string) (*Track
 		ReleaseYear: releaseYear,
 		CoverArtURL: coverArtURL,
 		Source:      "AcoustID / MusicBrainz",
-	}, nil
+	}
+
+	if c.Cache != nil {
+		_ = c.Cache.Put("acoustid", cacheKey, *res, 30*24*time.Hour)
+	}
+
+	return res, nil
 }
 
 // FetchFromShazam performs audio fingerprinting and recognition against Apple Shazam catalog.
