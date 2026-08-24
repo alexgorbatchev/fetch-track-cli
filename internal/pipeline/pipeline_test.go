@@ -59,24 +59,37 @@ func TestIsAgentMode(t *testing.T) {
 	orig := os.Getenv("AGENT")
 	defer os.Setenv("AGENT", orig)
 
-	os.Setenv("AGENT", "1")
-	if !IsAgentMode() {
-		t.Errorf("expected IsAgentMode() to be true when AGENT=1")
+	tests := []struct {
+		envVal string
+		want   bool
+	}{
+		{"1", true},
+		{"true", true},
+		{"TRUE", true},
+		{" True ", true},
+		{"yes", true},
+		{"YES", true},
+		{" Yes ", true},
+		{"0", false},
+		{"false", false},
+		{"no", false},
+		{"", false},
+		{"2", false},
+		{"random", false},
 	}
 
-	os.Setenv("AGENT", "true")
-	if !IsAgentMode() {
-		t.Errorf("expected IsAgentMode() to be true when AGENT=true")
-	}
+	for _, tt := range tests {
+		t.Run("env="+tt.envVal, func(t *testing.T) {
+			if tt.envVal == "" {
+				_ = os.Unsetenv("AGENT")
+			} else {
+				_ = os.Setenv("AGENT", tt.envVal)
+			}
 
-	os.Setenv("AGENT", "0")
-	if IsAgentMode() {
-		t.Errorf("expected IsAgentMode() to be false when AGENT=0")
-	}
-
-	os.Unsetenv("AGENT")
-	if IsAgentMode() {
-		t.Errorf("expected IsAgentMode() to be false when AGENT is unset")
+			if got := IsAgentMode(); got != tt.want {
+				t.Errorf("IsAgentMode() with AGENT=%q = %v, want %v", tt.envVal, got, tt.want)
+			}
+		})
 	}
 }
 

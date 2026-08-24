@@ -1,178 +1,108 @@
-# fetch-track
+A fast, lightweight CLI tool with AI agent support for bedroom and amateur DJs to find, inspect, and download high-quality single tracks for their DJ sets.
 
-`fetch-track` is a simple command-line tool with AI agent support for bedroom and amateur DJs to find, check, and download high-quality single tracks for their DJ sets.
+# What It Does
 
-> [!IMPORTANT]
-> **Intended Audience & Legal Disclaimer:**  
-> `fetch-track` is strictly intended for **amateur and bedroom DJs** practicing at home or playing non-commercial sets who are not seeking to become professional DJs. **Working professional DJs and commercial performers must source music from legitimate commercial sources** (such as Beatport, Bandcamp purchases, Juno Download, iTunes, or authorized record pools).
+- Searches YouTube, SoundCloud, and Bandcamp in parallel for full extended DJ mixes with mixable intro/outro sections.
+- Matches artist and title while filtering out short radio edits, snippets, or multi-hour mix compilations.
+- Downloads native high-bitrate audio streams directly without lossy re-encoding.
+- Analyzes spectral frequency bandwidth (Goertzel algorithm) and computes mixer volume Gain Offset.
+- Identifies tracks via acoustic audio fingerprinting (AcoustID and Apple Shazam) with API fallbacks (iTunes and MusicBrainz) to embed canonical metadata and 1400x1400 album art.
 
-> [!WARNING]
-> **Avoiding Temporary IP Bans (Rate Limiting & Simultaneous Downloads):**  
-> Platforms like YouTube and SoundCloud will temporarily block your internet connection if tracks are queried or downloaded too quickly. To protect your connection and prevent download failures, **avoid running multiple `fetch-track` commands simultaneously** or executing high-speed concurrent batch downloads.
+# How It Works
 
-## What It Does
+- Searches configured streaming platforms simultaneously for your requested artist and title.
+- Evaluates candidate durations and titles to select the full-length extended DJ mix.
+- Downloads the highest fidelity native audio stream without re-encoding.
+- Inspects audio frequency response and calculates mixer Gain Offset.
+- Enriches the track with high-resolution 1400x1400 artwork and canonical tags before saving.
 
-- **Finds Full DJ Mixes**: Searches YouTube and SoundCloud in parallel for extended and original DJ mixes with mixable intro/outro sections.
-- **Picks the Right Track**: Matches artist and title while ignoring short radio edits, 30-second snippets, or multi-hour mix compilations.
-- **Preserves Original Audio Quality**: Downloads high-bitrate audio streams directly without re-encoding or degrading sound quality.
-- **Checks Audio & Volume**: Analyzes frequency range to catch low-quality rips and calculates the recommended volume Gain Offset for your mixer.
-- **Acoustic Identification & Metadata**: Identifies tracks by acoustic audio fingerprinting (AcoustID and Apple Shazam) with API fallbacks (iTunes and MusicBrainz) to embed canonical metadata with 1400x1400 album art.
+# How it Really Works
 
-## How It Works
+- Discovers candidate streams using concurrent `yt-dlp` JSON scrapers with fuzzy title and duration scoring heuristics.
+- Extracts PCM audio samples via `ffmpeg` and executes Goertzel frequency bin analysis to detect audio cutoff thresholds and RMS loudness.
+- Generates Chromaprint acoustic fingerprints and landmark constellations to query AcoustID and Shazam recognition services in pure Go.
+- Normalizes and center-crops downloaded album artwork to 1400x1400 square format and embeds ID3/MP4 metadata using stream-copy mode (`-c:a copy`).
+- Streams real-time NDJSON progress events over UNIX domain sockets, TCP, or file descriptors when executed by AI agents or supervisor orchestrators.
 
-1. **Search**: Searches YouTube and SoundCloud simultaneously for your requested artist and title.
-2. **Select**: Ranks candidates to pick the full-length DJ mix.
-3. **Download**: Downloads the best native audio stream directly.
-4. **Inspect**: Checks audio frequency response and calculates mixer Gain Offset.
-5. **Identify & Tag**: Identifies the track via acoustic audio fingerprinting (AcoustID/Shazam) with API fallback (iTunes/MusicBrainz), embedding high-res artwork and metadata tags before saving.
+# Prerequisites
 
-## Prerequisites
+- [`yt-dlp`](https://github.com/yt-dlp/yt-dlp#installation) (version 2024.08.01 or newer) - Audio stream extraction backend.
+- [`ffmpeg` & `ffprobe`](https://ffmpeg.org/download.html) (version 4.4 or newer) - Audio analysis and metadata tagging.
 
-`fetch-track` requires the following external binary dependencies installed on your system:
+# Installation
 
-- [`yt-dlp`](https://github.com/yt-dlp/yt-dlp#installation) (version 2024.08.01 or newer) — for audio stream downloading
-- [`ffmpeg`](https://ffmpeg.org/download.html) (version 4.4 or newer, including `ffprobe`) — for audio quality analysis and cover art tagging
-
-## Installation
-
-Go to the [Latest Release Page](https://github.com/alexgorbatchev/fetch-track-cli/releases/latest) and download the pre-compiled archive for your operating system.
-
-## Quick Start
-
-### 1. Download a Track
+Download the latest prebuilt binary from GitHub Releases:
 
 ```bash
+# Using GitHub CLI
+gh release download --repo alexgorbatchev/fetch-track-cli --pattern 'fetch-track_*_darwin_arm64.tar.gz'
+tar -xzf fetch-track_*_darwin_arm64.tar.gz
+chmod +x fetch-track
+mv fetch-track ~/.local/bin/
+```
+
+Or via direct download:
+
+```bash
+curl -sSL https://github.com/alexgorbatchev/fetch-track-cli/releases/latest/download/fetch-track_darwin_arm64.tar.gz | tar -xz
+chmod +x fetch-track
+mv fetch-track ~/.local/bin/
+```
+
+# Quick Start
+
+```bash
+# Download a full DJ mix
 fetch-track "Boris Brejcha - Space X"
-```
 
-Sample Output:
-```
-searching: youtube, soundcloud
-candidates:
-  - "Boris Brejcha - Space X (Radio Edit)" [youtube 3:15]
-  - "Boris Brejcha - Space X (Extended Mix)" [soundcloud 8:23]
-selected: "Boris Brejcha - Space X (Extended Mix)" [soundcloud 8:23] score=150
+# Download from direct URL
+fetch-track "https://soundcloud.com/boris-brejcha/space-x-extended-mix"
 
-downloading audio stream & artwork (https://soundcloud.com/boris-brejcha/space-x-extended-mix)
-  Saved: Boris Brejcha - Space X (Extended Mix).m4a
+# Search specific sources
+fetch-track -s "youtube,soundcloud" "Boris Brejcha - Space X"
 
-running audio quality & spectrum inspection
-  Duration: 8:23 (Original / Extended DJ Mix)
-  Bandwidth: High Fidelity (>=18.5 kHz) (20 kHz)
-  Peak / RMS: 0.04 dBFS / -9.44 dBFS
-  Gain Offset: -2.6 dB
-  STATUS: High fidelity audio suitable for mixing.
-
-enriching metadata & cover art via API fallback
-  Matched: "Boris Brejcha - Space X" (Space X - Single, 2024)
-  Source: iTunes API
-
-DONE: Boris Brejcha - Space X.m4a
-```
-
-### 2. Download from a Direct URL
-
-If you have a link to a track:
-
-```bash
-fetch-track "https://www.youtube.com/watch?v=..."
-```
-
-### 3. Restrict Search Sources
-
-Search YouTube only or SoundCloud only:
-
-```bash
-fetch-track -s "youtube" "Boris Brejcha - Space X"
-```
-
-### 4. Interactive Track Candidate Approval
-
-Approve or choose a different search result candidate interactively before downloading:
-
-```bash
+# Interactively choose candidate
 fetch-track -i "Boris Brejcha - Space X"
-```
 
-### 5. Check an Existing Local Track File
-
-Inspect any audio file without downloading:
-
-```bash
+# Inspect local file quality
 fetch-track verify "Boris Brejcha - Space X.m4a"
-```
 
-### 6. Metadata & Acoustic Identification Fallback Chain
-
-`fetch-track` enriches downloaded audio files using a multi-tiered identification hierarchy:
-
-1. **AcoustID & MusicBrainz** — Pure Go acoustic fingerprinting (`gochromaprint`) identifies the waveform and queries the AcoustID database for canonical MusicBrainz metadata and Cover Art Archive artwork.
-2. **Apple Shazam** — Pure Go landmark acoustic recognition (`goshazam`) identifies the audio against Apple Music's commercial catalog and extracts 1400x1400 artwork.
-3. **iTunes Search API** — Fast commercial catalog search for 1400x1400 artwork and metadata.
-4. **MusicBrainz API & Cover Art Archive** — Open-source community music database fallback.
-5. **Raw Video Fallback** — Preserves uploader/title tags if no external database matches.
-
-### 7. Manage Dependencies
-
-Verify, auto-install, or update external dependencies (`yt-dlp`, `ffmpeg`, `ffprobe`):
-
-```bash
-# Verify dependencies
+# Manage external dependencies
 fetch-track dependencies
-
-# Auto-install missing dependencies to ~/.local/share/fetch-track/bin
 fetch-track deps install
-
-# Update dependencies to their latest versions
 fetch-track deps update
-```
 
-Sample Output:
-```
-yt-dlp: 2026.07.04 (min 2024.08.01) [OK]
-ffmpeg: 8.1.2 (min 4.4) [OK]
-ffprobe: 8.1.2 (min 4.4) [OK]
-
-All dependencies met.
-```
-
-### 8. Self-Upgrade
-
-Upgrade the `fetch-track` binary in-place to the latest GitHub release without using the GitHub API:
-
-```bash
+# Upgrade CLI binary in-place
 fetch-track upgrade
 ```
 
-## Options & Flags
+# Options & Flags
 
 | Flag | Short | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `--out-dir` | `-o` | `.` | Folder where tracks are saved |
-| `--auto-install` | | `false` | Automatically install missing dependencies without prompting |
-| `--sources` | `-s` | `youtube,soundcloud` | Comma-separated list of [supported search sources](#supported-search-sources) |
+| `--out-dir <path>` | `-o` | `.` | Output directory for downloaded tracks |
+| `--sources <list>` | `-s` | `youtube,soundcloud` | Comma-separated list of sources to search in parallel |
 | `--interactive` | `-i` | `false` | Interactively approve or choose track candidate before downloading |
+| `--auto-install` | | `false` | Automatically install missing dependencies without prompting |
 | `--no-cache` | | `false` | Disable local caching for search queries, metadata, and artwork |
-| `--progress-target` | | `""` | Target URI for streaming NDJSON progress events (`unix:///path.sock`, `tcp://127.0.0.1:9099`, `fd://3`, `stdout`, `stderr`). See [PROGRESS.md](PROGRESS.md). |
-| `--progress-socket` | | `""` | Shorthand alias for `--progress-target`. See [PROGRESS.md](PROGRESS.md). |
-| `--skip-verify` | | `false` | Skip audio frequency and loudness check |
-| `--skip-metadata` | | `false` | Skip fetching album artwork and track details |
-| `--verbose` | `-v` | `false` | Show extra detailed progress logs |
+| `--skip-verify` | | `false` | Skip DJ audio quality and spectrum inspection |
+| `--skip-metadata` | | `false` | Skip metadata lookup and high-res cover art tagging |
+| `--progress-target <uri>` | | `""` | Target URI for streaming NDJSON progress events |
+| `--progress-socket <path>` | | `""` | Shorthand alias for `--progress-target` |
+| `--verbose` | `-v` | `false` | Enable verbose logging |
+| `--version` | | `false` | Print version information and exit |
+| `--help` | `-h` | `false` | Print command help |
 
-## Progress & IPC Telemetry for Tools and Agents
+# Progress & IPC Telemetry
 
-When executing `fetch-track` from another CLI tool, desktop GUI, or AI agent harness, use `--progress-target` or `--progress-socket` to stream structured real-time NDJSON events over a UNIX domain socket, TCP socket, or file descriptor.
+When executing `fetch-track` from an AI agent or parent supervisor, stream NDJSON events over UNIX sockets, TCP, or file descriptors:
 
-See [PROGRESS.md](PROGRESS.md) for full protocol specifications, event schemas, and integration code samples.
+```bash
+fetch-track --progress-target "unix:///tmp/ft.sock" "Boris Brejcha - Space X"
+```
 
-## Supported Search Sources
+See [PROGRESS.md](PROGRESS.md) for full protocol specifications and event schemas.
 
-`fetch-track` supports searching the following platforms via the `-s` / `--sources` flag:
+# License
 
-- `youtube` — [YouTube](https://www.youtube.com) (default)
-- `soundcloud` — [SoundCloud](https://soundcloud.com) (default)
-- `bandcamp` — [Bandcamp](https://bandcamp.com)
-
-## License
-
-This project is licensed under the [MIT License](LICENSE).
+MIT License (c) 2026 Alex Gorbatchev

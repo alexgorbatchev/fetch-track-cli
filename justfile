@@ -1,48 +1,51 @@
-# fetch-track-cli justfile
-
-set positional-arguments
+set dotenv-load := false
 
 # Default recipe: list available recipes
 default:
     @just --list
 
-# Build the fetch-track binary in bin/
-build:
-	mkdir -p bin
-	go build -o bin/fetch-track ./cmd/fetch-track
+# Run CLI in human mode (default)
+run *args:
+    go run ./cmd/fetch-track {{args}}
 
-# Install fetch-track binary to GOPATH bin directory
-install:
-    go install ./cmd/fetch-track
-
-# Run single-track acquisition pipeline
-run *ARGS:
-    go run ./cmd/fetch-track "$@"
-
-# Run in agent-facing token-conservative mode
-run-ai *ARGS:
-    AGENT=1 go run ./cmd/fetch-track "$@"
+# Run CLI in agent-facing token-conservative mode
+run-ai *args:
+    AGENT=1 go run ./cmd/fetch-track {{args}}
 
 # Run stand-alone DJ audio quality verification
-verify *ARGS:
-    go run ./cmd/fetch-track verify "$@"
+verify *args:
+    go run ./cmd/fetch-track verify {{args}}
 
 # Run all unit tests
 test:
     go test -v ./...
 
-# Run static code analysis
-vet:
+# Lint and static check
+lint:
     go vet ./...
+
+# Run static checks and test suite in sequence
+check:
+    go vet ./...
+    go test ./...
 
 # Format Go code
 fmt:
     go fmt ./...
 
+# Build the fetch-track binary in bin/
+build:
+    mkdir -p bin
+    go build -o bin/fetch-track ./cmd/fetch-track
+
+# Install fetch-track binary to GOPATH bin directory
+install:
+    go install ./cmd/fetch-track
+
 # Clean up build binaries and temporary files
 clean:
-	rm -rf bin fetch-track coverage.out .tmp
+    rm -rf bin fetch-track coverage.out .tmp
 
 # Run out-of-band socket progress demo
-demo-progress *ARGS:
-    ./scripts/demo-progress-socket.sh "$@"
+demo-progress *args:
+    ./scripts/demo-progress-socket.sh {{args}}

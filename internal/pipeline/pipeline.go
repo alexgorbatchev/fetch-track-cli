@@ -35,8 +35,8 @@ type Options struct {
 
 // IsAgentMode checks if the environment variable AGENT=1 is set.
 func IsAgentMode() bool {
-	val := strings.TrimSpace(os.Getenv("AGENT"))
-	return val == "1" || strings.ToLower(val) == "true"
+	val := strings.ToLower(strings.TrimSpace(os.Getenv("AGENT")))
+	return val == "1" || val == "true" || val == "yes"
 }
 
 // Run executes the full single-track acquisition pipeline.
