@@ -31,9 +31,10 @@ Go CLI tool for searching, verifying, downloading, and managing high-fidelity si
 - **Progress Socket / IPC Telemetry:** When executed by another CLI, agent orchestrator, or GUI, use `--progress-target <uri>` (or `--progress-socket <path>`, or `FETCH_TRACK_PROGRESS_TARGET` env var) to stream atomic NDJSON progress events (`phase_start`, `candidate_found`, `candidate_selected`, `progress`, `complete`, `error`) over a UNIX socket (`unix:///path/to.sock`), TCP address (`tcp://127.0.0.1:9099`), file descriptor (`fd://3`), or standard stream (`stdout`, `stderr`).
 - **Release Notes:** All GitHub releases MUST include comprehensive release notes detailing user-visible changes, performance improvements, and notable commits in the tag range.
 - **Metadata Fallback Chain:**
-  1. iTunes Search API (1400x1400 artwork)
-  2. MusicBrainz API + Cover Art Archive
-  3. YouTube / Local Filename Raw Fallback
+  1. Acoustic Identification (AcoustID via `gochromaprint` / Shazam via `goshazam`)
+  2. iTunes Search API (1400x1400 artwork)
+  3. MusicBrainz API + Cover Art Archive
+  4. YouTube / Local Filename Raw Fallback
 - **Origin Date & Provenance Preservation:** Always preserve full release date (`YYYY-MM-DD` when available) in file date tags and embed source provenance (audio source URL, metadata provider, and acquisition date) in track comment tags (`Source: <url> | Metadata: <provider> | Fetched: <date>`) without re-encoding.
 - **Dependency Management & Auto-Installation:** Use `fetch-track dependencies` (`deps`), `fetch-track deps install [dep...]`, `fetch-track deps update [dep...]`, or the `--auto-install` flag to check, install, or update required external tools (`yt-dlp`, `ffmpeg`, `ffprobe`) in `$XDG_DATA_HOME/fetch-track/bin` (or `~/.local/share/fetch-track/bin`) powered by `github.com/alexgorbatchev/godeps`.
 - **Required Dependencies Messages:** Dependency verification and error messages must always show the required minimum version, and if a dependency is already installed but outdated, clearly display which old version is currently available.

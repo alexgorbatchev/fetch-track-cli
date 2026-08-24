@@ -338,7 +338,7 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 		}
 
 		metaClient := metadata.NewClient(cacheInst)
-		metaRes := metaClient.ResolveTrackMetadata(ctx, cleanTitle, artist, title, opts.Verbose)
+		metaRes := metaClient.ResolveTrackMetadata(ctx, downloadedPath, cleanTitle, artist, title, opts.Verbose)
 		metaRes.AudioSourceURL = targetURL
 		metaRes.FetchedAt = time.Now().UTC()
 		metaResult = &metaRes

@@ -3,7 +3,9 @@ module github.com/dj/fetch-track-cli
 go 1.26.2
 
 require (
+	github.com/alexgorbatchev/gochromaprint v1.6.0
 	github.com/alexgorbatchev/godeps v1.0.0
+	github.com/alexgorbatchev/goshazam v0.8.0
 	github.com/briandowns/spinner v1.23.2
 	github.com/charmbracelet/huh v1.0.0
 	github.com/charmbracelet/lipgloss v1.1.0

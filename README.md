@@ -16,7 +16,7 @@
 - **Picks the Right Track**: Matches artist and title while ignoring short radio edits, 30-second snippets, or multi-hour mix compilations.
 - **Preserves Original Audio Quality**: Downloads high-bitrate audio streams directly without re-encoding or degrading sound quality.
 - **Checks Audio & Volume**: Analyzes frequency range to catch low-quality rips and calculates the recommended volume Gain Offset for your mixer.
-- **Adds Cover Art & Metadata**: Fetches official track details, release years, and high-res 1400x1400 album art so your music looks great on DJ decks and laptops.
+- **Acoustic Identification & Metadata**: Identifies tracks by acoustic audio fingerprinting (AcoustID and Apple Shazam) with API fallbacks (iTunes and MusicBrainz) to embed canonical metadata with 1400x1400 album art.
 
 ## How It Works
 
@@ -24,7 +24,7 @@
 2. **Select**: Ranks candidates to pick the full-length DJ mix.
 3. **Download**: Downloads the best native audio stream directly.
 4. **Inspect**: Checks audio frequency response and calculates mixer Gain Offset.
-5. **Tag**: Adds high-res artwork and metadata tags before saving.
+5. **Identify & Tag**: Identifies the track via acoustic audio fingerprinting (AcoustID/Shazam) with API fallback (iTunes/MusicBrainz), embedding high-res artwork and metadata tags before saving.
 
 ## Prerequisites
 
@@ -102,7 +102,17 @@ Inspect any audio file without downloading:
 fetch-track verify "Boris Brejcha - Space X.m4a"
 ```
 
-### 6. Manage Dependencies
+### 6. Metadata & Acoustic Identification Fallback Chain
+
+`fetch-track` enriches downloaded audio files using a multi-tiered identification hierarchy:
+
+1. **AcoustID & MusicBrainz** — Pure Go acoustic fingerprinting (`gochromaprint`) identifies the waveform and queries the AcoustID database for canonical MusicBrainz metadata and Cover Art Archive artwork.
+2. **Apple Shazam** — Pure Go landmark acoustic recognition (`goshazam`) identifies the audio against Apple Music's commercial catalog and extracts 1400x1400 artwork.
+3. **iTunes Search API** — Fast commercial catalog search for 1400x1400 artwork and metadata.
+4. **MusicBrainz API & Cover Art Archive** — Open-source community music database fallback.
+5. **Raw Video Fallback** — Preserves uploader/title tags if no external database matches.
+
+### 7. Manage Dependencies
 
 Verify, auto-install, or update external dependencies (`yt-dlp`, `ffmpeg`, `ffprobe`):
 
@@ -126,7 +136,7 @@ ffprobe: 8.1.2 (min 4.4) [OK]
 All dependencies met.
 ```
 
-### 7. Self-Upgrade
+### 8. Self-Upgrade
 
 Upgrade the `fetch-track` binary in-place to the latest GitHub release without using the GitHub API:
 

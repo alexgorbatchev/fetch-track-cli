@@ -3,8 +3,12 @@ package metadata
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
+	"errors"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -22,6 +26,29 @@ func newMockClient(fn mockTransport) *Client {
 		httpClient: &http.Client{
 			Transport: fn,
 		},
+		runner: defaultRunner,
+	}
+}
+
+func TestDefaultRunner(t *testing.T) {
+	ctx := context.Background()
+
+	// 1. Successful execution
+	out, err := defaultRunner(ctx, "echo", "hello")
+	if err != nil || strings.TrimSpace(string(out)) != "hello" {
+		t.Fatalf("defaultRunner success failed: out=%q, err=%v", string(out), err)
+	}
+
+	// 2. Failure with stderr
+	_, err = defaultRunner(ctx, "sh", "-c", "echo 'some error' >&2; exit 1")
+	if err == nil || !strings.Contains(err.Error(), "some error") {
+		t.Fatalf("expected error containing 'some error', got %v", err)
+	}
+
+	// 3. Failure without stderr
+	_, err = defaultRunner(ctx, "sh", "-c", "exit 1")
+	if err == nil {
+		t.Fatal("expected error for non-zero exit code")
 	}
 }
 
@@ -37,6 +64,8 @@ func TestNewClient(t *testing.T) {
 	if c2 == nil || c2.Cache == nil {
 		t.Fatal("NewClient with cache returned nil cache")
 	}
+
+	c2.SetRunner(defaultRunner)
 }
 
 func TestFetchFromITunes(t *testing.T) {
@@ -219,8 +248,355 @@ func TestFetchFromMusicBrainz(t *testing.T) {
 	}
 }
 
+func TestFetchFromAcoustID(t *testing.T) {
+	ctx := context.Background()
+	tempDir := t.TempDir()
+	dummyFile := filepath.Join(tempDir, "sample.m4a")
+	if err := os.WriteFile(dummyFile, []byte("dummy audio content"), 0644); err != nil {
+		t.Fatalf("creating dummy audio file: %v", err)
+	}
+
+	// Generate 11025 * 2 samples of synthetic 16-bit PCM (2 seconds)
+	syntheticPCMLen := 11025 * 2
+	syntheticPCM := make([]byte, syntheticPCMLen*2)
+	for i := 0; i < syntheticPCMLen; i++ {
+		binary.LittleEndian.PutUint16(syntheticPCM[i*2:], uint16(i%1000))
+	}
+
+	t.Run("successful_acoustid_match_with_cover_art", func(t *testing.T) {
+		client := newMockClient(func(req *http.Request) (*http.Response, error) {
+			if strings.Contains(req.URL.Host, "acoustid.org") {
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Body: io.NopCloser(bytes.NewBufferString(`{
+						"status": "ok",
+						"results": [
+							{
+								"score": 0.95,
+								"recordings": [
+									{
+										"id": "mbid-123",
+										"title": "Kernkraft 400 (W&W remix)",
+										"artists": [{"name": "Zombie Nation"}],
+										"releasegroups": [{"id": "rg-1", "title": "Kernkraft 400 Single", "type": "Single"}],
+										"releases": [{"id": "rel-1", "title": "Kernkraft 400", "date": {"year": 2015}}]
+									}
+								]
+							}
+						]
+					}`)),
+				}, nil
+			}
+			if strings.Contains(req.URL.Host, "coverartarchive.org") {
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Body: io.NopCloser(bytes.NewBufferString(`{
+						"images": [{"image": "https://coverartarchive.org/release/rg-1.jpg"}]
+					}`)),
+				}, nil
+			}
+			return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(bytes.NewBufferString(`{}`))}, nil
+		})
+
+		client.SetRunner(func(ctx context.Context, name string, args ...string) ([]byte, error) {
+			return syntheticPCM, nil
+		})
+
+		res, err := client.FetchFromAcoustID(ctx, dummyFile)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if res.Title != "Kernkraft 400 (W&W remix)" {
+			t.Errorf("Title = %q, want Kernkraft 400 (W&W remix)", res.Title)
+		}
+		if res.Artist != "Zombie Nation" {
+			t.Errorf("Artist = %q, want Zombie Nation", res.Artist)
+		}
+		if res.ReleaseYear != "2015" {
+			t.Errorf("ReleaseYear = %q, want 2015", res.ReleaseYear)
+		}
+		if res.CoverArtURL != "https://coverartarchive.org/release/rg-1.jpg" {
+			t.Errorf("CoverArtURL = %q", res.CoverArtURL)
+		}
+		if res.Source != "AcoustID / MusicBrainz" {
+			t.Errorf("Source = %q", res.Source)
+		}
+	})
+
+	t.Run("acoustid_empty_path", func(t *testing.T) {
+		client := newMockClient(nil)
+		_, err := client.FetchFromAcoustID(ctx, "")
+		if err == nil {
+			t.Fatal("expected error for empty file path")
+		}
+	})
+
+	t.Run("acoustid_nonexistent_file", func(t *testing.T) {
+		client := newMockClient(nil)
+		_, err := client.FetchFromAcoustID(ctx, filepath.Join(tempDir, "nonexistent.m4a"))
+		if err == nil {
+			t.Fatal("expected error for nonexistent file")
+		}
+	})
+
+	t.Run("acoustid_ffmpeg_runner_error", func(t *testing.T) {
+		client := newMockClient(nil)
+		client.SetRunner(func(ctx context.Context, name string, args ...string) ([]byte, error) {
+			return nil, errors.New("ffmpeg decode failed")
+		})
+		_, err := client.FetchFromAcoustID(ctx, dummyFile)
+		if err == nil {
+			t.Fatal("expected error when runner fails")
+		}
+	})
+
+	t.Run("acoustid_audio_too_short", func(t *testing.T) {
+		client := newMockClient(nil)
+		client.SetRunner(func(ctx context.Context, name string, args ...string) ([]byte, error) {
+			return []byte{0, 1, 2, 3}, nil // too few samples
+		})
+		_, err := client.FetchFromAcoustID(ctx, dummyFile)
+		if err == nil {
+			t.Fatal("expected error when audio is too short")
+		}
+	})
+
+	t.Run("acoustid_http_error", func(t *testing.T) {
+		client := newMockClient(func(req *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusInternalServerError,
+				Body:       io.NopCloser(bytes.NewBufferString(`server error`)),
+			}, nil
+		})
+		client.SetRunner(func(ctx context.Context, name string, args ...string) ([]byte, error) {
+			return syntheticPCM, nil
+		})
+		_, err := client.FetchFromAcoustID(ctx, dummyFile)
+		if err == nil {
+			t.Fatal("expected error on HTTP 500")
+		}
+	})
+
+	t.Run("acoustid_invalid_json", func(t *testing.T) {
+		client := newMockClient(func(req *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(`{invalid json`)),
+			}, nil
+		})
+		client.SetRunner(func(ctx context.Context, name string, args ...string) ([]byte, error) {
+			return syntheticPCM, nil
+		})
+		_, err := client.FetchFromAcoustID(ctx, dummyFile)
+		if err == nil {
+			t.Fatal("expected error on invalid json")
+		}
+	})
+
+	t.Run("acoustid_no_matches", func(t *testing.T) {
+		client := newMockClient(func(req *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(`{"status": "ok", "results": []}`)),
+			}, nil
+		})
+		client.SetRunner(func(ctx context.Context, name string, args ...string) ([]byte, error) {
+			return syntheticPCM, nil
+		})
+		_, err := client.FetchFromAcoustID(ctx, dummyFile)
+		if err == nil {
+			t.Fatal("expected error when no results found")
+		}
+	})
+
+	t.Run("acoustid_score_below_threshold", func(t *testing.T) {
+		client := newMockClient(func(req *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body: io.NopCloser(bytes.NewBufferString(`{
+					"status": "ok",
+					"results": [
+						{"score": 0.2, "recordings": [{"title": "Bad Match"}]}
+					]
+				}`)),
+			}, nil
+		})
+		client.SetRunner(func(ctx context.Context, name string, args ...string) ([]byte, error) {
+			return syntheticPCM, nil
+		})
+		_, err := client.FetchFromAcoustID(ctx, dummyFile)
+		if err == nil {
+			t.Fatal("expected error when score is below threshold")
+		}
+	})
+
+	t.Run("acoustid_releases_fallback", func(t *testing.T) {
+		client := newMockClient(func(req *http.Request) (*http.Response, error) {
+			if strings.Contains(req.URL.Host, "acoustid.org") {
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Body: io.NopCloser(bytes.NewBufferString(`{
+						"status": "ok",
+						"results": [
+							{
+								"score": 0.85,
+								"recordings": [
+									{
+										"id": "mbid-2",
+										"title": "Release Only Track",
+										"artists": [],
+										"releases": [{"id": "rel-99", "title": "Release Title Album", "date": {"year": 2019}}]
+									}
+								]
+							}
+						]
+					}`)),
+				}, nil
+			}
+			return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(bytes.NewBufferString(`{}`))}, nil
+		})
+
+		client.SetRunner(func(ctx context.Context, name string, args ...string) ([]byte, error) {
+			return syntheticPCM, nil
+		})
+
+		res, err := client.FetchFromAcoustID(ctx, dummyFile)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if res.Artist != "Unknown Artist" {
+			t.Errorf("expected Unknown Artist, got %q", res.Artist)
+		}
+		if res.Album != "Release Title Album" {
+			t.Errorf("Album = %q, want Release Title Album", res.Album)
+		}
+		if res.ReleaseYear != "2019" {
+			t.Errorf("ReleaseYear = %q, want 2019", res.ReleaseYear)
+		}
+	})
+}
+
+func TestFetchFromShazam(t *testing.T) {
+	ctx := context.Background()
+	tempDir := t.TempDir()
+	dummyFile := filepath.Join(tempDir, "sample.m4a")
+	if err := os.WriteFile(dummyFile, []byte("dummy audio content"), 0644); err != nil {
+		t.Fatalf("creating dummy audio file: %v", err)
+	}
+
+	t.Run("shazam_empty_path", func(t *testing.T) {
+		client := newMockClient(nil)
+		_, err := client.FetchFromShazam(ctx, "")
+		if err == nil {
+			t.Fatal("expected error for empty file path")
+		}
+	})
+
+	t.Run("shazam_nonexistent_file", func(t *testing.T) {
+		client := newMockClient(nil)
+		_, err := client.FetchFromShazam(ctx, filepath.Join(tempDir, "nonexistent.m4a"))
+		if err == nil {
+			t.Fatal("expected error for nonexistent file")
+		}
+	})
+
+	t.Run("shazam_mock_response_match", func(t *testing.T) {
+		client := newMockClient(func(req *http.Request) (*http.Response, error) {
+			if strings.Contains(req.URL.Host, "shazam.com") {
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Body: io.NopCloser(bytes.NewBufferString(`{
+						"matches": [{"id": "123"}],
+						"track": {
+							"title": "Kernkraft 400 (W&W Remix)",
+							"subtitle": "Zombie Nation",
+							"genres": {"primary": "Dance"},
+							"images": {"coverarthq": "https://images.shazam.com/cover/400x400cc.jpg"},
+							"sections": [
+								{
+									"type": "SONG",
+									"metadata": [
+										{"title": "Album", "text": "Dance Mix 2023"},
+										{"title": "Released", "text": "2023"}
+									]
+								}
+							]
+						}
+					}`)),
+				}, nil
+			}
+			return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(bytes.NewBufferString(`{}`))}, nil
+		})
+
+		// Use synthetic valid small audio file created via ffmpeg
+		realAudioPath := filepath.Join(tempDir, "real.m4a")
+		_, _ = defaultRunner(ctx, "ffmpeg", "-v", "quiet", "-hide_banner", "-f", "lavfi", "-i", "anullsrc=r=16000:cl=mono", "-t", "1", "-y", realAudioPath)
+
+		if _, err := os.Stat(realAudioPath); err == nil {
+			res, err := client.FetchFromShazam(ctx, realAudioPath)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if res.Title != "Kernkraft 400 (W&W Remix)" {
+				t.Errorf("Title = %q", res.Title)
+			}
+			if res.Artist != "Zombie Nation" {
+				t.Errorf("Artist = %q", res.Artist)
+			}
+			if res.Album != "Dance Mix 2023" {
+				t.Errorf("Album = %q", res.Album)
+			}
+			if res.ReleaseYear != "2023" {
+				t.Errorf("ReleaseYear = %q", res.ReleaseYear)
+			}
+			if !strings.Contains(res.CoverArtURL, "1400x1400cc.jpg") {
+				t.Errorf("CoverArtURL = %q, expected 1400x1400 upgraded url", res.CoverArtURL)
+			}
+			if res.Source != "Shazam API" {
+				t.Errorf("Source = %q", res.Source)
+			}
+		}
+	})
+
+	t.Run("shazam_fallback_artist_and_coverart", func(t *testing.T) {
+		client := newMockClient(func(req *http.Request) (*http.Response, error) {
+			if strings.Contains(req.URL.Host, "shazam.com") {
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Body: io.NopCloser(bytes.NewBufferString(`{
+						"matches": [{"id": "123"}],
+						"track": {
+							"title": "Solo Track",
+							"subtitle": "",
+							"artists": [{"adamid": "12345"}],
+							"images": {"coverart": "https://images.shazam.com/cover/800x800cc.jpg"}
+						}
+					}`)),
+				}, nil
+			}
+			return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(bytes.NewBufferString(`{}`))}, nil
+		})
+
+		realAudioPath := filepath.Join(tempDir, "real_solo.m4a")
+		_, _ = defaultRunner(ctx, "ffmpeg", "-v", "quiet", "-hide_banner", "-f", "lavfi", "-i", "anullsrc=r=16000:cl=mono", "-t", "1", "-y", realAudioPath)
+
+		if _, err := os.Stat(realAudioPath); err == nil {
+			res, err := client.FetchFromShazam(ctx, realAudioPath)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if res.Artist != "12345" {
+				t.Errorf("Artist = %q, want 12345", res.Artist)
+			}
+			if !strings.Contains(res.CoverArtURL, "1400x1400cc.jpg") {
+				t.Errorf("CoverArtURL = %q", res.CoverArtURL)
+			}
+		}
+	})
+}
+
 func TestResolveTrackMetadataFallback(t *testing.T) {
-	// Mock client that returns 404 for iTunes and successful MusicBrainz
+	// Mock client that returns 404 for AcoustID/Shazam/iTunes and successful MusicBrainz
 	client := newMockClient(func(req *http.Request) (*http.Response, error) {
 		if strings.Contains(req.URL.Host, "itunes") {
 			return &http.Response{
@@ -256,7 +632,7 @@ func TestResolveTrackMetadataFallback(t *testing.T) {
 		}, nil
 	})
 
-	res := client.ResolveTrackMetadata(context.Background(), "Gopnik", "Fallback Artist", "Gopnik", true)
+	res := client.ResolveTrackMetadata(context.Background(), "", "Gopnik", "Fallback Artist", "Gopnik", true)
 	if res.Artist != "DJ Blyatman MB" {
 		t.Errorf("Artist = %q, want DJ Blyatman MB", res.Artist)
 	}
@@ -271,67 +647,187 @@ func TestResolveTrackMetadataFallback(t *testing.T) {
 	}
 }
 
-func TestResolveTrackMetadata_ITunesAndYouTubeFallback(t *testing.T) {
-	// 1. Test iTunes Match branch
-	clientITunes := newMockClient(func(req *http.Request) (*http.Response, error) {
-		if strings.Contains(req.URL.Host, "itunes") {
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body: io.NopCloser(bytes.NewBufferString(`{
-					"results": [
-						{
-							"trackName": "Space X",
-							"artistName": "Boris Brejcha",
-							"collectionName": "Space X Single",
-							"releaseDate": "2024-05-10T07:00:00Z",
-							"artworkUrl100": "https://is1-ssl.mzstatic.com/image/thumb/Music123/v4/100x100bb.jpg"
-						}
-					]
-				}`)),
-			}, nil
+func TestResolveTrackMetadata_AllBranches(t *testing.T) {
+	tempDir := t.TempDir()
+	dummyAudio := filepath.Join(tempDir, "audio.m4a")
+	if err := os.WriteFile(dummyAudio, []byte("audio"), 0644); err != nil {
+		t.Fatalf("writing audio file: %v", err)
+	}
+
+	syntheticPCMLen := 11025 * 2
+	syntheticPCM := make([]byte, syntheticPCMLen*2)
+	for i := 0; i < syntheticPCMLen; i++ {
+		binary.LittleEndian.PutUint16(syntheticPCM[i*2:], uint16(i%1000))
+	}
+
+	// 1. Test AcoustID Match branch in ResolveTrackMetadata
+	t.Run("acoustid_match_branch", func(t *testing.T) {
+		clientAcoustID := newMockClient(func(req *http.Request) (*http.Response, error) {
+			if strings.Contains(req.URL.Host, "acoustid.org") {
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Body: io.NopCloser(bytes.NewBufferString(`{
+						"status": "ok",
+						"results": [
+							{
+								"score": 0.99,
+								"recordings": [
+									{
+										"id": "mbid-1",
+										"title": "AcoustID Title",
+										"artists": [{"name": "AcoustID Artist"}],
+										"releasegroups": [{"id": "rg-1", "title": "AcoustID Album"}]
+									}
+								]
+							}
+						]
+					}`)),
+				}, nil
+			}
+			if strings.Contains(req.URL.Host, "coverartarchive.org") {
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Body: io.NopCloser(bytes.NewBufferString(`{
+						"images": [{"image": "https://coverartarchive.org/rg-1.jpg"}]
+					}`)),
+				}, nil
+			}
+			return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(bytes.NewBufferString(`{}`))}, nil
+		})
+		clientAcoustID.SetRunner(func(ctx context.Context, name string, args ...string) ([]byte, error) {
+			return syntheticPCM, nil
+		})
+
+		res := clientAcoustID.ResolveTrackMetadata(context.Background(), dummyAudio, "AcoustID Title", "Fallback Artist", "AcoustID Title", true)
+		if res.Source != "AcoustID / MusicBrainz" {
+			t.Errorf("Source = %q, want AcoustID / MusicBrainz", res.Source)
 		}
-		return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(bytes.NewBufferString(`{}`))}, nil
+		if res.Artist != "AcoustID Artist" {
+			t.Errorf("Artist = %q, want AcoustID Artist", res.Artist)
+		}
+		if res.CoverArtURL != "https://coverartarchive.org/rg-1.jpg" {
+			t.Errorf("CoverArtURL = %q", res.CoverArtURL)
+		}
 	})
 
-	resITunes := clientITunes.ResolveTrackMetadata(context.Background(), "Space X", "Boris Brejcha", "Space X", true)
-	if resITunes.Source != "iTunes API" {
-		t.Errorf("expected iTunes API source, got %q", resITunes.Source)
-	}
+	// 2. Test Shazam Match branch when AcoustID fails
+	t.Run("shazam_match_branch", func(t *testing.T) {
+		realAudioPath := filepath.Join(tempDir, "real_shazam.m4a")
+		_, _ = defaultRunner(context.Background(), "ffmpeg", "-v", "quiet", "-hide_banner", "-f", "lavfi", "-i", "anullsrc=r=16000:cl=mono", "-t", "1", "-y", realAudioPath)
 
-	// 2. Test YouTube Fallback branch when both fail
-	clientFallback := newMockClient(func(req *http.Request) (*http.Response, error) {
-		return &http.Response{
-			StatusCode: http.StatusNotFound,
-			Body:       io.NopCloser(bytes.NewBufferString(`{}`)),
-		}, nil
+		clientShazam := newMockClient(func(req *http.Request) (*http.Response, error) {
+			if strings.Contains(req.URL.Host, "shazam.com") {
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Body: io.NopCloser(bytes.NewBufferString(`{
+						"matches": [{"id": "1"}],
+						"track": {
+							"title": "Shazam Track",
+							"subtitle": "Shazam Artist",
+							"genres": {"primary": "Electronic"},
+							"images": {"coverarthq": "https://images.shazam.com/cover/400x400cc.jpg"}
+						}
+					}`)),
+				}, nil
+			}
+			return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(bytes.NewBufferString(`{}`))}, nil
+		})
+		// AcoustID fails
+		clientShazam.SetRunner(func(ctx context.Context, name string, args ...string) ([]byte, error) {
+			return nil, errors.New("acoustid failed")
+		})
+
+		if _, err := os.Stat(realAudioPath); err == nil {
+			res := clientShazam.ResolveTrackMetadata(context.Background(), realAudioPath, "Shazam Track", "Fallback Artist", "Shazam Track", true)
+			if res.Source != "Shazam API" {
+				t.Errorf("Source = %q, want Shazam API", res.Source)
+			}
+			if res.Artist != "Shazam Artist" {
+				t.Errorf("Artist = %q, want Shazam Artist", res.Artist)
+			}
+			if !strings.Contains(res.CoverArtURL, "1400x1400cc.jpg") {
+				t.Errorf("CoverArtURL = %q", res.CoverArtURL)
+			}
+		}
 	})
 
-	resFallback := clientFallback.ResolveTrackMetadata(context.Background(), "Unknown Track", "Raw Artist", "Unknown Track", true)
-	if resFallback.Source != "YouTube Fallback" {
-		t.Errorf("expected YouTube Fallback source, got %q", resFallback.Source)
-	}
-	if resFallback.Artist != "Raw Artist" {
-		t.Errorf("Artist = %q, want Raw Artist", resFallback.Artist)
-	}
+	// 3. Test iTunes Match branch
+	t.Run("itunes_match_branch", func(t *testing.T) {
+		clientITunes := newMockClient(func(req *http.Request) (*http.Response, error) {
+			if strings.Contains(req.URL.Host, "itunes") {
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Body: io.NopCloser(bytes.NewBufferString(`{
+						"results": [
+							{
+								"trackName": "Space X",
+								"artistName": "Boris Brejcha",
+								"collectionName": "Space X Single",
+								"releaseDate": "2024-05-10T07:00:00Z",
+								"artworkUrl100": "https://is1-ssl.mzstatic.com/image/thumb/Music123/v4/100x100bb.jpg"
+							}
+						]
+					}`)),
+				}, nil
+			}
+			return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(bytes.NewBufferString(`{}`))}, nil
+		})
 
-	// 3. Test Cache Hit branch in ResolveTrackMetadata
-	cacheDir := t.TempDir()
-	cacheInst := cache.NewInDir(cacheDir, true)
-	clientITunes.Cache = cacheInst
+		resITunes := clientITunes.ResolveTrackMetadata(context.Background(), "", "Space X", "Boris Brejcha", "Space X", true)
+		if resITunes.Source != "iTunes API" {
+			t.Errorf("expected iTunes API source, got %q", resITunes.Source)
+		}
+	})
 
-	// First call caches it
-	_ = clientITunes.ResolveTrackMetadata(context.Background(), "Space X", "Boris Brejcha", "Space X", true)
-	// Second call retrieves from cache
-	resCached := clientITunes.ResolveTrackMetadata(context.Background(), "Space X", "Boris Brejcha", "Space X", true)
-	if !strings.Contains(resCached.Source, "[cached]") {
-		t.Errorf("expected [cached] source, got %q", resCached.Source)
-	}
+	// 4. Test YouTube Fallback branch when all fail
+	t.Run("youtube_fallback_branch", func(t *testing.T) {
+		clientFallback := newMockClient(func(req *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusNotFound,
+				Body:       io.NopCloser(bytes.NewBufferString(`{}`)),
+			}, nil
+		})
 
-	// 4. Test YouTube Fallback with empty fallbackArtist
-	resEmptyArtist := clientFallback.ResolveTrackMetadata(context.Background(), "Fallback Track", "", "Fallback Track", false)
-	if resEmptyArtist.Artist != "Unknown Artist" {
-		t.Errorf("expected 'Unknown Artist', got %q", resEmptyArtist.Artist)
-	}
+		resFallback := clientFallback.ResolveTrackMetadata(context.Background(), "", "Unknown Track", "Raw Artist", "Unknown Track", true)
+		if resFallback.Source != "YouTube Fallback" {
+			t.Errorf("expected YouTube Fallback source, got %q", resFallback.Source)
+		}
+		if resFallback.Artist != "Raw Artist" {
+			t.Errorf("Artist = %q, want Raw Artist", resFallback.Artist)
+		}
+
+		resEmptyArtist := clientFallback.ResolveTrackMetadata(context.Background(), "", "Fallback Track", "", "Fallback Track", false)
+		if resEmptyArtist.Artist != "Unknown Artist" {
+			t.Errorf("expected 'Unknown Artist', got %q", resEmptyArtist.Artist)
+		}
+	})
+
+	// 5. Test Cache Hit branch in ResolveTrackMetadata
+	t.Run("cache_hit_branch", func(t *testing.T) {
+		clientCache := newMockClient(func(req *http.Request) (*http.Response, error) {
+			if strings.Contains(req.URL.Host, "itunes") {
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Body: io.NopCloser(bytes.NewBufferString(`{
+						"results": [
+							{"trackName": "Space X", "artistName": "Boris Brejcha", "collectionName": "Single", "releaseDate": "2024-01-01"}
+						]
+					}`)),
+				}, nil
+			}
+			return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(bytes.NewBufferString(`{}`))}, nil
+		})
+
+		cacheDir := t.TempDir()
+		cacheInst := cache.NewInDir(cacheDir, true)
+		clientCache.Cache = cacheInst
+
+		_ = clientCache.ResolveTrackMetadata(context.Background(), "", "Space X", "Boris Brejcha", "Space X", true)
+		resCached := clientCache.ResolveTrackMetadata(context.Background(), "", "Space X", "Boris Brejcha", "Space X", true)
+		if !strings.Contains(resCached.Source, "[cached]") {
+			t.Errorf("expected [cached] source, got %q", resCached.Source)
+		}
+	})
 }
 
 func TestFetchFromITunes_AdditionalBranches(t *testing.T) {
