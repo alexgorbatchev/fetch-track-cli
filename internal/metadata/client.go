@@ -641,27 +641,12 @@ func (c *Client) ResolveTrackMetadata(ctx context.Context, audioFilePath, search
 		return cachedRes
 	}
 
-	// 1. Acoustic Fingerprinting Fallback: AcoustID -> Shazam
+	// 1. Acoustic Fingerprinting Fallback: Shazam (1400x1400 square artwork) -> AcoustID
 	if audioFilePath != "" {
 		if _, err := os.Stat(audioFilePath); err == nil {
 			if isVerbose {
-				fmt.Printf("metadata acoustic: probing %s via AcoustID\n", audioFilePath)
+				fmt.Printf("metadata acoustic: probing %s via Shazam\n", audioFilePath)
 			}
-			if res, err := c.FetchFromAcoustID(ctx, audioFilePath); err == nil && res.Title != "" && res.Artist != "" {
-				if isVerbose {
-					fmt.Printf("acoustid match: %q (Album: %s, %s)\n", res.Artist+" - "+res.Title, res.Album, res.ReleaseYear)
-					if res.CoverArtURL != "" {
-						fmt.Printf("acoustid artwork: %s\n", res.CoverArtURL)
-					}
-				}
-				if c.Cache != nil {
-					_ = c.Cache.Put("metadata", cacheKey, *res, 7*24*time.Hour)
-				}
-				return *res
-			} else if isVerbose {
-				fmt.Printf("acoustid: no match (%v)\nmetadata acoustic: probing %s via Shazam\n", err, audioFilePath)
-			}
-
 			if res, err := c.FetchFromShazam(ctx, audioFilePath); err == nil && res.Title != "" && res.Artist != "" {
 				if isVerbose {
 					fmt.Printf("shazam match: %q (Album: %s, %s)\n", res.Artist+" - "+res.Title, res.Album, res.ReleaseYear)
@@ -674,7 +659,22 @@ func (c *Client) ResolveTrackMetadata(ctx context.Context, audioFilePath, search
 				}
 				return *res
 			} else if isVerbose {
-				fmt.Printf("shazam: no match (%v)\n", err)
+				fmt.Printf("shazam: no match (%v)\nmetadata acoustic: probing %s via AcoustID\n", err, audioFilePath)
+			}
+
+			if res, err := c.FetchFromAcoustID(ctx, audioFilePath); err == nil && res.Title != "" && res.Artist != "" {
+				if isVerbose {
+					fmt.Printf("acoustid match: %q (Album: %s, %s)\n", res.Artist+" - "+res.Title, res.Album, res.ReleaseYear)
+					if res.CoverArtURL != "" {
+						fmt.Printf("acoustid artwork: %s\n", res.CoverArtURL)
+					}
+				}
+				if c.Cache != nil {
+					_ = c.Cache.Put("metadata", cacheKey, *res, 7*24*time.Hour)
+				}
+				return *res
+			} else if isVerbose {
+				fmt.Printf("acoustid: no match (%v)\n", err)
 			}
 		}
 	}

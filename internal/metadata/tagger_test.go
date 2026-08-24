@@ -286,3 +286,60 @@ func TestApplyMetadataToLocalTrack_WithCoverArt(t *testing.T) {
 		t.Error("expected error for canceled context")
 	}
 }
+
+func TestNormalizeCoverArtToSquare(t *testing.T) {
+	ctx := context.Background()
+	tempDir := t.TempDir()
+
+	t.Run("empty_path", func(t *testing.T) {
+		_, err := NormalizeCoverArtToSquare(ctx, "", tempDir)
+		if err == nil {
+			t.Fatal("expected error for empty image path")
+		}
+	})
+
+	t.Run("nonexistent_path", func(t *testing.T) {
+		_, err := NormalizeCoverArtToSquare(ctx, filepath.Join(tempDir, "nonexistent.jpg"), tempDir)
+		if err == nil {
+			t.Fatal("expected error for nonexistent image path")
+		}
+	})
+
+	t.Run("crops_16_9_to_1_1_square", func(t *testing.T) {
+		// Generate 1280x720 16:9 test image
+		input16x9 := filepath.Join(tempDir, "test_16_9.jpg")
+		genCmd := exec.CommandContext(ctx, "ffmpeg", "-v", "quiet", "-hide_banner", "-y", "-f", "lavfi", "-i", "color=c=red:s=1280x720", "-frames:v", "1", input16x9)
+		if err := genCmd.Run(); err != nil {
+			t.Skipf("ffmpeg not available: %v", err)
+		}
+
+		squarePath, err := NormalizeCoverArtToSquare(ctx, input16x9, tempDir)
+		if err != nil {
+			t.Fatalf("NormalizeCoverArtToSquare error: %v", err)
+		}
+		if squarePath == input16x9 {
+			t.Fatalf("expected new square file, got original path %s", squarePath)
+		}
+
+		// Verify square dimensions using ffprobe
+		probeCmd := exec.CommandContext(ctx, "ffprobe", "-v", "error", "-show_entries", "stream=width,height", "-of", "json", squarePath)
+		out, err := probeCmd.Output()
+		if err != nil {
+			t.Fatalf("ffprobe error: %v", err)
+		}
+
+		var data struct {
+			Streams []struct {
+				Width  int `json:"width"`
+				Height int `json:"height"`
+			} `json:"streams"`
+		}
+		if err := json.Unmarshal(out, &data); err != nil || len(data.Streams) == 0 {
+			t.Fatalf("parsing ffprobe json: %v", err)
+		}
+
+		if data.Streams[0].Width != 1400 || data.Streams[0].Height != 1400 {
+			t.Errorf("expected 1400x1400 dimensions, got %dx%d", data.Streams[0].Width, data.Streams[0].Height)
+		}
+	})
+}

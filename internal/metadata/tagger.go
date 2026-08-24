@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -16,6 +17,37 @@ import (
 
 func init() {
 	ffmpeg.LogCompiledCommand = false
+}
+
+// NormalizeCoverArtToSquare center-crops and scales any input image to a 1:1 square (1400x1400) JPEG.
+func NormalizeCoverArtToSquare(ctx context.Context, inputImagePath, outDir string) (string, error) {
+	if inputImagePath == "" {
+		return "", fmt.Errorf("empty input image path")
+	}
+	if _, err := os.Stat(inputImagePath); err != nil {
+		return inputImagePath, err
+	}
+
+	squarePath := filepath.Join(outDir, fmt.Sprintf("square_cover_%d.jpg", time.Now().UnixNano()))
+	cmdCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(cmdCtx, "ffmpeg",
+		"-v", "quiet",
+		"-hide_banner",
+		"-y",
+		"-i", inputImagePath,
+		"-vf", "crop='min(iw,ih)':'min(iw,ih)',scale=1400:1400",
+		"-q:v", "2",
+		squarePath,
+	)
+	if err := cmd.Run(); err != nil {
+		return inputImagePath, err
+	}
+	if stat, err := os.Stat(squarePath); err == nil && stat.Size() > 0 {
+		return squarePath, nil
+	}
+	return inputImagePath, nil
 }
 
 // ApplyMetadataToLocalTrack embeds metadata and high-res cover art into the M4A file
@@ -89,9 +121,22 @@ func ApplyMetadataToLocalTrack(ctx context.Context, filePath string, metadata Tr
 		}
 	}
 
+	// Normalize cover art to 1:1 square 1400x1400
+	var finalCoverPath string
+	if coverTempPath != "" {
+		if squarePath, err := NormalizeCoverArtToSquare(ctx, coverTempPath, tmpDir); err == nil {
+			finalCoverPath = squarePath
+		} else {
+			finalCoverPath = coverTempPath
+		}
+	}
+
 	defer func() {
-		if coverTempPath != "" {
+		if coverTempPath != "" && strings.HasPrefix(coverTempPath, tmpDir) {
 			_ = os.Remove(coverTempPath)
+		}
+		if finalCoverPath != "" && finalCoverPath != coverTempPath {
+			_ = os.Remove(finalCoverPath)
 		}
 		_ = os.Remove(tmpDir)
 		if !dotTmpExisted {
@@ -165,9 +210,9 @@ func ApplyMetadataToLocalTrack(ctx context.Context, filePath string, metadata Tr
 	}
 
 	var err error
-	if coverTempPath != "" {
+	if finalCoverPath != "" {
 		audioStream := ffmpeg.Input(filePath)
-		coverStream := ffmpeg.Input(coverTempPath)
+		coverStream := ffmpeg.Input(finalCoverPath)
 
 		kwArgs["map"] = []string{"0:a:0", "1:v:0"}
 		kwArgs["c:a"] = "copy"
@@ -205,10 +250,11 @@ func ApplyMetadataToLocalTrack(ctx context.Context, filePath string, metadata Tr
 		if errRead != nil {
 			return filePath, fmt.Errorf("reading temp tagged file: %w", errRead)
 		}
-		if errWrite := os.WriteFile(finalPath, input, 0644); errWrite != nil {
+		if errWrite := os.WriteFile(finalPath, input, 0644); errWrite == nil {
+			_ = os.Remove(tmpTaggedPath)
+		} else {
 			return filePath, fmt.Errorf("writing final tagged file: %w", errWrite)
 		}
-		_ = os.Remove(tmpTaggedPath)
 	}
 
 	return finalPath, nil
