@@ -1,4 +1,5 @@
 set dotenv-load := false
+set positional-arguments
 
 # Default recipe: list available recipes
 default:
@@ -6,15 +7,15 @@ default:
 
 # Run CLI in human mode (default)
 run *args:
-    go run ./cmd/fetch-track {{args}}
+    go run ./cmd/fetch-track "$@"
 
 # Run CLI in agent-facing token-conservative mode
 run-ai *args:
-    AGENT=1 go run ./cmd/fetch-track {{args}}
+    AGENT=1 go run ./cmd/fetch-track "$@"
 
 # Run stand-alone DJ audio quality verification
 verify *args:
-    go run ./cmd/fetch-track verify {{args}}
+    go run ./cmd/fetch-track verify "$@"
 
 # Run all unit tests
 test:
@@ -22,6 +23,10 @@ test:
 
 # Lint and static check
 lint:
+    go vet ./...
+
+# Static code analysis (alias for lint)
+vet:
     go vet ./...
 
 # Run static checks and test suite in sequence
@@ -48,4 +53,4 @@ clean:
 
 # Run out-of-band socket progress demo
 demo-progress *args:
-    ./scripts/demo-progress-socket.sh {{args}}
+    ./scripts/demo-progress-socket.sh "$@"

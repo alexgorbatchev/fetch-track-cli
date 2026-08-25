@@ -116,6 +116,28 @@ func ApplyMetadataToLocalTrack(ctx context.Context, filePath string, metadata Tr
 			}
 			cancel()
 		}
+		if coverTempPath == "" {
+			// Check if input audio file has an embedded video / thumbnail stream from download
+			extractedPath := filepath.Join(tmpDir, fmt.Sprintf("extracted_%d.jpg", time.Now().UnixNano()))
+			extCtx, extCancel := context.WithTimeout(ctx, 10*time.Second)
+			extCmd := exec.CommandContext(extCtx, "ffmpeg",
+				"-v", "quiet",
+				"-hide_banner",
+				"-y",
+				"-i", filePath,
+				"-an",
+				"-vcodec", "copy",
+				extractedPath,
+			)
+			if errExt := extCmd.Run(); errExt == nil {
+				if stat, errStat := os.Stat(extractedPath); errStat == nil && stat.Size() > 0 {
+					coverTempPath = extractedPath
+				} else {
+					_ = os.Remove(extractedPath)
+				}
+			}
+			extCancel()
+		}
 	}
 
 	// Normalize cover art to 1:1 square 1400x1400

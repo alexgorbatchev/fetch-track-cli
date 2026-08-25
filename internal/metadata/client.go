@@ -364,6 +364,42 @@ func (c *Client) FetchFromShazam(ctx context.Context, filePath string) (*TrackMe
 			coverArtURL = track.Images["coverarthq"]
 		} else if track.Images["coverart"] != "" {
 			coverArtURL = track.Images["coverart"]
+		} else if track.Images["background"] != "" {
+			coverArtURL = track.Images["background"]
+		}
+	}
+	if coverArtURL == "" && track.Share.Image != "" {
+		coverArtURL = track.Share.Image
+	}
+	if coverArtURL == "" && track.Share.Avatar != "" {
+		coverArtURL = track.Share.Avatar
+	}
+	if coverArtURL == "" && track.Hub.Image != "" {
+		coverArtURL = track.Hub.Image
+	}
+	if coverArtURL == "" {
+		for _, opt := range track.Hub.Options {
+			if opt.Image != "" {
+				coverArtURL = opt.Image
+				break
+			}
+		}
+	}
+	if coverArtURL == "" {
+		for _, sec := range track.Sections {
+			if sec.Avatar != "" {
+				coverArtURL = sec.Avatar
+				break
+			}
+			for _, page := range sec.MetaPages {
+				if page.Image != "" {
+					coverArtURL = page.Image
+					break
+				}
+			}
+			if coverArtURL != "" {
+				break
+			}
 		}
 	}
 
@@ -648,6 +684,21 @@ func (c *Client) ResolveTrackMetadata(ctx context.Context, audioFilePath, search
 				fmt.Printf("metadata acoustic: probing %s via Shazam\n", audioFilePath)
 			}
 			if res, err := c.FetchFromShazam(ctx, audioFilePath); err == nil && res.Title != "" && res.Artist != "" {
+				if res.CoverArtURL == "" {
+					search := fmt.Sprintf("%s %s", res.Artist, res.Title)
+					if itunesRes, itunesErr := c.FetchFromITunes(ctx, search, res.Title); itunesErr == nil && itunesRes.CoverArtURL != "" {
+						res.CoverArtURL = itunesRes.CoverArtURL
+						if res.Album == "DJ Collection" && itunesRes.Album != "" {
+							res.Album = itunesRes.Album
+						}
+						if res.ReleaseYear == "" && itunesRes.ReleaseYear != "" {
+							res.ReleaseYear = itunesRes.ReleaseYear
+							res.ReleaseDate = itunesRes.ReleaseDate
+						}
+					} else if mbRes, mbErr := c.FetchFromMusicBrainz(ctx, search, res.Title); mbErr == nil && mbRes.CoverArtURL != "" {
+						res.CoverArtURL = mbRes.CoverArtURL
+					}
+				}
 				if isVerbose {
 					fmt.Printf("shazam match: %q (Album: %s, %s)\n", res.Artist+" - "+res.Title, res.Album, res.ReleaseYear)
 					if res.CoverArtURL != "" {
@@ -663,6 +714,21 @@ func (c *Client) ResolveTrackMetadata(ctx context.Context, audioFilePath, search
 			}
 
 			if res, err := c.FetchFromAcoustID(ctx, audioFilePath); err == nil && res.Title != "" && res.Artist != "" {
+				if res.CoverArtURL == "" {
+					search := fmt.Sprintf("%s %s", res.Artist, res.Title)
+					if itunesRes, itunesErr := c.FetchFromITunes(ctx, search, res.Title); itunesErr == nil && itunesRes.CoverArtURL != "" {
+						res.CoverArtURL = itunesRes.CoverArtURL
+						if res.Album == "DJ Collection" && itunesRes.Album != "" {
+							res.Album = itunesRes.Album
+						}
+						if res.ReleaseYear == "" && itunesRes.ReleaseYear != "" {
+							res.ReleaseYear = itunesRes.ReleaseYear
+							res.ReleaseDate = itunesRes.ReleaseDate
+						}
+					} else if mbRes, mbErr := c.FetchFromMusicBrainz(ctx, search, res.Title); mbErr == nil && mbRes.CoverArtURL != "" {
+						res.CoverArtURL = mbRes.CoverArtURL
+					}
+				}
 				if isVerbose {
 					fmt.Printf("acoustid match: %q (Album: %s, %s)\n", res.Artist+" - "+res.Title, res.Album, res.ReleaseYear)
 					if res.CoverArtURL != "" {
