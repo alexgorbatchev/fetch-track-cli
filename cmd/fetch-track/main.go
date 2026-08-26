@@ -12,6 +12,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	cobrahelptree "github.com/alexgorbatchev/cobra-help-tree"
 	"github.com/dj/fetch-track-cli/internal/cache"
 	"github.com/dj/fetch-track-cli/internal/deps"
 	"github.com/dj/fetch-track-cli/internal/pipeline"
@@ -37,14 +38,27 @@ var (
 
 func newRootCommand() *cobra.Command {
 	rootCmd := &cobra.Command{
-		Use:          "fetch-track <youtube_url_or_search_query>",
+		Use:          "fetch-track <url|query>",
 		Short:        "Fetch and verify high-quality single tracks for DJ collections",
 		Version:      version,
 		SilenceUsage: true,
-		Long: `fetch-track is a CLI tool designed for DJ collections.
-It searches configured sources (YouTube, SoundCloud, Bandcamp) in parallel for full/extended DJ mixes,
-inspects track candidates concurrently for audio bandwidth and track length, downloads native audio streams,
-performs spectral bandwidth & loudness analysis, and enriches files with 1400x1400 cover art.`,
+		Long: `fetch-track is a CLI tool designed for DJ collections to discover, inspect, download, and manage high-fidelity single audio tracks in native formats.
+
+When a URL is provided, fetch-track inspects the link and downloads the native audio stream while searching across configured sources for higher-fidelity extended mixes. Supported direct streaming platforms include:
+  - YouTube (https://www.youtube.com/watch?v=..., https://youtu.be/...)
+  - SoundCloud (https://soundcloud.com/...)
+  - Bandcamp (https://artist.bandcamp.com/track/...)
+  - Mixcloud (https://mixcloud.com/...)
+  - Any audio/video URL supported by yt-dlp backend extraction (http:// / https://)
+
+When a query is provided, fetch-track executes the full acquisition pipeline:
+  - Searches configured sources (YouTube, SoundCloud, Bandcamp) in parallel
+  - Prioritizes full-length extended, original, club, or dub DJ mixes
+  - Concurrently inspects candidates for audio bandwidth and track duration
+  - Downloads native high-bitrate audio streams with zero lossy transcoding
+  - Performs Goertzel spectral frequency analysis and computes mixer gain offset
+  - Identifies tracks via acoustic fingerprinting (Shazam/AcoustID) with API fallbacks
+  - Enriches audio files with canonical metadata and 1400x1400 square cover art`,
 		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 {
@@ -93,7 +107,7 @@ performs spectral bandwidth & loudness analysis, and enriches files with 1400x14
 				Interactive:      interactive,
 				NoCache:          noCache,
 				Verbose:          verbose,
-				IsAgent:          pipeline.IsAgentMode(),
+				IsAgent:          deps.IsAgentMode(),
 				AutoInstall:      autoInstall,
 				ProgressReporter: reporter,
 			}
@@ -115,7 +129,7 @@ performs spectral bandwidth & loudness analysis, and enriches files with 1400x14
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output logging")
 
 	verifyCmd := &cobra.Command{
-		Use:          "verify <file_path_or_url>",
+		Use:          "verify <url|path>",
 		Short:        "Run DJ audio quality and spectrum inspection on a track file or URL",
 		SilenceUsage: true,
 		Args:         cobra.ArbitraryArgs,
@@ -124,7 +138,7 @@ performs spectral bandwidth & loudness analysis, and enriches files with 1400x14
 				return cmd.Help()
 			}
 			target := strings.Join(args, " ")
-			isAgent := pipeline.IsAgentMode()
+			isAgent := deps.IsAgentMode()
 
 			if err := ensureDependencies(cmd.Context()); err != nil {
 				if isAgent {
@@ -201,7 +215,7 @@ performs spectral bandwidth & loudness analysis, and enriches files with 1400x14
 		Short:        "Verify required external binary dependencies (yt-dlp, ffmpeg, ffprobe)",
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			isAgent := pipeline.IsAgentMode()
+			isAgent := deps.IsAgentMode()
 			reports, err := deps.VerifyDependencies(cmd.Context())
 
 			if isAgent {
@@ -241,7 +255,7 @@ performs spectral bandwidth & loudness analysis, and enriches files with 1400x14
 	}
 
 	depsInstallCmd := &cobra.Command{
-		Use:          "install [dependency...]",
+		Use:          "install [dep...]",
 		Aliases:      []string{"add", "get"},
 		Short:        "Install missing external dependencies (yt-dlp, ffmpeg, ffprobe)",
 		SilenceUsage: true,
@@ -273,7 +287,7 @@ performs spectral bandwidth & loudness analysis, and enriches files with 1400x14
 	}
 
 	depsUpdateCmd := &cobra.Command{
-		Use:          "update [dependency...]",
+		Use:          "update [dep...]",
 		Aliases:      []string{"upgrade"},
 		Short:        "Update external dependencies to their latest versions",
 		SilenceUsage: true,
@@ -326,6 +340,8 @@ performs spectral bandwidth & loudness analysis, and enriches files with 1400x14
 	rootCmd.AddCommand(verifyCmd)
 	rootCmd.AddCommand(depsCmd)
 	rootCmd.AddCommand(upgradeCmd)
+
+	cobrahelptree.Setup(rootCmd)
 
 	return rootCmd
 }

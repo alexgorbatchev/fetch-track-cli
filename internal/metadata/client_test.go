@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -648,6 +649,115 @@ func TestFetchFromShazam(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("shazam_alternate_image_fields", func(t *testing.T) {
+		tests := []struct {
+			name     string
+			trackJSON string
+			wantURL  string
+		}{
+			{
+				name: "background_image",
+				trackJSON: `{
+					"title": "Track 1",
+					"images": {"background": "https://images.shazam.com/bg/400x400cc.jpg"}
+				}`,
+				wantURL: "https://images.shazam.com/bg/1400x1400cc.jpg",
+			},
+			{
+				name: "share_image",
+				trackJSON: `{
+					"title": "Track 2",
+					"share": {"image": "https://images.shazam.com/share.jpg"}
+				}`,
+				wantURL: "https://images.shazam.com/share.jpg",
+			},
+			{
+				name: "share_avatar",
+				trackJSON: `{
+					"title": "Track 3",
+					"share": {"avatar": "https://images.shazam.com/share-avatar.jpg"}
+				}`,
+				wantURL: "https://images.shazam.com/share-avatar.jpg",
+			},
+			{
+				name: "hub_image",
+				trackJSON: `{
+					"title": "Track 4",
+					"hub": {"image": "https://images.shazam.com/hub.jpg"}
+				}`,
+				wantURL: "https://images.shazam.com/hub.jpg",
+			},
+			{
+				name: "hub_options_image",
+				trackJSON: `{
+					"title": "Track 5",
+					"hub": {"options": [{"image": "https://images.shazam.com/hub-opt.jpg"}]}
+				}`,
+				wantURL: "https://images.shazam.com/hub-opt.jpg",
+			},
+			{
+				name: "sections_avatar",
+				trackJSON: `{
+					"title": "Track 6",
+					"sections": [{"avatar": "https://images.shazam.com/sec-avatar.jpg"}]
+				}`,
+				wantURL: "https://images.shazam.com/sec-avatar.jpg",
+			},
+			{
+				name: "sections_metapages_image",
+				trackJSON: `{
+					"title": "Track 7",
+					"sections": [{"metapages": [{"image": "https://images.shazam.com/sec-meta.jpg"}]}]
+				}`,
+				wantURL: "https://images.shazam.com/sec-meta.jpg",
+			},
+		}
+
+		realAudioPath := filepath.Join(tempDir, "real_alt.m4a")
+		_, _ = defaultRunner(ctx, "ffmpeg", "-v", "quiet", "-hide_banner", "-f", "lavfi", "-i", "anullsrc=r=16000:cl=mono", "-t", "1", "-y", realAudioPath)
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				client := newMockClient(func(req *http.Request) (*http.Response, error) {
+					return &http.Response{
+						StatusCode: http.StatusOK,
+						Body: io.NopCloser(bytes.NewBufferString(fmt.Sprintf(`{
+							"matches": [{"id": "123"}],
+							"track": %s
+						}`, tt.trackJSON))),
+					}, nil
+				})
+
+				res, err := client.FetchFromShazam(ctx, realAudioPath)
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if res.CoverArtURL != tt.wantURL {
+					t.Errorf("CoverArtURL = %q, want %q", res.CoverArtURL, tt.wantURL)
+				}
+			})
+		}
+	})
+
+	t.Run("shazam_empty_track_match", func(t *testing.T) {
+		client := newMockClient(func(req *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(`{"matches": []}`)),
+			}, nil
+		})
+
+		realAudioPath := filepath.Join(tempDir, "real_empty.m4a")
+		_, _ = defaultRunner(ctx, "ffmpeg", "-v", "quiet", "-hide_banner", "-f", "lavfi", "-i", "anullsrc=r=16000:cl=mono", "-t", "1", "-y", realAudioPath)
+
+		if _, err := os.Stat(realAudioPath); err == nil {
+			_, err := client.FetchFromShazam(ctx, realAudioPath)
+			if err == nil {
+				t.Fatal("expected error for empty shazam matches")
+			}
+		}
+	})
 }
 
 func TestResolveTrackMetadataFallback(t *testing.T) {
@@ -803,6 +913,130 @@ func TestResolveTrackMetadata_AllBranches(t *testing.T) {
 			if !strings.Contains(res.CoverArtURL, "1400x1400cc.jpg") {
 				t.Errorf("CoverArtURL = %q", res.CoverArtURL)
 			}
+		}
+	})
+
+	// 2b. Test Shazam Match branch when Shazam has no art and falls back to iTunes
+	t.Run("shazam_match_no_art_itunes_fallback", func(t *testing.T) {
+		realAudioPath := filepath.Join(tempDir, "real_shazam_noart.m4a")
+		_, _ = defaultRunner(context.Background(), "ffmpeg", "-v", "quiet", "-hide_banner", "-f", "lavfi", "-i", "anullsrc=r=16000:cl=mono", "-t", "1", "-y", realAudioPath)
+
+		clientShazam := newMockClient(func(req *http.Request) (*http.Response, error) {
+			if strings.Contains(req.URL.Host, "shazam.com") {
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Body: io.NopCloser(bytes.NewBufferString(`{
+						"matches": [{"id": "1"}],
+						"track": {
+							"title": "NoArt Track",
+							"subtitle": "NoArt Artist"
+						}
+					}`)),
+				}, nil
+			}
+			if strings.Contains(req.URL.Host, "itunes.apple.com") {
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Body: io.NopCloser(bytes.NewBufferString(`{
+						"results": [
+							{
+								"trackName": "NoArt Track",
+								"artistName": "NoArt Artist",
+								"collectionName": "Enriched Album",
+								"releaseDate": "2024-06-01",
+								"artworkUrl100": "https://img.example.com/100x100bb.jpg"
+							}
+						]
+					}`)),
+				}, nil
+			}
+			return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(bytes.NewBufferString(`{}`))}, nil
+		})
+		clientShazam.SetRunner(func(ctx context.Context, name string, args ...string) ([]byte, error) {
+			return nil, errors.New("acoustid failed")
+		})
+
+		if _, err := os.Stat(realAudioPath); err == nil {
+			res := clientShazam.ResolveTrackMetadata(context.Background(), realAudioPath, "NoArt Track", "NoArt Artist", "NoArt Track", true)
+			if res.Source != "Shazam API" {
+				t.Errorf("Source = %q, want Shazam API", res.Source)
+			}
+			if res.Album != "Enriched Album" {
+				t.Errorf("Album = %q, want Enriched Album", res.Album)
+			}
+			if res.ReleaseYear != "2024" {
+				t.Errorf("ReleaseYear = %q, want 2024", res.ReleaseYear)
+			}
+			if !strings.Contains(res.CoverArtURL, "1400x1400bb.jpg") {
+				t.Errorf("CoverArtURL = %q", res.CoverArtURL)
+			}
+		}
+	})
+
+	// 2c. Test AcoustID Match branch when AcoustID has no art and falls back to MusicBrainz
+	t.Run("acoustid_match_no_art_musicbrainz_fallback", func(t *testing.T) {
+		clientAcoustID := newMockClient(func(req *http.Request) (*http.Response, error) {
+			if strings.Contains(req.URL.Host, "acoustid.org") {
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Body: io.NopCloser(bytes.NewBufferString(`{
+						"status": "ok",
+						"results": [
+							{
+								"score": 0.99,
+								"recordings": [
+									{
+										"id": "mbid-noart",
+										"title": "AcoustID NoArt",
+										"artists": [{"name": "AcoustID Artist"}],
+										"releasegroups": []
+									}
+								]
+							}
+						]
+					}`)),
+				}, nil
+			}
+			if strings.Contains(req.URL.Host, "itunes.apple.com") {
+				return &http.Response{
+					StatusCode: http.StatusNotFound,
+					Body:       io.NopCloser(bytes.NewBufferString(`{"results":[]}`)),
+				}, nil
+			}
+			if strings.Contains(req.URL.Host, "musicbrainz.org") {
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Body: io.NopCloser(bytes.NewBufferString(`{
+						"recordings": [
+							{
+								"title": "AcoustID NoArt",
+								"artist-credit": [{"name": "AcoustID Artist"}],
+								"releases": [{"id": "rel-mb", "title": "MB Album"}]
+							}
+						]
+					}`)),
+				}, nil
+			}
+			if strings.Contains(req.URL.Host, "coverartarchive.org") {
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Body: io.NopCloser(bytes.NewBufferString(`{
+						"images": [{"image": "https://coverartarchive.org/mb-art.jpg"}]
+					}`)),
+				}, nil
+			}
+			return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(bytes.NewBufferString(`{}`))}, nil
+		})
+		clientAcoustID.SetRunner(func(ctx context.Context, name string, args ...string) ([]byte, error) {
+			return syntheticPCM, nil
+		})
+
+		res := clientAcoustID.ResolveTrackMetadata(context.Background(), dummyAudio, "AcoustID NoArt", "AcoustID Artist", "AcoustID NoArt", true)
+		if res.Source != "AcoustID / MusicBrainz" {
+			t.Errorf("Source = %q, want AcoustID / MusicBrainz", res.Source)
+		}
+		if res.CoverArtURL != "https://coverartarchive.org/mb-art.jpg" {
+			t.Errorf("CoverArtURL = %q", res.CoverArtURL)
 		}
 	})
 
@@ -971,3 +1205,78 @@ func TestFetchFromMusicBrainz_AdditionalBranches(t *testing.T) {
 		}
 	})
 }
+
+func TestResolveTrackMetadata_ArtFallbacks(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("itunes_art_fallback_when_shazam_has_no_art", func(t *testing.T) {
+		tempDir := t.TempDir()
+		audioFile := filepath.Join(tempDir, "track.m4a")
+		_ = os.WriteFile(audioFile, []byte("dummy audio"), 0644)
+
+		client := newMockClient(func(req *http.Request) (*http.Response, error) {
+			if strings.Contains(req.URL.String(), "itunes.apple.com") {
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Body: io.NopCloser(bytes.NewBufferString(`{
+						"results": [
+							{
+								"trackName": "Track",
+								"artistName": "Artist",
+								"collectionName": "Album Single",
+								"releaseDate": "2024-01-01",
+								"artworkUrl100": "https://img.example.com/100x100bb.jpg"
+							}
+						]
+					}`)),
+				}, nil
+			}
+			return &http.Response{
+				StatusCode: http.StatusNotFound,
+				Body:       io.NopCloser(bytes.NewBufferString(`{}`)),
+			}, nil
+		})
+
+		res := client.ResolveTrackMetadata(ctx, "", "Track", "Artist", "Track", true)
+		if res.Title != "Track" || res.CoverArtURL == "" {
+			t.Fatalf("expected iTunes art fallback, got res=%+v", res)
+		}
+	})
+
+	t.Run("musicbrainz_art_fallback_when_itunes_fails", func(t *testing.T) {
+		client := newMockClient(func(req *http.Request) (*http.Response, error) {
+			if strings.Contains(req.URL.String(), "musicbrainz.org") {
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Body: io.NopCloser(bytes.NewBufferString(`{
+						"recordings": [
+							{
+								"title": "MB Track",
+								"artist-credit": [{"name": "MB Artist"}],
+								"releases": [{"id": "rel-1", "title": "MB Album", "date": "2023-05-01"}]
+							}
+						]
+					}`)),
+				}, nil
+			}
+			if strings.Contains(req.URL.String(), "coverartarchive.org") {
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Body: io.NopCloser(bytes.NewBufferString(`{
+						"images": [{"image": "https://coverartarchive.org/art.jpg"}]
+					}`)),
+				}, nil
+			}
+			return &http.Response{
+				StatusCode: http.StatusNotFound,
+				Body:       io.NopCloser(bytes.NewBufferString(`{"results":[]}`)),
+			}, nil
+		})
+
+		res := client.ResolveTrackMetadata(ctx, "", "MB Track", "", "MB Track", true)
+		if res.Title != "MB Track" || res.CoverArtURL == "" {
+			t.Fatalf("expected MusicBrainz match and artwork, got %+v", res)
+		}
+	})
+}
+

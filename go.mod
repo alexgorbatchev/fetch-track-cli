@@ -3,6 +3,7 @@ module github.com/dj/fetch-track-cli
 go 1.26.2
 
 require (
+	github.com/alexgorbatchev/cobra-help-tree v1.1.0
 	github.com/alexgorbatchev/gochromaprint v1.6.0
 	github.com/alexgorbatchev/godeps v1.0.0
 	github.com/alexgorbatchev/goshazam v0.8.0
@@ -47,6 +48,6 @@ require (
 	github.com/u2takey/go-utils v0.3.1 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	golang.org/x/sync v0.22.0 // indirect
-	golang.org/x/sys v0.33.0 // indirect
-	golang.org/x/term v0.5.0 // indirect
+	golang.org/x/sys v0.47.0 // indirect
+	golang.org/x/term v0.45.0 // indirect
 )

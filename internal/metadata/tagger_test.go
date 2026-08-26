@@ -285,6 +285,47 @@ func TestApplyMetadataToLocalTrack_WithCoverArt(t *testing.T) {
 	if err == nil {
 		t.Error("expected error for canceled context")
 	}
+
+	// 6. With cache instance hit
+	savedArtPath, _ := c.PutFile("artworks", "https://cached.art/cover.jpg", dummyImg)
+	metaCached := meta
+	metaCached.CoverArtURL = "https://cached.art/cover.jpg"
+	inputPath5 := createDummyAudioFile(t, srcDir, "CoverTrack5.m4a")
+	taggedCached, errCached := ApplyMetadataToLocalTrack(context.Background(), inputPath5, metaCached, outDir, c, true)
+	if errCached != nil {
+		t.Fatalf("ApplyMetadataToLocalTrack with cached artwork failed: %v", errCached)
+	}
+	_ = savedArtPath
+	_ = taggedCached
+
+	// 7. Opus/Ogg format
+	inputPathOpus := createDummyAudioFile(t, srcDir, "Track.opus")
+	metaOpus := meta
+	metaOpus.CoverArtURL = ""
+	taggedOpus, errOpus := ApplyMetadataToLocalTrack(context.Background(), inputPathOpus, metaOpus, outDir)
+	if errOpus != nil {
+		t.Fatalf("ApplyMetadataToLocalTrack with opus failed: %v", errOpus)
+	}
+	_ = taggedOpus
+
+	// 8. Download fails, falls back to embedded thumbnail check
+	inputPath6 := createDummyAudioFile(t, srcDir, "CoverTrack6.m4a")
+	metaFailURL := meta
+	metaFailURL.CoverArtURL = "http://127.0.0.1:0/nonexistent.jpg"
+	tagged6, err6 := ApplyMetadataToLocalTrack(context.Background(), inputPath6, metaFailURL, outDir)
+	if err6 != nil {
+		t.Fatalf("ApplyMetadataToLocalTrack fallback failed: %v", err6)
+	}
+	_ = tagged6
+
+	// 9. Output directory is a file (triggers MkdirAll error)
+	invalidDirFile := filepath.Join(t.TempDir(), "not_a_dir")
+	_ = os.WriteFile(invalidDirFile, []byte("file"), 0644)
+	inputPath7 := createDummyAudioFile(t, srcDir, "CoverTrack7.m4a")
+	_, err7 := ApplyMetadataToLocalTrack(context.Background(), inputPath7, meta, invalidDirFile)
+	if err7 == nil {
+		t.Fatal("expected error when output dir is a file")
+	}
 }
 
 func TestNormalizeCoverArtToSquare(t *testing.T) {

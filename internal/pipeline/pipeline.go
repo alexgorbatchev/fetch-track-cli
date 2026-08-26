@@ -3,7 +3,6 @@ package pipeline
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -33,10 +32,9 @@ type Options struct {
 	ProgressReporter *progress.Reporter
 }
 
-// IsAgentMode checks if the environment variable AGENT=1 is set.
+// IsAgentMode checks if the environment variable AGENT=1 or AGENT=true is set.
 func IsAgentMode() bool {
-	val := strings.ToLower(strings.TrimSpace(os.Getenv("AGENT")))
-	return val == "1" || val == "true" || val == "yes"
+	return deps.IsAgentMode()
 }
 
 // Run executes the full single-track acquisition pipeline.
