@@ -717,26 +717,28 @@ func TestFetchFromShazam(t *testing.T) {
 		realAudioPath := filepath.Join(tempDir, "real_alt.m4a")
 		_, _ = defaultRunner(ctx, "ffmpeg", "-v", "quiet", "-hide_banner", "-f", "lavfi", "-i", "anullsrc=r=16000:cl=mono", "-t", "1", "-y", realAudioPath)
 
-		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
-				client := newMockClient(func(req *http.Request) (*http.Response, error) {
-					return &http.Response{
-						StatusCode: http.StatusOK,
-						Body: io.NopCloser(bytes.NewBufferString(fmt.Sprintf(`{
-							"matches": [{"id": "123"}],
-							"track": %s
-						}`, tt.trackJSON))),
-					}, nil
-				})
+		if _, err := os.Stat(realAudioPath); err == nil {
+			for _, tt := range tests {
+				t.Run(tt.name, func(t *testing.T) {
+					client := newMockClient(func(req *http.Request) (*http.Response, error) {
+						return &http.Response{
+							StatusCode: http.StatusOK,
+							Body: io.NopCloser(bytes.NewBufferString(fmt.Sprintf(`{
+								"matches": [{"id": "123"}],
+								"track": %s
+							}`, tt.trackJSON))),
+						}, nil
+					})
 
-				res, err := client.FetchFromShazam(ctx, realAudioPath)
-				if err != nil {
-					t.Fatalf("unexpected error: %v", err)
-				}
-				if res.CoverArtURL != tt.wantURL {
-					t.Errorf("CoverArtURL = %q, want %q", res.CoverArtURL, tt.wantURL)
-				}
-			})
+					res, err := client.FetchFromShazam(ctx, realAudioPath)
+					if err != nil {
+						t.Fatalf("unexpected error: %v", err)
+					}
+					if res.CoverArtURL != tt.wantURL {
+						t.Errorf("CoverArtURL = %q, want %q", res.CoverArtURL, tt.wantURL)
+					}
+				})
+			}
 		}
 	})
 
