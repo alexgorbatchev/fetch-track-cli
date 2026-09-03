@@ -15,7 +15,7 @@ import (
 	"github.com/dj/fetch-track-cli/internal/cache"
 	"github.com/dj/fetch-track-cli/internal/deps"
 	"github.com/dj/fetch-track-cli/internal/downloader"
-	"github.com/dj/fetch-track-cli/internal/metadata"
+	"github.com/dj/fetch-track-cli/internal/pipeline"
 )
 
 func createTestAudio(t *testing.T, dir, filename string) string {
@@ -38,10 +38,22 @@ func setupMainTestEnv(t *testing.T) (string, func()) {
 	_ = c.Put("deps", "yt-dlp", "2026.08.01", time.Hour)
 	_ = c.Put("deps", "ffmpeg", "ffmpeg version 8.1.2", time.Hour)
 	_ = c.Put("deps", "ffprobe", "ffprobe version 8.1.2", time.Hour)
+	_ = c.Put("deps", "tag-track", "1.0.0", time.Hour)
 
 	cleanupDeps := deps.SetDefaultRunner(func(ctx context.Context, name string, args ...string) ([]byte, error) {
 		if name == "yt-dlp" {
 			return []byte("2026.08.01"), nil
+		}
+		if name == "tag-track" {
+			for i, arg := range args {
+				if arg == "-o" && i+1 < len(args) {
+					outD := args[i+1]
+					filePath := filepath.Join(outD, "Boris Brejcha - Space X.m4a")
+					_ = os.WriteFile(filePath, []byte("audio"), 0644)
+					return []byte(fmt.Sprintf("output: %s\ntitle: Space X\nartist: Boris Brejcha\nalbum: Level One\nyear: 2024\nsource: iTunes API\nDONE: %s\n", filePath, filePath)), nil
+				}
+			}
+			return []byte("1.0.0"), nil
 		}
 		return []byte(fmt.Sprintf("%s version 8.1.2", name)), nil
 	})
@@ -177,6 +189,7 @@ func TestDepsCommand_Failure(t *testing.T) {
 	_ = c.Delete("deps", "yt-dlp")
 	_ = c.Delete("deps", "ffmpeg")
 	_ = c.Delete("deps", "ffprobe")
+	_ = c.Delete("deps", "tag-track")
 
 	cleanupFail := deps.SetDefaultRunner(func(ctx context.Context, name string, args ...string) ([]byte, error) {
 		return nil, errors.New("missing")
@@ -216,6 +229,7 @@ func TestDepsInstallCommand(t *testing.T) {
 	_ = c.Delete("deps", "yt-dlp")
 	_ = c.Delete("deps", "ffmpeg")
 	_ = c.Delete("deps", "ffprobe")
+	_ = c.Delete("deps", "tag-track")
 
 	cmdMissing := newRootCommand()
 	cmdMissing.SetArgs([]string{"deps", "install"})
@@ -243,18 +257,10 @@ func TestDepsUpdateCommand(t *testing.T) {
 	defer cleanupEnv()
 	_ = tempCacheDir
 
-	cmd := newRootCommand()
-	cmd.SetArgs([]string{"deps", "update"})
-
-	err := cmd.Execute()
-	if err != nil {
-		t.Fatalf("deps update error = %v", err)
-	}
-
 	// Specific dep arg
 	cmd2 := newRootCommand()
 	cmd2.SetArgs([]string{"deps", "update", "ffmpeg"})
-	err = cmd2.Execute()
+	err := cmd2.Execute()
 	if err != nil {
 		t.Fatalf("deps update specific error = %v", err)
 	}
@@ -353,7 +359,7 @@ func TestRootCommand_Execution(t *testing.T) {
 
 	outDir := t.TempDir()
 	c := cache.NewInDir(filepath.Join(tempCacheDir, "fetch-track"), true)
-	metaRes := metadata.TrackMetadataResult{
+	metaRes := pipeline.TrackMetadataResult{
 		Title:       "Space X",
 		Artist:      "Boris Brejcha",
 		Album:       "Space X Single",
@@ -433,16 +439,20 @@ func TestEnsureDependencies_Branches(t *testing.T) {
 	_ = c.Delete("deps", "yt-dlp")
 	_ = c.Delete("deps", "ffmpeg")
 	_ = c.Delete("deps", "ffprobe")
+	_ = c.Delete("deps", "tag-track")
 
 	var callCount int
 	dynamicRunner := func(ctx context.Context, name string, args ...string) ([]byte, error) {
 		callCount++
-		if callCount <= 3 {
+		if callCount <= len(deps.RequiredDependencies) {
 			// Report missing on first verify
 			return nil, errors.New("not found")
 		}
 		if name == "yt-dlp" {
 			return []byte("2026.08.01"), nil
+		}
+		if name == "tag-track" {
+			return []byte("1.0.0"), nil
 		}
 		return []byte(fmt.Sprintf("%s version 8.1.2", name)), nil
 	}
@@ -463,6 +473,7 @@ func TestEnsureDependencies_Branches(t *testing.T) {
 	_ = c.Delete("deps", "yt-dlp")
 	_ = c.Delete("deps", "ffmpeg")
 	_ = c.Delete("deps", "ffprobe")
+	_ = c.Delete("deps", "tag-track")
 	autoInstall = true
 	_ = ensureDependencies(ctx)
 	autoInstall = false
@@ -471,6 +482,7 @@ func TestEnsureDependencies_Branches(t *testing.T) {
 	_ = c.Delete("deps", "yt-dlp")
 	_ = c.Delete("deps", "ffmpeg")
 	_ = c.Delete("deps", "ffprobe")
+	_ = c.Delete("deps", "tag-track")
 	stdinReader = strings.NewReader("y\n")
 	_ = ensureDependencies(ctx)
 
@@ -478,6 +490,7 @@ func TestEnsureDependencies_Branches(t *testing.T) {
 	_ = c.Delete("deps", "yt-dlp")
 	_ = c.Delete("deps", "ffmpeg")
 	_ = c.Delete("deps", "ffprobe")
+	_ = c.Delete("deps", "tag-track")
 	stdinReader = strings.NewReader("n\n")
 	_ = ensureDependencies(ctx)
 
@@ -487,6 +500,7 @@ func TestEnsureDependencies_Branches(t *testing.T) {
 	_ = c.Delete("deps", "yt-dlp")
 	_ = c.Delete("deps", "ffmpeg")
 	_ = c.Delete("deps", "ffprobe")
+	_ = c.Delete("deps", "tag-track")
 	stdinReader = strings.NewReader("yes\n")
 	_ = ensureDependencies(ctx)
 

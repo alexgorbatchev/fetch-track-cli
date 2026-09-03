@@ -109,6 +109,7 @@ When a query is provided, fetch-track executes the full acquisition pipeline:
 				Verbose:          verbose,
 				IsAgent:          deps.IsAgentMode(),
 				AutoInstall:      autoInstall,
+				ProgressTarget:   targetURI,
 				ProgressReporter: reporter,
 			}
 			return pipeline.Run(cmd.Context(), target, opts)
@@ -121,6 +122,8 @@ When a query is provided, fetch-track executes the full acquisition pipeline:
 	rootCmd.Flags().StringVarP(&sourcesFlag, "sources", "s", "youtube,soundcloud", "Comma-separated list of sources to search in parallel")
 	rootCmd.Flags().BoolVar(&skipVerify, "skip-verify", false, "Skip DJ audio quality and spectrum inspection")
 	rootCmd.Flags().BoolVar(&skipMetadata, "skip-metadata", false, "Skip metadata lookup and high-res cover art tagging")
+	rootCmd.Flags().BoolVar(&skipMetadata, "no-metadata", false, "Alias for --skip-metadata")
+	_ = rootCmd.Flags().MarkHidden("no-metadata")
 	rootCmd.Flags().BoolVarP(&interactive, "interactive", "i", false, "Interactively approve or choose track candidate before downloading")
 	rootCmd.Flags().BoolVar(&noCache, "no-cache", false, "Disable local caching for search queries, metadata, and artwork")
 	rootCmd.Flags().StringVar(&progressTarget, "progress-target", "", "Target URI/address for streaming JSON progress events (e.g. unix:///path/to.sock, tcp://127.0.0.1:9099, fd://3, stdout, stderr)")
@@ -323,16 +326,27 @@ When a query is provided, fetch-track executes the full acquisition pipeline:
 		Short:        "Upgrade fetch-track CLI binary to the latest released version",
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Printf("Checking for newer fetch-track release (current version: %s)...\n", version)
+			isAgent := deps.IsAgentMode()
+			if !isAgent {
+				fmt.Printf("Checking for newer fetch-track release (current version: %s)...\n", version)
+			}
 			latestVer, err := deps.UpgradeSelf(cmd.Context(), version)
 			if err != nil {
 				if strings.Contains(err.Error(), "already at the latest version") {
-					fmt.Printf("fetch-track is already up to date (version %s).\n", version)
+					if isAgent {
+						fmt.Printf("upgrade: current\nversion: %s\n", version)
+					} else {
+						fmt.Printf("fetch-track is already up to date (version %s).\n", version)
+					}
 					return nil
 				}
 				return fmt.Errorf("upgrade failed: %w", err)
 			}
-			fmt.Printf("Successfully upgraded fetch-track to version %s!\n", latestVer)
+			if isAgent {
+				fmt.Printf("upgrade: ok\nversion: %s\n", latestVer)
+			} else {
+				fmt.Printf("Successfully upgraded fetch-track to version %s!\n", latestVer)
+			}
 			return nil
 		},
 	}
@@ -399,12 +413,14 @@ func ensureDependencies(ctx context.Context) error {
 	}
 
 	if autoInstall {
-		fmt.Printf("Auto-installing missing dependencies: %s...\n", strings.Join(missing, ", "))
+		if !deps.IsAgentMode() {
+			fmt.Printf("Auto-installing missing dependencies: %s...\n", strings.Join(missing, ", "))
+		}
 		installed, installErr := deps.InstallMissingDependencies(ctx)
 		if installErr != nil {
 			return fmt.Errorf("auto-installing dependencies: %w", installErr)
 		}
-		if len(installed) > 0 {
+		if len(installed) > 0 && !deps.IsAgentMode() {
 			fmt.Printf("Successfully installed: %s\n", strings.Join(installed, ", "))
 		}
 		return nil

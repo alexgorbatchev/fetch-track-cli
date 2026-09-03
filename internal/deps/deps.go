@@ -46,7 +46,8 @@ func SetDefaultRunner(runner CommandRunner) func() {
 	}
 }
 
-func getRunner() CommandRunner {
+// GetRunner returns the active CommandRunner.
+func GetRunner() CommandRunner {
 	defaultRunnerMu.Lock()
 	defer defaultRunnerMu.Unlock()
 	if currentRunner == nil {
@@ -81,6 +82,14 @@ var RequiredDependencies = []Dependency{
 		ParseVersion: ParseVersionOutput,
 		Installer:    &pkgInstaller{pkgName: "ffmpeg"},
 	},
+	{
+		Name:         "tag-track",
+		MinVersion:   "0.1.0",
+		InstallURL:   "https://github.com/alexgorbatchev/tag-track-cli#installation",
+		VersionArgs:  []string{"--version"},
+		ParseVersion: ParseVersionOutput,
+		Installer:    godeps.GitHubReleaseGoBinary("alexgorbatchev", "tag-track-cli", "tag-track"),
+	},
 }
 
 type ytDlpInstaller struct{}
@@ -90,7 +99,7 @@ func (y *ytDlpInstaller) Install(ctx context.Context, targetDir string) error {
 }
 
 func (y *ytDlpInstaller) Update(ctx context.Context, targetDir string) error {
-	return godeps.UpdateYtDlp(ctx, getRunner(), targetDir)
+	return godeps.UpdateYtDlp(ctx, GetRunner(), targetDir)
 }
 
 type pkgInstaller struct {
@@ -98,11 +107,11 @@ type pkgInstaller struct {
 }
 
 func (p *pkgInstaller) Install(ctx context.Context, targetDir string) error {
-	return godeps.InstallPackage(ctx, p.pkgName, getRunner())
+	return godeps.InstallPackage(ctx, p.pkgName, GetRunner())
 }
 
 func (p *pkgInstaller) Update(ctx context.Context, targetDir string) error {
-	return godeps.InstallPackage(ctx, p.pkgName, getRunner())
+	return godeps.InstallPackage(ctx, p.pkgName, GetRunner())
 }
 
 // cacheAdapter adapts internal/cache.Cache to godeps.Cache.
@@ -140,7 +149,7 @@ func (a *cacheAdapter) Delete(key string) error {
 
 // NewManager creates a configured godeps.Manager instance for fetch-track.
 func NewManager(cacheInst *cache.Cache, runner ...CommandRunner) *godeps.Manager {
-	r := getRunner()
+	r := GetRunner()
 	if len(runner) > 0 && runner[0] != nil {
 		r = runner[0]
 	}
@@ -174,7 +183,7 @@ func VerifyDependencies(ctx context.Context, cacheInst ...*cache.Cache) ([]Depen
 	if len(cacheInst) > 0 {
 		c = cacheInst[0]
 	}
-	return VerifyDependenciesWithRunner(ctx, getRunner(), c, RequiredDependencies...)
+	return VerifyDependenciesWithRunner(ctx, GetRunner(), c, RequiredDependencies...)
 }
 
 // VerifyDependenciesWithRunner inspects dependencies using a provided CommandRunner.

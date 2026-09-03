@@ -3,19 +3,31 @@ package pipeline
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
+	"github.com/alexgorbatchev/godeps"
 	"github.com/dj/fetch-track-cli/internal/cache"
 	"github.com/dj/fetch-track-cli/internal/deps"
 	"github.com/dj/fetch-track-cli/internal/downloader"
-	"github.com/dj/fetch-track-cli/internal/metadata"
 	"github.com/dj/fetch-track-cli/internal/progress"
 	"github.com/dj/fetch-track-cli/internal/spinner"
 	"github.com/dj/fetch-track-cli/internal/ui"
 	"github.com/dj/fetch-track-cli/internal/verifier"
 )
+
+// TrackMetadataResult describes metadata received from tag-track.
+type TrackMetadataResult struct {
+	Title       string `json:"title"`
+	Artist      string `json:"artist"`
+	Album       string `json:"album"`
+	Genre       string `json:"genre,omitempty"`
+	ReleaseDate string `json:"releaseDate,omitempty"`
+	ReleaseYear string `json:"releaseYear,omitempty"`
+	CoverArtURL string `json:"coverArtUrl,omitempty"`
+	Source      string `json:"source,omitempty"`
+}
 
 // Options configures the track acquisition pipeline execution.
 type Options struct {
@@ -29,7 +41,9 @@ type Options struct {
 	Verbose          bool
 	IsAgent          bool
 	AutoInstall      bool
+	ProgressTarget   string
 	ProgressReporter *progress.Reporter
+	Runner           deps.CommandRunner
 }
 
 // IsAgentMode checks if the environment variable AGENT=1 or AGENT=true is set.
@@ -292,15 +306,15 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 		fmt.Println("\nStep 3: Skipped DJ Audio Quality & Spectrum Inspection (-skipVerify)")
 	}
 
-	// Step 4: Metadata & High-Res Cover Art Enrichment
+	// Step 4: Metadata & High-Res Cover Art Enrichment via tag-track
 	finalPath := downloadedPath
-	var metaResult *metadata.TrackMetadataResult
+	var metaResult *TrackMetadataResult
 
 	if !opts.SkipMetadata {
 		if !opts.IsAgent {
-			fmt.Println("\nEnriching metadata & cover art via API fallback")
+			fmt.Println("\nEnriching metadata & cover art via tag-track")
 			if sp != nil {
-				sp.Update("working...")
+				sp.Update("working... running tag-track")
 				sp.Start()
 			}
 		}
@@ -310,44 +324,83 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 			Phase:      "metadata",
 			Step:       5,
 			TotalSteps: 5,
-			Message:    "enriching metadata & cover art via API fallback",
+			Message:    "enriching metadata & cover art via tag-track",
 		})
-		ext := filepath.Ext(downloadedFilename)
-		cleanTitle := strings.TrimSuffix(downloadedFilename, ext)
 
-		artist := ""
-		title := cleanTitle
-		if strings.Contains(cleanTitle, " - ") {
-			parts := strings.SplitN(cleanTitle, " - ", 2)
-			artist = strings.TrimSpace(parts[0])
-			title = strings.TrimSpace(parts[1])
+		runner := opts.Runner
+		if runner == nil {
+			runner = deps.GetRunner()
 		}
 
-		metaClient := metadata.NewClient(cacheInst)
-		metaRes := metaClient.ResolveTrackMetadata(ctx, downloadedPath, cleanTitle, artist, title, opts.Verbose)
-		metaRes.AudioSourceURL = targetURL
-		metaRes.FetchedAt = time.Now().UTC()
-		metaResult = &metaRes
+		tagArgs := []string{"track", "update", downloadedPath, "-o", opts.OutDir, "--in-place"}
+		if targetURL != "" {
+			tagArgs = append(tagArgs, "--source-url", targetURL)
+		}
+		if opts.ProgressTarget != "" {
+			tagArgs = append(tagArgs, "--progress-target", opts.ProgressTarget)
+		}
+		if opts.NoCache {
+			tagArgs = append(tagArgs, "--no-cache")
+		}
+		if opts.Verbose {
+			tagArgs = append(tagArgs, "-v")
+		}
 
+		tagOutBytes, tagErr := runner(ctx, "tag-track", tagArgs...)
 		if sp != nil {
 			sp.Stop()
 		}
 
-		if !opts.IsAgent {
-			fmt.Printf("  - matched: \"%s - %s\" (%s, %s)\n", metaRes.Artist, metaRes.Title, metaRes.Album, metaRes.ReleaseYear)
-			fmt.Printf("  - source: %s\n", metaRes.Source)
-		}
-
-		taggedPath, tagErr := metadata.ApplyMetadataToLocalTrack(ctx, downloadedPath, metaRes, opts.OutDir, opts.Verbose, cacheInst)
-		if sp != nil {
-			sp.Stop()
-		}
 		if tagErr != nil {
 			if !opts.IsAgent {
-				fmt.Printf("  - notice: %v\n", tagErr)
+				cleanErr := godeps.SanitizeStderr(tagErr.Error())
+				if cleanErr == "" {
+					cleanErr = tagErr.Error()
+				}
+				fmt.Printf("  - notice: tagging via tag-track failed: %s\n", cleanErr)
 			}
 		} else {
-			finalPath = taggedPath
+			tagOut := string(tagOutBytes)
+			for _, line := range strings.Split(tagOut, "\n") {
+				line = strings.TrimSpace(line)
+				if strings.HasPrefix(line, "DONE: ") {
+					finalPath = strings.TrimPrefix(line, "DONE: ")
+				} else if strings.HasPrefix(line, "output: ") {
+					finalPath = strings.TrimPrefix(line, "output: ")
+				} else if strings.HasPrefix(line, "title: ") {
+					if metaResult == nil {
+						metaResult = &TrackMetadataResult{}
+					}
+					metaResult.Title = strings.TrimPrefix(line, "title: ")
+				} else if strings.HasPrefix(line, "artist: ") {
+					if metaResult == nil {
+						metaResult = &TrackMetadataResult{}
+					}
+					metaResult.Artist = strings.TrimPrefix(line, "artist: ")
+				} else if strings.HasPrefix(line, "album: ") {
+					if metaResult == nil {
+						metaResult = &TrackMetadataResult{}
+					}
+					metaResult.Album = strings.TrimPrefix(line, "album: ")
+				} else if strings.HasPrefix(line, "year: ") {
+					if metaResult == nil {
+						metaResult = &TrackMetadataResult{}
+					}
+					metaResult.ReleaseYear = strings.TrimPrefix(line, "year: ")
+				} else if strings.HasPrefix(line, "source: ") {
+					if metaResult == nil {
+						metaResult = &TrackMetadataResult{}
+					}
+					metaResult.Source = strings.TrimPrefix(line, "source: ")
+				}
+			}
+			if finalPath != downloadedPath {
+				_ = os.Remove(downloadedPath)
+			}
+			if !opts.IsAgent && metaResult != nil && metaResult.Title != "" {
+				fmt.Printf("  - matched: \"%s - %s\" (%s, %s)\n", metaResult.Artist, metaResult.Title, metaResult.Album, metaResult.ReleaseYear)
+				fmt.Printf("  - source: %s\n", metaResult.Source)
+			}
 		}
 	} else if !opts.IsAgent {
 		fmt.Println("\nStep 4: Skipped Metadata & Cover Art Enrichment (-skipMetadata)")

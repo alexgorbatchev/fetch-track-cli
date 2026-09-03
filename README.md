@@ -32,10 +32,10 @@ A fast, lightweight CLI tool with AI agent support for bedroom and amateur DJs t
 
 # Installation
 
-Download and extract the latest prebuilt binary from [GitHub Releases](https://github.com/alexgorbatchev/fetch-track-cli/releases/latest):
+Download the precompiled binary for your platform from [GitHub Releases](https://github.com/alexgorbatchev/fetch-track-cli/releases/latest):
 
 ```bash
-curl -sSL https://github.com/alexgorbatchev/fetch-track-cli/releases/latest/download/fetch-track_darwin_arm64.tar.gz | tar -xz
+curl -fsSL https://github.com/alexgorbatchev/fetch-track-cli/releases/latest/download/fetch-track_darwin_arm64.tar.gz | tar -xz
 chmod +x fetch-track
 mv fetch-track ~/.local/bin/
 ```
@@ -64,6 +64,9 @@ fetch-track dependencies
 fetch-track deps install ffmpeg
 fetch-track deps update yt-dlp
 
+# Pipeline composition with tag-track
+fetch-track "Boris Brejcha - Space X" --no-metadata -o .tmp/ | tag-track -o tracks/
+
 # Upgrade CLI binary in-place
 fetch-track upgrade
 ```
@@ -79,6 +82,7 @@ fetch-track upgrade
 | `--no-cache` | | `false` | Disable local caching for search queries, metadata, and artwork |
 | `--skip-verify` | | `false` | Skip DJ audio quality and spectrum inspection |
 | `--skip-metadata` | | `false` | Skip metadata lookup and high-res cover art tagging |
+| `--no-metadata` | | `false` | Alias for `--skip-metadata` |
 | `--progress-target <uri>` | | `""` | Target URI for streaming NDJSON progress events |
 | `--progress-socket <path>` | | `""` | Shorthand alias for `--progress-target` |
 | `--verbose` | `-v` | `false` | Enable verbose logging |

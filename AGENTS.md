@@ -47,6 +47,11 @@ Go CLI tool for searching, verifying, downloading, and managing high-fidelity si
 - **Zero-Reencoding Tagging:** When embedding artwork and tags via `ffmpeg`, always pass `-c:a copy` (plus `-id3v2_version 3` for MP3) to avoid triggering unintended audio transcoding.
 - **Temporary Folder Cleanup:** `.tmp` directories created during execution must be cleaned up on completion if `.tmp` did not exist prior to execution.
 
+## Pipeline & Tag-Track Composition
+- **Pipeline Separation:** Audio downloading and DJ mix discovery are handled by `fetch-track`, while standalone audio file tagging, retagging, and metadata refreshes are handled by `tag-track` (`tag-track-cli`).
+- **Pipeline Composition:** Use `--no-metadata` (or `--skip-metadata`) to stream downloaded track paths directly into `tag-track`:
+  `fetch-track "<query>" --no-metadata -o .tmp/ | tag-track -o tracks/`
+
 ## Boundaries
 - **Always:** Automatically record all new instructions in the most appropriate `AGENTS.md` file immediately upon receipt (check with user if existing instructions conflict).
 - **Always:** Back up Engine DJ SQLite databases (`Database2/` and root `.db` files) before making any modifications or updates to the library database.

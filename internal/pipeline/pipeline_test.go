@@ -17,7 +17,6 @@ import (
 	"github.com/dj/fetch-track-cli/internal/cache"
 	"github.com/dj/fetch-track-cli/internal/deps"
 	"github.com/dj/fetch-track-cli/internal/downloader"
-	"github.com/dj/fetch-track-cli/internal/metadata"
 	"github.com/dj/fetch-track-cli/internal/progress"
 	"github.com/dj/fetch-track-cli/internal/verifier"
 )
@@ -42,10 +41,22 @@ func setupTestEnvironment(t *testing.T) (string, func()) {
 	_ = c.Put("deps", "yt-dlp", "2026.08.01", time.Hour)
 	_ = c.Put("deps", "ffmpeg", "ffmpeg version 8.1.2", time.Hour)
 	_ = c.Put("deps", "ffprobe", "ffprobe version 8.1.2", time.Hour)
+	_ = c.Put("deps", "tag-track", "1.0.0", time.Hour)
 
 	cleanupDeps := deps.SetDefaultRunner(func(ctx context.Context, name string, args ...string) ([]byte, error) {
 		if name == "yt-dlp" {
 			return []byte("2026.08.01"), nil
+		}
+		if name == "tag-track" {
+			for i, arg := range args {
+				if arg == "-o" && i+1 < len(args) {
+					outD := args[i+1]
+					filePath := filepath.Join(outD, "Boris Brejcha - Space X.m4a")
+					_ = os.WriteFile(filePath, []byte("audio"), 0644)
+					return []byte(fmt.Sprintf("output: %s\ntitle: Space X\nartist: Boris Brejcha\nalbum: Level One\nyear: 2024\nsource: iTunes API\nDONE: %s\n", filePath, filePath)), nil
+				}
+			}
+			return []byte("1.0.0"), nil
 		}
 		return []byte(fmt.Sprintf("%s version 8.1.2", name)), nil
 	})
@@ -244,7 +255,7 @@ func TestRun_EndToEndQuery_NonAgent(t *testing.T) {
 	ctx := context.Background()
 
 	c := cache.NewInDir(filepath.Join(tempCacheDir, "fetch-track"), true)
-	metaRes := metadata.TrackMetadataResult{
+	metaRes := TrackMetadataResult{
 		Title:       "Space X",
 		Artist:      "Boris Brejcha",
 		Album:       "Space X Single",
@@ -317,7 +328,7 @@ func TestRun_EndToEndQuery_AgentMode(t *testing.T) {
 	ctx := context.Background()
 
 	c := cache.NewInDir(filepath.Join(tempCacheDir, "fetch-track"), true)
-	metaRes := metadata.TrackMetadataResult{
+	metaRes := TrackMetadataResult{
 		Title:       "Space X",
 		Artist:      "Boris Brejcha",
 		Album:       "Space X Single",
@@ -382,7 +393,7 @@ func TestRun_EndToEndURL_CachedAndUncached(t *testing.T) {
 	}
 	_ = c.Put("url_meta", "https://soundcloud.com/boris-brejcha/space-x", urlMeta, time.Hour)
 
-	metaRes := metadata.TrackMetadataResult{
+	metaRes := TrackMetadataResult{
 		Title:       "Space X",
 		Artist:      "Boris Brejcha",
 		Album:       "Space X Single",
@@ -518,7 +529,7 @@ func TestRun_AdditionalBranches(t *testing.T) {
 	outDir3 := t.TempDir()
 	optsDirect3 := optsDirect
 	optsDirect3.OutDir = outDir3
-	_ = c.Put("metadata", "fail", metadata.TrackMetadataResult{Title: "Fail", Artist: "Artist"}, time.Hour)
+	_ = c.Put("metadata", "fail", TrackMetadataResult{Title: "Fail", Artist: "Artist"}, time.Hour)
 	mockRunner3 := func(ctx context.Context, name string, args ...string) ([]byte, error) {
 		for _, a := range args {
 			if a == "-o" {
@@ -543,7 +554,7 @@ func TestRun_InteractiveCancel(t *testing.T) {
 	ctx := context.Background()
 
 	c := cache.NewInDir(filepath.Join(tempCacheDir, "fetch-track"), true)
-	metaRes := metadata.TrackMetadataResult{
+	metaRes := TrackMetadataResult{
 		Title:  "Space X",
 		Artist: "Boris Brejcha",
 	}
@@ -568,6 +579,61 @@ func TestRun_InteractiveCancel(t *testing.T) {
 
 	// In non-TTY test runner, interactive candidate prompt will cancel and return error
 	_ = Run(ctx, "Boris Brejcha - Space X", opts)
+}
+
+func TestRun_WithProgressTargetDelegation(t *testing.T) {
+	_, cleanupEnv := setupTestEnvironment(t)
+	defer cleanupEnv()
+	t.Setenv("AGENT", "1")
+
+	outDir := t.TempDir()
+	ctx := context.Background()
+
+	jsonSearch := `{"id":"spx1","title":"Boris Brejcha - Space X","duration":2,"webpage_url":"https://soundcloud.com/boris-brejcha/space-x"}` + "\n"
+	mockRunner := func(ctx context.Context, name string, args ...string) ([]byte, error) {
+		for _, a := range args {
+			if a == "-o" {
+				createTestAudio(t, outDir, "Boris Brejcha - Space X.m4a")
+				return []byte("downloaded"), nil
+			}
+		}
+		return []byte(jsonSearch), nil
+	}
+	cleanupDl := downloader.SetDefaultRunner(mockRunner)
+	defer cleanupDl()
+
+	tagTrackCalledWithTarget := false
+	tagRunner := func(ctx context.Context, name string, args ...string) ([]byte, error) {
+		if name == "tag-track" {
+			for i, arg := range args {
+				if arg == "--progress-target" && i+1 < len(args) && args[i+1] == "tcp://127.0.0.1:9099" {
+					tagTrackCalledWithTarget = true
+				}
+			}
+			return []byte("output: /path/to/Boris Brejcha - Space X.m4a\ntitle: Space X\nartist: Boris Brejcha\nalbum: Level One\nyear: 2024\nsource: tag-track\n"), nil
+		}
+		return []byte("version 8.1.2"), nil
+	}
+
+	opts := Options{
+		OutDir:         outDir,
+		Sources:        []string{"soundcloud"},
+		SkipVerify:     false,
+		SkipMetadata:   false,
+		SkipDepCheck:   false,
+		Verbose:        true,
+		IsAgent:        true,
+		ProgressTarget: "tcp://127.0.0.1:9099",
+		Runner:         tagRunner,
+	}
+
+	err := Run(ctx, "Boris Brejcha - Space X", opts)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !tagTrackCalledWithTarget {
+		t.Error("expected tag-track to be called with --progress-target")
+	}
 }
 
 func TestRun_DownloadFailure(t *testing.T) {
@@ -605,3 +671,61 @@ func TestRun_DownloadFailure(t *testing.T) {
 		t.Fatal("expected error on download failure")
 	}
 }
+
+func TestRun_TagTrackFailure(t *testing.T) {
+	_, cleanupEnv := setupTestEnvironment(t)
+	defer cleanupEnv()
+
+	outDir := t.TempDir()
+	ctx := context.Background()
+
+	jsonSearch := `{"id":"spx1","title":"Boris Brejcha - Space X","duration":2,"webpage_url":"https://soundcloud.com/boris-brejcha/space-x"}` + "\n"
+	mockRunner := func(ctx context.Context, name string, args ...string) ([]byte, error) {
+		for _, a := range args {
+			if a == "-o" {
+				createTestAudio(t, outDir, "Boris Brejcha - Space X.m4a")
+				return []byte("downloaded"), nil
+			}
+		}
+		return []byte(jsonSearch), nil
+	}
+	cleanup := downloader.SetDefaultRunner(mockRunner)
+	defer cleanup()
+
+	// 1. Human mode with tag-track error
+	t.Setenv("AGENT", "0")
+	optsHuman := Options{
+		OutDir:       outDir,
+		Sources:      []string{"soundcloud"},
+		SkipVerify:   true,
+		SkipMetadata: false,
+		SkipDepCheck: false,
+		IsAgent:      false,
+		Runner: func(ctx context.Context, name string, args ...string) ([]byte, error) {
+			if name == "tag-track" {
+				return nil, errors.New("tagging error")
+			}
+			return []byte("version 8.1.2"), nil
+		},
+	}
+	_ = Run(ctx, "Boris Brejcha - Space X", optsHuman)
+
+	// 2. Agent mode with candidate selection and report
+	t.Setenv("AGENT", "1")
+	optsAgent := Options{
+		OutDir:       outDir,
+		Sources:      []string{"soundcloud"},
+		SkipVerify:   false,
+		SkipMetadata: false,
+		SkipDepCheck: false,
+		IsAgent:      true,
+		Runner: func(ctx context.Context, name string, args ...string) ([]byte, error) {
+			if name == "tag-track" {
+				return []byte("output: /path/to/Boris Brejcha - Space X.m4a\ntitle: Space X\nartist: Boris Brejcha\nalbum: Level One\nyear: 2024\nsource: iTunes API\n"), nil
+			}
+			return []byte("version 8.1.2"), nil
+		},
+	}
+	_ = Run(ctx, "Boris Brejcha - Space X", optsAgent)
+}
+

@@ -113,6 +113,8 @@ func TestVerifyDependenciesWithRunner(t *testing.T) {
 				return []byte("ffmpeg version 8.1.2 Copyright...\n"), nil
 			case "ffprobe":
 				return nil, &exec.Error{Name: "ffprobe", Err: exec.ErrNotFound}
+			case "tag-track":
+				return []byte("1.0.0\n"), nil
 			default:
 				return nil, errors.New("unknown tool")
 			}
@@ -122,8 +124,8 @@ func TestVerifyDependenciesWithRunner(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error due to missing ffprobe")
 		}
-		if len(reports) != 3 {
-			t.Fatalf("expected 3 reports, got %d", len(reports))
+		if len(reports) != len(RequiredDependencies) {
+			t.Fatalf("expected %d reports, got %d", len(RequiredDependencies), len(reports))
 		}
 
 		if !reports[0].Satisfied || reports[0].Name != "yt-dlp" {
@@ -150,6 +152,8 @@ func TestCheckDependenciesWithRunner(t *testing.T) {
 				return []byte("ffmpeg version 8.1.2 Copyright...\n"), nil
 			case "ffprobe":
 				return []byte("ffprobe version 8.1.2 Copyright...\n"), nil
+			case "tag-track":
+				return []byte("1.0.0\n"), nil
 			default:
 				return nil, errors.New("unknown tool")
 			}
@@ -384,6 +388,7 @@ func TestCheckDependencies_Cached(t *testing.T) {
 	_ = c.Put("deps", "yt-dlp", "2026.08.01", time.Hour)
 	_ = c.Put("deps", "ffmpeg", "ffmpeg version 8.1", time.Hour)
 	_ = c.Put("deps", "ffprobe", "ffprobe version 8.1", time.Hour)
+	_ = c.Put("deps", "tag-track", "1.0.0", time.Hour)
 
 	err := CheckDependencies(ctx, c)
 	if err != nil {
@@ -394,8 +399,8 @@ func TestCheckDependencies_Cached(t *testing.T) {
 	if err != nil {
 		t.Fatalf("VerifyDependencies with cache error = %v", err)
 	}
-	if len(reports) != 3 {
-		t.Fatalf("expected 3 reports, got %d", len(reports))
+	if len(reports) != len(RequiredDependencies) {
+		t.Fatalf("expected %d reports, got %d", len(RequiredDependencies), len(reports))
 	}
 }
 
@@ -418,6 +423,42 @@ func TestCheckDependencies_DefaultRunner(t *testing.T) {
 
 	_ = CheckDependencies(ctx)
 	_, _ = VerifyDependencies(ctx)
+}
+
+func TestIsAgentMode(t *testing.T) {
+	t.Setenv("AGENT", "1")
+	if !IsAgentMode() {
+		t.Fatal("expected agent mode to be true")
+	}
+	t.Setenv("AGENT", "0")
+	if IsAgentMode() {
+		t.Fatal("expected agent mode to be false")
+	}
+}
+
+func TestUpgradeSelfFunctions(t *testing.T) {
+	restore := SetUpgradeSelfFunc(func(ctx context.Context, owner, repo, currentVersion string) (string, error) {
+		return "2.0.0", nil
+	})
+	defer restore()
+
+	ver, err := UpgradeSelf(context.Background(), "1.0.0")
+	if err != nil || ver != "2.0.0" {
+		t.Fatalf("UpgradeSelf failed: ver=%s, err=%v", ver, err)
+	}
+}
+
+func TestInstallerDirectCalls(t *testing.T) {
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+
+	yt := &ytDlpInstaller{}
+	_ = yt.Install(ctx, tmpDir)
+	_ = yt.Update(ctx, tmpDir)
+
+	pkg := &pkgInstaller{pkgName: "ffmpeg"}
+	_ = pkg.Install(ctx, tmpDir)
+	_ = pkg.Update(ctx, tmpDir)
 }
 
 func TestManagerOperations(t *testing.T) {
