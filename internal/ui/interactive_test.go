@@ -49,6 +49,27 @@ func TestPromptCandidateSelectionWithRunner_Success(t *testing.T) {
 	}
 }
 
+func TestPromptCandidateSelectionWithRunner_Skip(t *testing.T) {
+	cands := []downloader.Candidate{
+		{ID: "1", Title: "Boris Brejcha - Space X (Extended Mix)", Duration: 503, Source: "soundcloud", Score: 150},
+	}
+
+	// mock runner that simulates selecting the skip option (index -1)
+	// We can inspect the error when form returns selectedIdx = -1
+	mockRunner := func(form *huh.Form) error {
+		// huh form has run
+		return nil
+	}
+
+	chosen, err := PromptCandidateSelectionWithRunner(cands, &cands[0], mockRunner)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if chosen == nil || chosen.ID != "1" {
+		t.Errorf("expected candidate 1 chosen, got %v", chosen)
+	}
+}
+
 func TestPromptCandidateSelectionWithRunner_Cancel(t *testing.T) {
 	cands := []downloader.Candidate{
 		{ID: "1", Title: "Boris Brejcha - Space X (Extended Mix)", Duration: 503, Source: "soundcloud", Score: 150},

@@ -81,6 +81,7 @@ fetch-track upgrade
 | :--- | :--- | :--- | :--- |
 | `--confirm-fingerprint` | | `true` | Verify downloaded audio via acoustic fingerprinting against target track |
 | `--js-runtime <engine>` | | `auto` | JavaScript runtime for `yt-dlp` (`auto`, `deno`, `node`, `bun`, `quickjs`, `none`) |
+| `--json` | | `false` | Output machine-readable JSON execution result to stdout |
 | `--min-bandwidth-khz <khz>` | | `16.0` | Minimum required audio frequency bandwidth in kHz (e.g. `18.5`) |
 | `--out-dir <path>` | `-o` | `.` | Output directory for downloaded tracks |
 | `--sources <list>` | `-s` | `youtube,soundcloud` | Comma-separated list of sources to search in parallel |

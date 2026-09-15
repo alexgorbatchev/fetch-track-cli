@@ -41,6 +41,7 @@ var (
 	confirmFingerprint bool
 	skipFingerprint    bool
 	minBandwidthKhz    float64
+	jsonOutput         bool
 )
 
 func newRootCommand() *cobra.Command {
@@ -185,6 +186,14 @@ When a query is provided, fetch-track executes the full acquisition pipeline:
 					fmt.Printf("target: %s\nstatus: error\nerror: %v\n", target, err)
 				}
 				return fmt.Errorf("audio verification failed: %w", err)
+			}
+
+			if jsonOutput {
+				return pipeline.RenderJSONOutput(&pipeline.JSONExecutionResult{
+					Target:       target,
+					Status:       "success",
+					Verification: pipeline.ConvertVerificationReport(report),
+				})
 			}
 
 			if isAgent {

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 
@@ -11,6 +12,9 @@ import (
 )
 
 var (
+	// ErrUserSkipped is returned when the user explicitly chooses to skip the current track.
+	ErrUserSkipped = errors.New("track skipped by user")
+
 	selectedStyle = lipgloss.NewStyle().
 		Bold(true).
 		Foreground(lipgloss.Color("86"))
@@ -57,15 +61,21 @@ func PromptCandidateSelectionWithRunner(candidates []downloader.Candidate, curre
 
 	var selectedIdx int = defaultIdx
 
-	options := make([]huh.Option[int], 0, len(sortedCands))
+	options := make([]huh.Option[int], 0, len(sortedCands)+1)
 	for i, c := range sortedCands {
 		durStr := verifier.FormatDuration(c.Duration)
-		label := fmt.Sprintf("%s [%s %s score=%d]", c.Title, c.Source, durStr, c.Score)
+		uploaderInfo := ""
+		if c.Uploader != "" {
+			uploaderInfo = fmt.Sprintf(" by: %s", c.Uploader)
+		}
+		label := fmt.Sprintf("%s [%s %s%s score=%d]", c.Title, c.Source, durStr, uploaderInfo, c.Score)
 		if i == defaultIdx {
 			label += " (Auto-Selected)"
 		}
 		options = append(options, huh.NewOption(label, i))
 	}
+	// Add explicit skip option
+	options = append(options, huh.NewOption("Skip this track (download nothing)", -1))
 
 	// Line break above selector
 	fmt.Println()
@@ -83,6 +93,11 @@ func PromptCandidateSelectionWithRunner(candidates []downloader.Candidate, curre
 	err := runner(form)
 	if err != nil {
 		return nil, fmt.Errorf("candidate selection canceled: %w", err)
+	}
+
+	if selectedIdx == -1 {
+		fmt.Println(lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("Track skipped."))
+		return nil, ErrUserSkipped
 	}
 
 	chosen := &sortedCands[selectedIdx]

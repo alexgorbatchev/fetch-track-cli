@@ -52,6 +52,7 @@ type Options struct {
 	JSRuntime          string
 	ConfirmFingerprint bool
 	MinBandwidthHz     int
+	JSONOutput         bool
 }
 
 type logger struct {
@@ -674,6 +675,28 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 		Message:    "track acquisition complete",
 		Result:     resultInfo,
 	})
+
+	if opts.JSONOutput {
+		jsonRes := &JSONExecutionResult{
+			Target:            urlOrQuery,
+			Status:            "success",
+			CandidateCount:    len(candidatePool),
+			SelectedCandidate: selectedCandidate,
+			OutputFile:        outDisplayPath,
+			Verification:      ConvertVerificationReport(report),
+		}
+		if metaResult != nil {
+			jsonRes.Metadata = &JSONMetadata{
+				Title:       metaResult.Title,
+				Artist:      metaResult.Artist,
+				Album:       metaResult.Album,
+				Year:        metaResult.ReleaseYear,
+				Source:      metaResult.Source,
+				CoverArtURL: metaResult.CoverArtURL,
+			}
+		}
+		return RenderJSONOutput(jsonRes)
+	}
 
 	if opts.IsAgent {
 		fmt.Printf("target: %s\n", urlOrQuery)
