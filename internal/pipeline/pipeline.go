@@ -617,7 +617,14 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 					metaResult.Source = cleanSource
 				}
 			}
-			if finalPath != downloadedPath {
+			if metaResult != nil && metaResult.Title != "" {
+				metaResult.Title = PreserveVersionInTitle(urlOrQuery, metaResult.Title)
+			}
+			safeFinalPath := ResolveCollisionSafePath(finalPath, downloadedPath)
+			if safeFinalPath != finalPath {
+				_ = os.Rename(finalPath, safeFinalPath)
+				finalPath = safeFinalPath
+			} else if finalPath != downloadedPath {
 				_ = os.Remove(downloadedPath)
 			}
 			if !opts.IsAgent && metaResult != nil {
