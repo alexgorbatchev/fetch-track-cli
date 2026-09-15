@@ -147,6 +147,7 @@ When a query is provided, fetch-track executes the full acquisition pipeline:
 	rootCmd.Flags().BoolVar(&skipFingerprint, "skip-fingerprint", false, "Skip acoustic fingerprint confirmation")
 	_ = rootCmd.Flags().MarkHidden("skip-fingerprint")
 	rootCmd.Flags().StringVar(&jsRuntime, "js-runtime", "auto", "JavaScript runtime for yt-dlp (auto, deno, node, bun, quickjs, none)")
+	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Output machine-readable JSON result to stdout")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output logging")
 	rootCmd.PersistentFlags().BoolVar(&debug, "debug", false, "Enable debug mode with elapsed millisecond timestamps on log lines")
 
