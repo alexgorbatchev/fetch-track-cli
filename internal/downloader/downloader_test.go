@@ -144,13 +144,25 @@ func TestSearchSourcesInParallelWithRunner(t *testing.T) {
 		t.Errorf("expected 4 cached candidates, got %d", len(cachedResults))
 	}
 
-	// 3. Empty results error
+	// 3. Empty results error and verifying transient failure is NOT cached
 	emptyRunner := func(ctx context.Context, name string, args ...string) ([]byte, error) {
-		return []byte(""), nil
+		return nil, errors.New("transient network timeout")
 	}
-	_, err = SearchSourcesInParallelWithRunner(ctx, emptyRunner, []string{"youtube"}, "Unknown", "Song", "Unknown Song", nil, false)
+	_, err = SearchSourcesInParallelWithRunner(ctx, emptyRunner, []string{"youtube"}, "Temporary", "Fail", "Temporary Fail", c, false)
 	if err == nil || !errors.Is(err, ErrNoCandidateFound) {
 		t.Errorf("expected ErrNoCandidateFound, got: %v", err)
+	}
+
+	// 4. Subsequent search with working runner succeeds (not poisoned by failed attempt)
+	recoverRunner := func(ctx context.Context, name string, args ...string) ([]byte, error) {
+		return []byte(`{"id":"rec1","title":"Temporary Fail","duration":200,"webpage_url":"https://youtube.com/watch?v=rec1"}` + "\n"), nil
+	}
+	recoveredResults, err := SearchSourcesInParallelWithRunner(ctx, recoverRunner, []string{"youtube"}, "Temporary", "Fail", "Temporary Fail", c, false)
+	if err != nil {
+		t.Fatalf("expected search to recover and succeed, got error: %v", err)
+	}
+	if len(recoveredResults) != 1 {
+		t.Errorf("expected 1 recovered candidate, got %d", len(recoveredResults))
 	}
 }
 
