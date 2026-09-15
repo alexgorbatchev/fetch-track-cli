@@ -51,6 +51,7 @@ type Options struct {
 	Runner             deps.CommandRunner
 	JSRuntime          string
 	ConfirmFingerprint bool
+	MinBandwidthHz     int
 }
 
 type logger struct {
@@ -486,7 +487,7 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 			Message:    "running audio quality & spectrum inspection",
 		})
 
-		rep, err := verifier.VerifyAudioTrack(ctx, downloadedPath, opts.Verbose)
+		rep, err := verifier.VerifyAudioTrack(ctx, downloadedPath, opts.Verbose, opts.MinBandwidthHz)
 		if sp != nil {
 			sp.Stop()
 		}

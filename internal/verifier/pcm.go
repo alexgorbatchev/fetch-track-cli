@@ -51,8 +51,28 @@ func ComputeGoertzelDb(samples []float32, startIdx, endIdx int, freqHz, sampleRa
 	return 20.0 * math.Log10(magnitude+1e-9)
 }
 
+// EvaluateBandwidthWarning updates the report bandwidth rating and low-bandwidth warning flag based on minBandwidthHz.
+func EvaluateBandwidthWarning(report *AudioQualityReport, minBandwidthHz int) {
+	if minBandwidthHz <= 0 {
+		minBandwidthHz = 16000
+	}
+	report.HasLowBandwidthWarning = report.EstimatedBandwidthHz < minBandwidthHz
+
+	if report.EstimatedBandwidthHz >= 18500 {
+		report.BandwidthRating = "High Fidelity (>=18.5 kHz)"
+	} else if report.EstimatedBandwidthHz >= 16000 {
+		report.BandwidthRating = "Standard YouTube (16-18.5 kHz)"
+	} else {
+		report.BandwidthRating = "Low Quality / Transcoded (<16 kHz)"
+	}
+}
+
 // AnalyzePCMAudio extracts 30 seconds of float32 PCM audio via ffmpeg and computes dynamics and bandwidth statistics.
-func AnalyzePCMAudio(ctx context.Context, filePath string, durationSec float64) (*AudioQualityReport, error) {
+func AnalyzePCMAudio(ctx context.Context, filePath string, durationSec float64, minBandwidthHz ...int) (*AudioQualityReport, error) {
+	minHz := 16000
+	if len(minBandwidthHz) > 0 && minBandwidthHz[0] > 0 {
+		minHz = minBandwidthHz[0]
+	}
 	cmdCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
@@ -124,26 +144,19 @@ func AnalyzePCMAudio(ctx context.Context, filePath string, durationSec float64) 
 		}
 	}
 
-	hasLowBandwidthWarning := estimatedBandwidthHz < 16000
-	bandwidthRating := "Standard YouTube (16-18.5 kHz)"
-	if estimatedBandwidthHz >= 18500 {
-		bandwidthRating = "High Fidelity (>=18.5 kHz)"
-	} else if estimatedBandwidthHz < 16000 {
-		bandwidthRating = "Low Quality / Transcoded (<16 kHz)"
-	}
-
 	hasClippingWarning := peakDbFS >= -0.1
 	suggestedDJGainDb := math.Round((TargetRMSDb-rmsDbFS)*10) / 10
 
-	return &AudioQualityReport{
-		EstimatedBandwidthHz:   estimatedBandwidthHz,
-		BandwidthRating:        bandwidthRating,
-		HasLowBandwidthWarning: hasLowBandwidthWarning,
-		PeakDbFS:               math.Round(peakDbFS*100) / 100,
-		RMSDbFS:                math.Round(rmsDbFS*100) / 100,
-		HasClippingWarning:     hasClippingWarning,
-		SubBassDbFS:            math.Round(subBassDbFS*100) / 100,
-		KickBassDbFS:           math.Round(kickBassDbFS*100) / 100,
-		SuggestedDJGainDb:      suggestedDJGainDb,
-	}, nil
+	report := &AudioQualityReport{
+		EstimatedBandwidthHz: estimatedBandwidthHz,
+		PeakDbFS:             math.Round(peakDbFS*100) / 100,
+		RMSDbFS:              math.Round(rmsDbFS*100) / 100,
+		HasClippingWarning:   hasClippingWarning,
+		SubBassDbFS:          math.Round(subBassDbFS*100) / 100,
+		KickBassDbFS:         math.Round(kickBassDbFS*100) / 100,
+		SuggestedDJGainDb:    suggestedDJGainDb,
+	}
+	EvaluateBandwidthWarning(report, minHz)
+
+	return report, nil
 }

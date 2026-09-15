@@ -29,3 +29,21 @@ func TestComputeGoertzelDb(t *testing.T) {
 		t.Errorf("expected >30dB difference between 1000Hz and 20000Hz, got diff = %f", db1000-db20000)
 	}
 }
+
+func TestAnalyzePCMAudio_MinBandwidthThreshold(t *testing.T) {
+	report := &AudioQualityReport{
+		EstimatedBandwidthHz: 18000,
+	}
+	EvaluateBandwidthWarning(report, 18500)
+	if !report.HasLowBandwidthWarning {
+		t.Errorf("expected HasLowBandwidthWarning = true when bandwidth 18000Hz < min 18500Hz")
+	}
+
+	report2 := &AudioQualityReport{
+		EstimatedBandwidthHz: 18500,
+	}
+	EvaluateBandwidthWarning(report2, 18500)
+	if report2.HasLowBandwidthWarning {
+		t.Errorf("expected HasLowBandwidthWarning = false when bandwidth 18500Hz >= min 18500Hz")
+	}
+}

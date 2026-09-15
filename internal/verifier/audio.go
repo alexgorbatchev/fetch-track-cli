@@ -249,13 +249,17 @@ func FetchLocalMetadata(ctx context.Context, filePath string) (*TrackMetadata, e
 }
 
 // VerifyAudioTrack analyzes a local audio file or remote URL for mix structure and bandwidth.
-func VerifyAudioTrack(ctx context.Context, target string, verbose ...bool) (*VerificationReport, error) {
-	return VerifyAudioTrackWithRunner(ctx, defaultRunnerVar, target, verbose...)
+func VerifyAudioTrack(ctx context.Context, target string, verbose bool, minBandwidthHz ...int) (*VerificationReport, error) {
+	return VerifyAudioTrackWithRunner(ctx, defaultRunnerVar, target, verbose, minBandwidthHz...)
 }
 
 // VerifyAudioTrackWithRunner analyzes audio track using a provided CommandRunner.
-func VerifyAudioTrackWithRunner(ctx context.Context, runner CommandRunner, target string, verbose ...bool) (*VerificationReport, error) {
-	isVerbose := len(verbose) > 0 && verbose[0]
+func VerifyAudioTrackWithRunner(ctx context.Context, runner CommandRunner, target string, verbose bool, minBandwidthHz ...int) (*VerificationReport, error) {
+	isVerbose := verbose
+	minHz := 16000
+	if len(minBandwidthHz) > 0 && minBandwidthHz[0] > 0 {
+		minHz = minBandwidthHz[0]
+	}
 	isURL := IsURL(target)
 	var metadata *TrackMetadata
 	var err error
@@ -342,7 +346,7 @@ func VerifyAudioTrackWithRunner(ctx context.Context, runner CommandRunner, targe
 	}
 
 	mixStructure := AnalyzeMixStructure(metadata.Title, metadata.DurationSeconds)
-	pcmReport, err := AnalyzePCMAudio(ctx, localAudioPath, metadata.DurationSeconds)
+	pcmReport, err := AnalyzePCMAudio(ctx, localAudioPath, metadata.DurationSeconds, minHz)
 	if err != nil {
 		return nil, fmt.Errorf("analyzing PCM audio for %s: %w", localAudioPath, err)
 	}
@@ -358,7 +362,7 @@ func VerifyAudioTrackWithRunner(ctx context.Context, runner CommandRunner, targe
 	}
 
 	if pcmReport.HasLowBandwidthWarning {
-		recommendations = append(recommendations, "LOW BANDWIDTH: High frequencies roll off below 16 kHz.")
+		recommendations = append(recommendations, fmt.Sprintf("LOW BANDWIDTH: Frequency cutoff (%d Hz) below minimum threshold (%d Hz).", pcmReport.EstimatedBandwidthHz, minHz))
 	} else {
 		recommendations = append(recommendations, fmt.Sprintf("AUDIO BANDWIDTH: Clean frequency response (%s).", pcmReport.BandwidthRating))
 	}
@@ -371,6 +375,8 @@ func VerifyAudioTrackWithRunner(ctx context.Context, runner CommandRunner, targe
 		summaryStatus = "STATUS: Downloaded track is a radio edit."
 	case pcmReport.HasLowBandwidthWarning:
 		summaryStatus = "STATUS: Low audio quality detected."
+	case pcmReport.EstimatedBandwidthHz < 18500:
+		summaryStatus = "STATUS: Standard fidelity audio suitable for mixing."
 	}
 
 	return &VerificationReport{

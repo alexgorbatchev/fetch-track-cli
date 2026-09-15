@@ -40,6 +40,7 @@ var (
 	jsRuntime          string
 	confirmFingerprint bool
 	skipFingerprint    bool
+	minBandwidthKhz    float64
 )
 
 func newRootCommand() *cobra.Command {
@@ -121,6 +122,7 @@ When a query is provided, fetch-track executes the full acquisition pipeline:
 				ProgressReporter:   reporter,
 				JSRuntime:          jsRuntime,
 				ConfirmFingerprint: confirmFingerprint && !skipFingerprint,
+				MinBandwidthHz:     int(minBandwidthKhz * 1000),
 			}
 			return pipeline.Run(cmd.Context(), target, opts)
 		},
@@ -139,6 +141,7 @@ When a query is provided, fetch-track executes the full acquisition pipeline:
 	rootCmd.Flags().StringVar(&progressTarget, "progress-target", "", "Target URI/address for streaming JSON progress events (e.g. unix:///path/to.sock, tcp://127.0.0.1:9099, fd://3, stdout, stderr)")
 	rootCmd.Flags().StringVar(&progressSocket, "progress-socket", "", "Shorthand alias for --progress-target")
 	rootCmd.Flags().BoolVar(&autoInstall, "auto-install", false, "Automatically install missing dependencies without prompting")
+	rootCmd.Flags().Float64Var(&minBandwidthKhz, "min-bandwidth-khz", 16.0, "Minimum required audio frequency bandwidth in kHz (e.g. 18.5)")
 	rootCmd.Flags().BoolVar(&confirmFingerprint, "confirm-fingerprint", true, "Verify downloaded audio via acoustic fingerprinting against target track")
 	rootCmd.Flags().BoolVar(&skipFingerprint, "skip-fingerprint", false, "Skip acoustic fingerprint confirmation")
 	_ = rootCmd.Flags().MarkHidden("skip-fingerprint")
@@ -173,7 +176,7 @@ When a query is provided, fetch-track executes the full acquisition pipeline:
 				fmt.Printf("Running Audio Quality Verification on: %s\n\n", target)
 			}
 
-			report, err := verifier.VerifyAudioTrack(cmd.Context(), target, verbose)
+			report, err := verifier.VerifyAudioTrack(cmd.Context(), target, verbose, int(minBandwidthKhz*1000))
 			if sp != nil {
 				sp.Stop()
 			}
@@ -366,6 +369,7 @@ When a query is provided, fetch-track executes the full acquisition pipeline:
 		},
 	}
 
+	verifyCmd.Flags().Float64Var(&minBandwidthKhz, "min-bandwidth-khz", 16.0, "Minimum required audio frequency bandwidth in kHz (e.g. 18.5)")
 	rootCmd.AddCommand(verifyCmd)
 	rootCmd.AddCommand(depsCmd)
 	rootCmd.AddCommand(upgradeCmd)
