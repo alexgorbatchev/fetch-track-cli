@@ -352,7 +352,7 @@ func VerifyAudioTrackWithRunner(ctx context.Context, runner CommandRunner, targe
 
 	var recommendations []string
 	if mixStructure.IsRadioEditWarning {
-		recommendations = append(recommendations, "RADIO EDIT WARNING: This track appears to be a short radio edit.")
+		recommendations = append(recommendations, "RADIO EDIT: This track is a radio edit.")
 	} else {
 		recommendations = append(recommendations, "MIX LENGTH: Track duration and mix structure are suitable for DJ mixing.")
 	}
@@ -366,9 +366,9 @@ func VerifyAudioTrackWithRunner(ctx context.Context, runner CommandRunner, targe
 	summaryStatus := "STATUS: High fidelity audio suitable for mixing."
 	switch {
 	case mixStructure.IsRadioEditWarning && pcmReport.HasLowBandwidthWarning:
-		summaryStatus = "STATUS: Low audio quality detected and appears to be a short radio edit."
+		summaryStatus = "STATUS: Low audio quality detected and is a radio edit."
 	case mixStructure.IsRadioEditWarning:
-		summaryStatus = "STATUS: Downloaded track appears to be a short radio edit."
+		summaryStatus = "STATUS: Downloaded track is a radio edit."
 	case pcmReport.HasLowBandwidthWarning:
 		summaryStatus = "STATUS: Low audio quality detected."
 	}

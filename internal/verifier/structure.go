@@ -61,17 +61,17 @@ func AnalyzeMixStructure(title string, durationSec float64) MixStructureReport {
 	isMediumDuration := durationSec > MaxRadioEditDurationSeconds && durationSec < MinExtendedMixDurationSeconds
 	isLongDuration := durationSec >= MinExtendedMixDurationSeconds
 
-	isRadioEditWarning := isRadioKeywordPresent || (isShortDuration && !isExtendedKeywordPresent)
+	isRadioEditWarning := isRadioKeywordPresent
 	isOriginalOrExtendedMix := isExtendedKeywordPresent || (isLongDuration && !isRadioKeywordPresent)
 
 	mixTypeDescription := "Standard Track"
 	switch {
 	case isRadioKeywordPresent:
-		mixTypeDescription = "Radio Edit (Short)"
+		mixTypeDescription = "Radio Edit"
 	case isExtendedKeywordPresent:
 		mixTypeDescription = "Original / Extended DJ Mix"
 	case isShortDuration:
-		mixTypeDescription = "Radio Edit / Short Track (<= 4.0 mins)"
+		mixTypeDescription = "Short Track (<= 4.0 mins)"
 	case isLongDuration:
 		mixTypeDescription = "Full Length Track (> 5.0 mins)"
 	case isMediumDuration:

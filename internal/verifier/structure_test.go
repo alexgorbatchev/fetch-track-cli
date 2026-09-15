@@ -46,15 +46,15 @@ func TestAnalyzeMixStructure(t *testing.T) {
 			durationSec:            200,
 			wantRadioEditWarning:   true,
 			wantExtendedMix:        false,
-			wantMixTypeDescription: "Radio Edit (Short)",
+			wantMixTypeDescription: "Radio Edit",
 		},
 		{
 			name:                   "Short track without extended keyword",
-			title:                  "Boris Brejcha - Space X",
-			durationSec:            200,
-			wantRadioEditWarning:   true,
+			title:                  "Francis Mercier - Take Me Home",
+			durationSec:            196,
+			wantRadioEditWarning:   false,
 			wantExtendedMix:        false,
-			wantMixTypeDescription: "Radio Edit / Short Track (<= 4.0 mins)",
+			wantMixTypeDescription: "Short Track (<= 4.0 mins)",
 		},
 	}
 
