@@ -459,11 +459,13 @@ func TestRun_AdditionalBranches(t *testing.T) {
 	_ = c.Delete("deps", "yt-dlp")
 	_ = c.Delete("deps", "ffmpeg")
 	_ = c.Delete("deps", "ffprobe")
+	_ = c.Delete("deps", "tag-track")
 
 	opts := Options{
 		OutDir:       t.TempDir(),
 		Sources:      []string{"soundcloud"},
 		SkipDepCheck: false,
+		NoCache:      true,
 		AutoInstall:  false,
 		IsAgent:      true,
 	}
@@ -477,6 +479,7 @@ func TestRun_AdditionalBranches(t *testing.T) {
 	_ = c.Put("deps", "yt-dlp", "2026.08.01", time.Hour)
 	_ = c.Put("deps", "ffmpeg", "ffmpeg version 8.1", time.Hour)
 	_ = c.Put("deps", "ffprobe", "ffprobe version 8.1", time.Hour)
+	_ = c.Put("deps", "tag-track", "1.0.0", time.Hour)
 
 	// 2. Direct URL candidate with SkipVerify and SkipMetadata
 	urlMeta := struct {
@@ -728,4 +731,3 @@ func TestRun_TagTrackFailure(t *testing.T) {
 	}
 	_ = Run(ctx, "Boris Brejcha - Space X", optsAgent)
 }
-

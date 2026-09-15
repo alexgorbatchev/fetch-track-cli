@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -22,7 +23,8 @@ import (
 )
 
 var (
-	version = "dev"
+	bootTime = time.Now()
+	version  = "dev"
 
 	outDir         string
 	sourcesFlag    string
@@ -31,9 +33,13 @@ var (
 	interactive    bool
 	noCache        bool
 	verbose        bool
-	progressTarget string
-	progressSocket string
-	autoInstall    bool
+	debug          bool
+	progressTarget     string
+	progressSocket     string
+	autoInstall        bool
+	jsRuntime          string
+	confirmFingerprint bool
+	skipFingerprint    bool
 )
 
 func newRootCommand() *cobra.Command {
@@ -100,17 +106,21 @@ When a query is provided, fetch-track executes the full acquisition pipeline:
 			}
 
 			opts := pipeline.Options{
-				OutDir:           outDir,
-				Sources:          sources,
-				SkipVerify:       skipVerify,
-				SkipMetadata:     skipMetadata,
-				Interactive:      interactive,
-				NoCache:          noCache,
-				Verbose:          verbose,
-				IsAgent:          deps.IsAgentMode(),
-				AutoInstall:      autoInstall,
-				ProgressTarget:   targetURI,
-				ProgressReporter: reporter,
+				OutDir:             outDir,
+				Sources:            sources,
+				SkipVerify:         skipVerify,
+				SkipMetadata:       skipMetadata,
+				Interactive:        interactive,
+				NoCache:            noCache,
+				Verbose:            verbose,
+				Debug:              debug,
+				BootTime:           bootTime,
+				IsAgent:            deps.IsAgentMode(),
+				AutoInstall:        autoInstall,
+				ProgressTarget:     targetURI,
+				ProgressReporter:   reporter,
+				JSRuntime:          jsRuntime,
+				ConfirmFingerprint: confirmFingerprint && !skipFingerprint,
 			}
 			return pipeline.Run(cmd.Context(), target, opts)
 		},
@@ -129,7 +139,12 @@ When a query is provided, fetch-track executes the full acquisition pipeline:
 	rootCmd.Flags().StringVar(&progressTarget, "progress-target", "", "Target URI/address for streaming JSON progress events (e.g. unix:///path/to.sock, tcp://127.0.0.1:9099, fd://3, stdout, stderr)")
 	rootCmd.Flags().StringVar(&progressSocket, "progress-socket", "", "Shorthand alias for --progress-target")
 	rootCmd.Flags().BoolVar(&autoInstall, "auto-install", false, "Automatically install missing dependencies without prompting")
+	rootCmd.Flags().BoolVar(&confirmFingerprint, "confirm-fingerprint", true, "Verify downloaded audio via acoustic fingerprinting against target track")
+	rootCmd.Flags().BoolVar(&skipFingerprint, "skip-fingerprint", false, "Skip acoustic fingerprint confirmation")
+	_ = rootCmd.Flags().MarkHidden("skip-fingerprint")
+	rootCmd.Flags().StringVar(&jsRuntime, "js-runtime", "auto", "JavaScript runtime for yt-dlp (auto, deno, node, bun, quickjs, none)")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output logging")
+	rootCmd.PersistentFlags().BoolVar(&debug, "debug", false, "Enable debug mode with elapsed millisecond timestamps on log lines")
 
 	verifyCmd := &cobra.Command{
 		Use:          "verify <url|path>",
@@ -393,8 +408,22 @@ func main() {
 
 func ensureDependencies(ctx context.Context) error {
 	_ = deps.InitManagedPath()
+	if debug {
+		fmt.Printf("[%dms] Verifying dependencies...\n", time.Since(bootTime).Milliseconds())
+	}
+	var sp *spinner.Spinner
+	if !deps.IsAgentMode() && !verbose && !debug {
+		sp = spinner.New("working... verifying dependencies")
+		sp.Start()
+	}
 	c, _ := cache.New(true)
 	reports, err := deps.VerifyDependencies(ctx, c)
+	if sp != nil {
+		sp.Stop()
+	}
+	if debug && err == nil {
+		fmt.Printf("[%dms] Dependencies verified.\n", time.Since(bootTime).Milliseconds())
+	}
 	if err == nil {
 		return nil
 	}

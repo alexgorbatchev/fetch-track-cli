@@ -31,6 +31,13 @@ Go CLI tool for searching, verifying, downloading, and managing high-fidelity si
 - **Help Screens & Terminal Width:** CLI help output (`--help`) must display an aligned hierarchical tree view with `├─` and `╰─` glyphs powered by `github.com/alexgorbatchev/cobra-help-tree` (`cobrahelptree.Setup(rootCmd)`), with command descriptions automatically trimmed to the terminal width using ellipsis (`...`).
 - **Progress Socket / IPC Telemetry:** When executed by another CLI, agent orchestrator, or GUI, use `--progress-target <uri>` (or `--progress-socket <path>`, or `FETCH_TRACK_PROGRESS_TARGET` env var) to stream atomic NDJSON progress events (`phase_start`, `candidate_found`, `candidate_selected`, `progress`, `complete`, `error`) over a UNIX socket (`unix:///path/to.sock`), TCP address (`tcp://127.0.0.1:9099`), file descriptor (`fd://3`), or standard stream (`stdout`, `stderr`).
 - **Release Notes:** All GitHub releases MUST include comprehensive release notes detailing user-visible changes, performance improvements, and notable commits in the tag range.
+- **Acoustic Fingerprint Confirmation:** When searching across sources (`--confirm-fingerprint`, on by default), candidate audio is cross-verified via acoustic recognition (`tag-track` / Shazam API). Candidates that acoustically identify as a conflicting track are automatically rejected and retried with the next best search candidate.
+- **Dynamic JS Runtime Resolution:** `yt-dlp` JavaScript runtime is auto-discovered across `$PATH` (`deno`, `node`, `bun`, `quickjs`) via `--js-runtime auto` (default) to ensure uninterrupted YouTube stream decryption.
+- **Candidate Ranking Heuristics:**
+  1. *Version & Remix Intent:* Target remixers (e.g. Solomun, Vintage Culture) are boosted (+150), conflicting remixers penalized (-250).
+  2. *Channel Authority:* `- Topic` channels (+50), verified electronic record labels (+40), and official audio badges (+30) receive priority scoring.
+  3. *Negative Keyword Penalties:* Covers, tutorials, 8D audio, slowed+reverb, and fan edits receive disqualifying penalties (-300).
+  4. *DJ Duration Curve:* Full extended mixes (4.5–9 min) receive peak scoring (+120), short edits penalized (-50), and snippets/sets disqualified (-400).
 - **Metadata Fallback Chain:**
   1. Acoustic Identification (Shazam via `goshazam` / AcoustID via `gochromaprint`)
   2. iTunes Search API (1400x1400 square artwork)
@@ -38,7 +45,8 @@ Go CLI tool for searching, verifying, downloading, and managing high-fidelity si
   4. YouTube / Local Filename Raw Fallback
 - **Square Artwork Normalization:** Always ensure embedded album art is strictly 1:1 square (1400x1400) by prioritizing square artwork sources (Shazam, iTunes) and applying a center-crop/scale video filter (`crop='min(iw,ih)':'min(iw,ih)',scale=1400:1400`) during ffmpeg tagging to prevent skewed or stretched images on DJ decks and jog wheels.
 - **Origin Date & Provenance Preservation:** Always preserve full release date (`YYYY-MM-DD` when available) in file date tags and embed source provenance (audio source URL, metadata provider, and acquisition date) in track comment tags (`Source: <url> | Metadata: <provider> | Fetched: <date>`) without re-encoding.
-- **Dependency Management & Auto-Installation:** Use `fetch-track dependencies` (`deps`), `fetch-track deps install [dep...]`, `fetch-track deps update [dep...]`, or the `--auto-install` flag to check, install, or update required external tools (`yt-dlp`, `ffmpeg`, `ffprobe`) in `$XDG_DATA_HOME/fetch-track/bin` (or `~/.local/share/fetch-track/bin`) powered by `github.com/alexgorbatchev/godeps`.
+- **Dependency Management & Auto-Installation:** Use `fetch-track dependencies` (`deps`), `fetch-track deps install [dep...]`, `fetch-track deps update [dep...]`, or the `--auto-install` flag to check, install, or update required external tools (`yt-dlp`, `ffmpeg`, `ffprobe`, `tag-track`) in `$XDG_DATA_HOME/fetch-track/bin` (or `~/.local/share/fetch-track/bin`) powered by `github.com/alexgorbatchev/godeps`.
+- **Search & Progress Logging:** In non-agent interactive mode, display live source search status (`Searching youtube...`, `Searching soundcloud...`, `Got X results from <source>`) with candidates streamed above the spinner. Keep logs clean without repeating track names across section headers or error messages.
 - **Required Dependencies Messages:** Dependency verification and error messages must always show the required minimum version, and if a dependency is already installed but outdated, clearly display which old version is currently available.
 - **No Stack Traces in Output:** User-facing output and error messages must never expose raw stack traces, Python tracebacks, Go panic dumps, or internal runtime frames from dependencies; errors from external tools must always be cleaned to concise user-actionable messages using `godeps.SanitizeStderr`.
 - **Self-Upgrade:** Use `fetch-track upgrade` (aliases: `self-update`, `update-self`) to check for newer GitHub releases and upgrade the running `fetch-track` binary in-place without using GitHub API via `godeps.UpgradeSelf`.
@@ -53,6 +61,7 @@ Go CLI tool for searching, verifying, downloading, and managing high-fidelity si
   `fetch-track "<query>" --no-metadata -o .tmp/ | tag-track -o tracks/`
 
 ## Boundaries
+- **Always:** Keep all documentation (including `README.md`, `AGENTS.md`, options/flags tables, CLI help strings, and reference docs) strictly synchronized and up to date whenever ANY changes in functionality, behavior, architecture, configuration, or interfaces are made.
 - **Always:** Automatically record all new instructions in the most appropriate `AGENTS.md` file immediately upon receipt (check with user if existing instructions conflict).
 - **Always:** Back up Engine DJ SQLite databases (`Database2/` and root `.db` files) before making any modifications or updates to the library database.
 - **Always:** Any time code is changed such that results from running that code are changed, a test file must be changed as well; 90% code coverage is required (the `scripts/` folder is explicitly excluded from this rule).

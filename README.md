@@ -4,22 +4,26 @@ A fast, lightweight CLI tool with AI agent support for bedroom and amateur DJs t
 
 - Accepts direct track URLs (YouTube, SoundCloud, Bandcamp, Mixcloud) or search queries.
 - Searches YouTube, SoundCloud, and Bandcamp in parallel for full extended DJ mixes with mixable intro/outro sections.
-- Matches artist and title while filtering out short radio edits, snippets, or multi-hour mix compilations.
-- Downloads native high-bitrate audio streams directly without lossy re-encoding.
+- Matches artist, title, and remix/version intent while filtering out short radio edits, snippets, or multi-hour mix compilations.
+- Confirms candidate authenticity before finalizing using acoustic audio fingerprinting (Shazam / AcoustID) to eliminate false positives and fake uploads.
+- Downloads native high-bitrate audio streams directly without lossy re-encoding using auto-detected JavaScript runtimes.
 - Analyzes spectral frequency bandwidth (Goertzel algorithm) and computes mixer volume Gain Offset.
 - Identifies tracks via acoustic audio fingerprinting (AcoustID and Apple Shazam) with API fallbacks (iTunes and MusicBrainz) to embed canonical metadata and 1400x1400 album art.
 
 # How It Works
 
 - Evaluates direct streaming URLs (YouTube, SoundCloud, Bandcamp, Mixcloud) or queries configured sources in parallel.
-- Discovers and prioritizes full-length Extended, Original, Club, or Dub DJ mixes over short radio edits.
+- Discovers and prioritizes full-length Extended, Original, Club, or Dub DJ mixes over short radio edits using remix intent and duration-curve heuristics.
 - Downloads the highest fidelity native audio stream without lossy re-encoding.
+- Confirms candidate audio authenticity via acoustic fingerprinting against target track metadata before finalizing.
 - Inspects audio frequency response and calculates mixer volume Gain Offset.
 - Enriches the track with high-resolution 1400x1400 artwork and canonical tags before saving.
 
 # How it Really Works
 
-- Probes direct streaming links and runs concurrent `yt-dlp` JSON scrapers with fuzzy title and duration scoring heuristics.
+- Probes direct streaming links and runs concurrent `yt-dlp` JSON scrapers with multi-angle query expansion, tokenized artist matching, remix intent scoring, and channel authority bonuses.
+- Auto-detects available JavaScript runtimes (`deno`, `node`, `bun`, `quickjs`) on `$PATH` for seamless `yt-dlp` signature challenge solving.
+- Performs pre-tag acoustic fingerprint validation (`--confirm-fingerprint`) to automatically reject and retry mismatched search candidates.
 - Extracts PCM audio samples via `ffmpeg` and executes Goertzel frequency bin analysis to detect audio cutoff thresholds and RMS loudness.
 - Generates Chromaprint acoustic fingerprints and landmark constellations to query AcoustID and Shazam recognition services in pure Go.
 - Normalizes and center-crops downloaded album artwork to 1:1 square format (1400x1400) and embeds ID3/MP4 metadata using stream-copy mode (`-c:a copy`).
@@ -75,6 +79,8 @@ fetch-track upgrade
 
 | Flag | Short | Default | Description |
 | :--- | :--- | :--- | :--- |
+| `--confirm-fingerprint` | | `true` | Verify downloaded audio via acoustic fingerprinting against target track |
+| `--js-runtime <engine>` | | `auto` | JavaScript runtime for `yt-dlp` (`auto`, `deno`, `node`, `bun`, `quickjs`, `none`) |
 | `--out-dir <path>` | `-o` | `.` | Output directory for downloaded tracks |
 | `--sources <list>` | `-s` | `youtube,soundcloud` | Comma-separated list of sources to search in parallel |
 | `--interactive` | `-i` | `false` | Interactively approve or choose track candidate before downloading |

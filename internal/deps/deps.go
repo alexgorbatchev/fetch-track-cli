@@ -84,7 +84,7 @@ var RequiredDependencies = []Dependency{
 	},
 	{
 		Name:         "tag-track",
-		MinVersion:   "0.1.0",
+		MinVersion:   "1.0.0",
 		InstallURL:   "https://github.com/alexgorbatchev/tag-track-cli#installation",
 		VersionArgs:  []string{"--version"},
 		ParseVersion: ParseVersionOutput,

@@ -78,6 +78,11 @@ func defaultRunner(ctx context.Context, name string, args ...string) ([]byte, er
 
 var defaultRunnerVar = defaultRunner
 
+// GetDefaultRunner returns the active default command runner for verifier.
+func GetDefaultRunner() CommandRunner {
+	return defaultRunnerVar
+}
+
 // SetDefaultRunner overrides the default command runner and returns a restore cleanup function.
 func SetDefaultRunner(runner CommandRunner) func() {
 	orig := defaultRunnerVar

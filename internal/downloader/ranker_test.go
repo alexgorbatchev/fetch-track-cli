@@ -59,6 +59,48 @@ func TestRankCandidates(t *testing.T) {
 			title:  "Bose",
 			wantID: "acc1",
 		},
+		{
+			name: "target remix intent matches requested remixer over competing remixer",
+			candidates: []Candidate{
+				{ID: "other_remix", Title: "Max Styler - One More (Vintage Culture Remix)", Duration: 320, Source: "youtube"},
+				{ID: "solomun_remix", Title: "Max Styler - One More (feat. Ad-Apt) [Solomun Remix]", Duration: 319, Source: "youtube"},
+				{ID: "original_mix", Title: "Max Styler - One More (Original Mix)", Duration: 300, Source: "youtube"},
+			},
+			artist: "Max Styler & Ad-Apt",
+			title:  "One More (Solomun Remix)",
+			wantID: "solomun_remix",
+		},
+		{
+			name: "negative keywords penalize fan tutorials and covers",
+			candidates: []Candidate{
+				{ID: "tutorial", Title: "Max Styler - One More (Piano Tutorial Synthesia)", Duration: 300, Source: "youtube"},
+				{ID: "slowed", Title: "Max Styler - One More (Slowed + Reverb)", Duration: 300, Source: "youtube"},
+				{ID: "real_track", Title: "Max Styler - One More (Official Audio)", Duration: 300, Source: "youtube"},
+			},
+			artist: "Max Styler",
+			title:  "One More",
+			wantID: "real_track",
+		},
+		{
+			name: "topic channel and official record label authority bonus",
+			candidates: []Candidate{
+				{ID: "random_user", Title: "Discip - The Way I Like It", Duration: 240, Source: "youtube", Uploader: "User12345"},
+				{ID: "label_channel", Title: "Discip - The Way I Like It", Duration: 240, Source: "youtube", Uploader: "Take Notes", Channel: "Take Notes"},
+			},
+			artist: "Discip",
+			title:  "The Way I Like It",
+			wantID: "label_channel",
+		},
+		{
+			name: "extended duration sweet spot beats short teaser",
+			candidates: []Candidate{
+				{ID: "short_teaser", Title: "Omiki - Maya", Duration: 30, Source: "youtube"},
+				{ID: "extended_cut", Title: "Omiki & Phanatic - Maya (feat. David Trindade) [Extended Mix]", Duration: 380, Source: "youtube"},
+			},
+			artist: "Omiki & Phanatic",
+			title:  "Maya (Extended Mix)",
+			wantID: "extended_cut",
+		},
 	}
 
 	for _, tt := range tests {

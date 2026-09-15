@@ -13,7 +13,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
+	"github.com/alexgorbatchev/godeps"
 	"github.com/dj/fetch-track-cli/internal/cache"
 	"github.com/dj/fetch-track-cli/internal/deps"
 	"github.com/dj/fetch-track-cli/internal/verifier"
@@ -28,7 +30,7 @@ var (
 )
 
 // CommandRunner abstracts execution of external commands for testability.
-type CommandRunner func(ctx context.Context, name string, args ...string) ([]byte, error)
+type CommandRunner = godeps.CommandRunner
 
 func defaultRunner(ctx context.Context, name string, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
@@ -60,6 +62,14 @@ func SetDefaultRunner(runner CommandRunner) func() {
 	}
 }
 
+// GetDefaultRunner returns the active default command runner for downloader.
+func GetDefaultRunner() CommandRunner {
+	if defaultRunnerVar == nil {
+		return defaultRunner
+	}
+	return defaultRunnerVar
+}
+
 // MapSourceSearchPrefix returns the yt-dlp search prefix for a given source name.
 func MapSourceSearchPrefix(source string) string {
 	switch strings.ToLower(strings.TrimSpace(source)) {
@@ -74,6 +84,13 @@ func MapSourceSearchPrefix(source string) string {
 	}
 }
 
+// SearchObserver provides hooks for observing search queries and candidate discovery.
+type SearchObserver struct {
+	OnQueryStart    func(source string)
+	OnQueryComplete func(source string, count int)
+	OnCandidate     func(candidate Candidate)
+}
+
 // SearchSourcesInParallel searches all configured sources concurrently for track candidates.
 func SearchSourcesInParallel(ctx context.Context, sources []string, artist, title, rawQuery string, c *cache.Cache, verbose ...bool) ([]Candidate, error) {
 	return SearchSourcesInParallelWithRunner(ctx, defaultRunnerVar, sources, artist, title, rawQuery, c, verbose...)
@@ -81,13 +98,18 @@ func SearchSourcesInParallel(ctx context.Context, sources []string, artist, titl
 
 // SearchSourcesInParallelWithRunner searches all configured sources concurrently using a provided CommandRunner.
 func SearchSourcesInParallelWithRunner(ctx context.Context, runner CommandRunner, sources []string, artist, title, rawQuery string, c *cache.Cache, verbose ...bool) ([]Candidate, error) {
+	return SearchSourcesInParallelWithObserver(ctx, runner, sources, artist, title, rawQuery, c, nil, verbose...)
+}
+
+// SearchSourcesInParallelWithObserver searches all configured sources concurrently using a provided CommandRunner and SearchObserver.
+func SearchSourcesInParallelWithObserver(ctx context.Context, runner CommandRunner, sources []string, artist, title, rawQuery string, c *cache.Cache, observer *SearchObserver, verbose ...bool) ([]Candidate, error) {
 	isVerbose := len(verbose) > 0 && verbose[0]
 	if isVerbose {
 		fmt.Printf("search: %s\n", strings.Join(sources, ", "))
 	}
 
 	if runner == nil {
-		runner = defaultRunner
+		runner = GetDefaultRunner()
 	}
 
 	if len(sources) == 0 {
@@ -100,9 +122,15 @@ func SearchSourcesInParallelWithRunner(ctx context.Context, runner CommandRunner
 		if isVerbose {
 			fmt.Printf("search cache hit for %q\n", rawQuery)
 		} else if !isAgentMode() {
-			fmt.Printf("candidates: [cached]\n")
-			for _, cand := range cachedList {
-				fmt.Printf("  - %q [%s %s]\n", cand.Title, cand.Source, verifier.FormatDuration(cand.Duration))
+			if observer != nil && observer.OnCandidate != nil {
+				for _, cand := range cachedList {
+					observer.OnCandidate(cand)
+				}
+			} else {
+				fmt.Printf("Candidates: [cached]\n")
+				for _, cand := range cachedList {
+					fmt.Printf("  - %q [%s %s]\n", cand.Title, cand.Source, verifier.FormatDuration(cand.Duration))
+				}
 			}
 		}
 		return cachedList, nil
@@ -113,6 +141,27 @@ func SearchSourcesInParallelWithRunner(ctx context.Context, runner CommandRunner
 		cleanTitle = strings.ReplaceAll(cleanTitle, kw, "")
 	}
 	cleanTitle = strings.TrimSpace(cleanTitle)
+
+	// Build expanded search queries for multi-angle parallel discovery
+	var searchQueries []string
+	seenQ := make(map[string]bool)
+
+	addQuery := func(qs string) {
+		qs = strings.TrimSpace(qs)
+		if qs != "" && !seenQ[strings.ToLower(qs)] {
+			seenQ[strings.ToLower(qs)] = true
+			searchQueries = append(searchQueries, qs)
+		}
+	}
+
+	if artist != "" && cleanTitle != "" {
+		addQuery(fmt.Sprintf("%s %s", artist, cleanTitle))
+		if !strings.Contains(strings.ToLower(cleanTitle), "extended") {
+			addQuery(fmt.Sprintf("%s %s extended", artist, cleanTitle))
+		}
+		addQuery(fmt.Sprintf("%s %s official audio", artist, cleanTitle))
+	}
+	addQuery(rawQuery)
 
 	var mu sync.Mutex
 	var headerOnce sync.Once
@@ -128,96 +177,135 @@ func SearchSourcesInParallelWithRunner(ctx context.Context, runner CommandRunner
 
 		prefix := MapSourceSearchPrefix(source)
 
-		q := rawQuery
-		if artist != "" && cleanTitle != "" {
-			q = fmt.Sprintf("%s %s", artist, cleanTitle)
-		}
-
 		wg.Add(1)
-		go func(srcName, searchPrefix, queryStr string) {
+		go func(srcName, searchPrefix string) {
 			defer wg.Done()
 
-			if isVerbose {
-				fmt.Printf("%s: %q\n", srcName, queryStr)
-			}
+			srcCount := 0
+			for _, queryStr := range searchQueries {
+				if isVerbose {
+					fmt.Printf("%s: %q\n", srcName, queryStr)
+				}
+				if observer != nil && observer.OnQueryStart != nil {
+					observer.OnQueryStart(srcName)
+				}
 
-			cmdCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
-			defer cancel()
+				cmdCtx, cancel := context.WithTimeout(ctx, 25*time.Second)
 
-			stdoutBytes, err := runner(cmdCtx, "yt-dlp",
-				"--flat-playlist",
-				"--dump-json",
-				"--no-warnings",
-				"--quiet",
-				"--js-runtimes", "node",
-				fmt.Sprintf("%s:%s", searchPrefix, queryStr),
-			)
-			if err != nil || len(stdoutBytes) == 0 {
-				return
-			}
+				jsArgs := deps.ResolveJSRuntimeArgs("auto")
+				cmdArgs := []string{
+					"--flat-playlist",
+					"--dump-json",
+					"--no-warnings",
+					"--quiet",
+				}
+				cmdArgs = append(cmdArgs, jsArgs...)
+				cmdArgs = append(cmdArgs, fmt.Sprintf("%s:%s", searchPrefix, queryStr))
 
-			scanner := bufio.NewScanner(bytes.NewReader(stdoutBytes))
-			for scanner.Scan() {
-				line := scanner.Text()
-				if strings.TrimSpace(line) == "" {
+				stdoutBytes, err := runner(cmdCtx, "yt-dlp", cmdArgs...)
+				cancel()
+				if err != nil || len(stdoutBytes) == 0 {
+					if isVerbose && err != nil {
+						fmt.Printf("%s search error: %v\n", srcName, err)
+					}
 					continue
 				}
 
-				var cand struct {
-					ID         string  `json:"id"`
-					Title      string  `json:"title"`
-					Duration   float64 `json:"duration"`
-					WebpageURL string  `json:"webpage_url"`
-					URL        string  `json:"url"`
-				}
-
-				if err := json.Unmarshal([]byte(line), &cand); err == nil && cand.Title != "" && cand.Duration > 0 {
-					// Filter out irrelevant search hits, short snippets (< 60s), and continuous album mixes (> 900s)
-					candNorm := NormalizeUnicode(cand.Title)
-					titleNorm := NormalizeUnicode(cleanTitle)
-
-					titleMatch := titleNorm == "" || strings.Contains(candNorm, titleNorm) || fuzzy.MatchFold(titleNorm, candNorm)
-
-					if !titleMatch || cand.Duration < 60 || cand.Duration > 900 {
-						continue // Discard garbage search candidate
+				scanner := bufio.NewScanner(bytes.NewReader(stdoutBytes))
+				for scanner.Scan() {
+					line := scanner.Text()
+					if strings.TrimSpace(line) == "" {
+						continue
 					}
 
-					targetURL := cand.WebpageURL
-					if targetURL == "" {
-						targetURL = cand.URL
+					var cand struct {
+						ID         string  `json:"id"`
+						Title      string  `json:"title"`
+						Duration   float64 `json:"duration"`
+						Uploader   string  `json:"uploader"`
+						Channel    string  `json:"channel"`
+						WebpageURL string  `json:"webpage_url"`
+						URL        string  `json:"url"`
 					}
-					if targetURL == "" && cand.ID != "" {
-						if srcName == "youtube" {
-							targetURL = fmt.Sprintf("https://www.youtube.com/watch?v=%s", cand.ID)
+
+					if err := json.Unmarshal([]byte(line), &cand); err == nil && cand.Title != "" && cand.Duration > 0 {
+						// Filter out extreme garbage (e.g. > 1 hour sets)
+						if cand.Duration > 3600 {
+							continue
+						}
+
+						candNorm := NormalizeUnicode(cand.Title)
+						titleNorm := NormalizeUnicode(cleanTitle)
+
+						// Relaxed candidate title matching: don't drop remix / feat / bracket variations early
+						var titleMatch bool
+						if titleNorm == "" {
+							titleMatch = true
+						} else if strings.Contains(candNorm, titleNorm) || fuzzy.MatchFold(titleNorm, candNorm) {
+							titleMatch = true
 						} else {
-							targetURL = cand.ID
+							// Check if major alphanumeric tokens (>= 3 chars) match
+							tokens := strings.FieldsFunc(titleNorm, func(r rune) bool {
+								return !unicode.IsLetter(r) && !unicode.IsNumber(r)
+							})
+							for _, tok := range tokens {
+								if len(tok) >= 3 && strings.Contains(candNorm, tok) {
+									titleMatch = true
+									break
+								}
+							}
 						}
-					}
 
-					if targetURL != "" {
-						key := fmt.Sprintf("%s:%s", srcName, targetURL)
-						mu.Lock()
-						if _, exists := candidatesMap[key]; !exists {
-							candObj := Candidate{
-								ID:         cand.ID,
-								Title:      cand.Title,
-								Duration:   cand.Duration,
-								Source:     srcName,
-								WebpageURL: targetURL,
-							}
-							candidatesMap[key] = candObj
-							if !isAgentMode() {
-								headerOnce.Do(func() {
-									fmt.Printf("\r\033[Kcandidates:\n")
-								})
-								fmt.Printf("\r\033[K  - %q [%s %s]\n", cand.Title, srcName, verifier.FormatDuration(cand.Duration))
+						if !titleMatch {
+							continue
+						}
+
+						targetURL := cand.WebpageURL
+						if targetURL == "" {
+							targetURL = cand.URL
+						}
+						if targetURL == "" && cand.ID != "" {
+							if srcName == "youtube" {
+								targetURL = fmt.Sprintf("https://www.youtube.com/watch?v=%s", cand.ID)
+							} else {
+								targetURL = cand.ID
 							}
 						}
-						mu.Unlock()
+
+						if targetURL != "" {
+							key := fmt.Sprintf("%s:%s", srcName, targetURL)
+							mu.Lock()
+							if _, exists := candidatesMap[key]; !exists {
+								candObj := Candidate{
+									ID:         cand.ID,
+									Title:      cand.Title,
+									Duration:   cand.Duration,
+									Source:     srcName,
+									Uploader:   cand.Uploader,
+									Channel:    cand.Channel,
+									WebpageURL: targetURL,
+								}
+								candidatesMap[key] = candObj
+								srcCount++
+								if observer != nil && observer.OnCandidate != nil {
+									observer.OnCandidate(candObj)
+								} else if !isAgentMode() {
+									headerOnce.Do(func() {
+										fmt.Printf("\r\033[KCandidates:\n")
+									})
+									fmt.Printf("\r\033[K  - %q [%s %s]\n", cand.Title, srcName, verifier.FormatDuration(cand.Duration))
+								}
+							}
+							mu.Unlock()
+						}
 					}
 				}
 			}
-		}(source, prefix, q)
+
+			if observer != nil && observer.OnQueryComplete != nil {
+				observer.OnQueryComplete(srcName, srcCount)
+			}
+		}(source, prefix)
 	}
 
 	wg.Wait()
@@ -299,7 +387,7 @@ func DownloadAudioStreamWithRunner(ctx context.Context, runner CommandRunner, ta
 	}
 
 	if runner == nil {
-		runner = defaultRunner
+		runner = GetDefaultRunner()
 	}
 
 	initialFiles, err := listAudioFiles(outDir)
@@ -308,6 +396,8 @@ func DownloadAudioStreamWithRunner(ctx context.Context, runner CommandRunner, ta
 	}
 
 	extractorArgsList := []string{
+		"youtube:player_client=ios,android,web",
+		"youtube:player_client=android_creator,web",
 		"youtube:player_client=mweb,web",
 		"",
 	}
@@ -325,16 +415,17 @@ func DownloadAudioStreamWithRunner(ctx context.Context, runner CommandRunner, ta
 			}
 		}
 
+		jsArgs := deps.ResolveJSRuntimeArgs("auto")
 		args := []string{
 			"--no-warnings",
 			"--quiet",
-			"--js-runtimes", "node",
 			"-f", "bestaudio/best",
 			"-x",
 			"--embed-metadata",
 			"--embed-thumbnail",
 			"-o", outPattern,
 		}
+		args = append(args, jsArgs...)
 
 		if extractorArgs != "" {
 			args = append(args, "--extractor-args", extractorArgs)
