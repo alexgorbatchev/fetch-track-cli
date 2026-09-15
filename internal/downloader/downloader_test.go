@@ -153,16 +153,18 @@ func TestSearchSourcesInParallelWithRunner(t *testing.T) {
 		t.Errorf("expected ErrNoCandidateFound, got: %v", err)
 	}
 
-	// 4. Subsequent search with working runner succeeds (not poisoned by failed attempt)
-	recoverRunner := func(ctx context.Context, name string, args ...string) ([]byte, error) {
-		return []byte(`{"id":"rec1","title":"Temporary Fail","duration":200,"webpage_url":"https://youtube.com/watch?v=rec1"}` + "\n"), nil
+	// 5. DRM Policy SNIP or SUB_HIGH_TIER is excluded
+	drmRunner := func(ctx context.Context, name string, args ...string) ([]byte, error) {
+		return []byte(`{"id":"drm1","title":"Flava D - Cant Get It Back","duration":180,"webpage_url":"https://soundcloud.com/flava_d/cant-get-it-back","policy":"SNIP"}` + "\n" +
+			`{"id":"drm2","title":"Flava D - Cant Get It Back","duration":180,"webpage_url":"https://soundcloud.com/flava_d/cant-get-it-back-2","monetization_model":"SUB_HIGH_TIER"}` + "\n" +
+			`{"id":"valid1","title":"Flava D - Cant Get It Back","duration":180,"webpage_url":"https://soundcloud.com/flava_d/cant-get-it-back-valid"}` + "\n"), nil
 	}
-	recoveredResults, err := SearchSourcesInParallelWithRunner(ctx, recoverRunner, []string{"youtube"}, "Temporary", "Fail", "Temporary Fail", c, false)
+	drmResults, err := SearchSourcesInParallelWithRunner(ctx, drmRunner, []string{"soundcloud"}, "Flava D", "Cant Get It Back", "Flava D Cant Get It Back", nil, false)
 	if err != nil {
-		t.Fatalf("expected search to recover and succeed, got error: %v", err)
+		t.Fatalf("unexpected search error: %v", err)
 	}
-	if len(recoveredResults) != 1 {
-		t.Errorf("expected 1 recovered candidate, got %d", len(recoveredResults))
+	if len(drmResults) != 1 || drmResults[0].ID != "valid1" {
+		t.Errorf("expected only 1 valid non-DRM candidate (valid1), got: %+v", drmResults)
 	}
 }
 

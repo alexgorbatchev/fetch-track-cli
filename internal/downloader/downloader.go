@@ -219,18 +219,20 @@ func SearchSourcesInParallelWithObserver(ctx context.Context, runner CommandRunn
 					}
 
 					var cand struct {
-						ID         string  `json:"id"`
-						Title      string  `json:"title"`
-						Duration   float64 `json:"duration"`
-						Uploader   string  `json:"uploader"`
-						Channel    string  `json:"channel"`
-						WebpageURL string  `json:"webpage_url"`
-						URL        string  `json:"url"`
+						ID                string  `json:"id"`
+						Title             string  `json:"title"`
+						Duration          float64 `json:"duration"`
+						Uploader          string  `json:"uploader"`
+						Channel           string  `json:"channel"`
+						WebpageURL        string  `json:"webpage_url"`
+						URL               string  `json:"url"`
+						Policy            string  `json:"policy"`
+						MonetizationModel string  `json:"monetization_model"`
 					}
 
 					if err := json.Unmarshal([]byte(line), &cand); err == nil && cand.Title != "" && cand.Duration > 0 {
-						// Filter out extreme garbage (e.g. > 1 hour sets)
-						if cand.Duration > 3600 {
+						// Filter out extreme garbage (e.g. > 1 hour sets) or DRM-protected 30s snippets
+						if cand.Duration > 3600 || strings.EqualFold(cand.Policy, "SNIP") || strings.EqualFold(cand.MonetizationModel, "SUB_HIGH_TIER") {
 							continue
 						}
 
