@@ -45,7 +45,6 @@ type Options struct {
 	Debug              bool
 	BootTime           time.Time
 	IsAgent            bool
-	AutoInstall        bool
 	ProgressTarget     string
 	ProgressReporter   *progress.Reporter
 	Runner             deps.CommandRunner

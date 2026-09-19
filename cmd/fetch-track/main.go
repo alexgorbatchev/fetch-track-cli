@@ -26,14 +26,14 @@ var (
 	bootTime = time.Now()
 	version  = "dev"
 
-	outDir         string
-	sourcesFlag    string
-	skipVerify     bool
-	skipMetadata   bool
-	interactive    bool
-	noCache        bool
-	verbose        bool
-	debug          bool
+	outDir             string
+	sourcesFlag        string
+	skipVerify         bool
+	skipMetadata       bool
+	interactive        bool
+	noCache            bool
+	verbose            bool
+	debug              bool
 	progressTarget     string
 	progressSocket     string
 	autoInstall        bool
@@ -118,7 +118,6 @@ When a query is provided, fetch-track executes the full acquisition pipeline:
 				Debug:              debug,
 				BootTime:           bootTime,
 				IsAgent:            deps.IsAgentMode(),
-				AutoInstall:        autoInstall,
 				ProgressTarget:     targetURI,
 				ProgressReporter:   reporter,
 				JSRuntime:          jsRuntime,

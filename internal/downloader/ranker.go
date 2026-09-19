@@ -95,7 +95,7 @@ func DeduplicateCandidates(candidates []Candidate) []Candidate {
 }
 
 var (
-	remixRegex = regexp.MustCompile(`(?i)(?:[\(\[\-]\s*)([a-z0-9\s&._-]+?)\s+(?:remix|mix|edit|dub|flip|vip|rework|bootleg)\s*[\)\]]?`)
+	remixRegex       = regexp.MustCompile(`(?i)(?:[\(\[\-]\s*)([a-z0-9\s&._-]+?)\s+(?:remix|mix|edit|dub|flip|vip|rework|bootleg)\s*[\)\]]?`)
 	negativeKeywords = []string{
 		"cover", "tutorial", "how to play", "reaction", "reacting to",
 		"lesson", "slowed + reverb", "slowed and reverb", "slowed & reverb",

@@ -84,7 +84,6 @@ func TestRun_CanceledContext(t *testing.T) {
 		Sources:      []string{"youtube"},
 		SkipVerify:   true,
 		SkipMetadata: true,
-		SkipDepCheck: true,
 		Verbose:      true,
 		IsAgent:      true,
 	}
@@ -92,34 +91,6 @@ func TestRun_CanceledContext(t *testing.T) {
 	err := Run(ctx, "Test Artist - Test Track", opts)
 	if err == nil {
 		t.Error("expected error when context is canceled, got nil")
-	}
-}
-
-func TestRun_SkipDepCheck(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-
-	_, cleanupEnv := setupTestEnvironment(t)
-	defer cleanupEnv()
-	t.Setenv("AGENT", "1")
-
-	cleanupDl := downloader.SetDefaultRunner(func(ctx context.Context, name string, args ...string) ([]byte, error) {
-		return nil, errors.New("canceled")
-	})
-	defer cleanupDl()
-
-	opts := Options{
-		OutDir:       t.TempDir(),
-		Sources:      []string{"youtube"},
-		SkipVerify:   true,
-		SkipMetadata: true,
-		SkipDepCheck: true,
-		IsAgent:      true,
-	}
-
-	err := Run(ctx, "Test Artist - Test Track", opts)
-	if err == nil {
-		t.Error("expected error when context is canceled with SkipDepCheck")
 	}
 }
 
@@ -217,7 +188,6 @@ func TestRun_WithProgressReporter(t *testing.T) {
 		Sources:          []string{"youtube"},
 		SkipVerify:       true,
 		SkipMetadata:     true,
-		SkipDepCheck:     true,
 		IsAgent:          true,
 		ProgressReporter: reporter,
 	}
@@ -287,7 +257,6 @@ func TestRun_EndToEndQuery_NonAgent(t *testing.T) {
 		Sources:      []string{"soundcloud"},
 		SkipVerify:   false,
 		SkipMetadata: false,
-		SkipDepCheck: false,
 		Verbose:      false,
 		IsAgent:      false,
 	}
@@ -359,7 +328,6 @@ func TestRun_EndToEndQuery_AgentMode(t *testing.T) {
 		Sources:      []string{"soundcloud"},
 		SkipVerify:   false,
 		SkipMetadata: false,
-		SkipDepCheck: false,
 		Verbose:      true,
 		IsAgent:      true,
 	}
@@ -424,7 +392,6 @@ func TestRun_EndToEndURL_CachedAndUncached(t *testing.T) {
 		Sources:      []string{"soundcloud"},
 		SkipVerify:   false,
 		SkipMetadata: false,
-		SkipDepCheck: false,
 		Verbose:      false,
 		IsAgent:      false,
 	}
@@ -466,7 +433,6 @@ func TestRun_AdditionalBranches(t *testing.T) {
 		Sources:      []string{"soundcloud"},
 		SkipDepCheck: false,
 		NoCache:      true,
-		AutoInstall:  false,
 		IsAgent:      true,
 	}
 	err := Run(ctx, "Test Track", opts)
@@ -474,7 +440,6 @@ func TestRun_AdditionalBranches(t *testing.T) {
 		t.Error("expected error on dependency check failure")
 	}
 	failDepsCleanup()
-
 	// Restore deps in cache
 	_ = c.Put("deps", "yt-dlp", "2026.08.01", time.Hour)
 	_ = c.Put("deps", "ffmpeg", "ffmpeg version 8.1", time.Hour)
@@ -519,7 +484,6 @@ func TestRun_AdditionalBranches(t *testing.T) {
 		Sources:      []string{"soundcloud"},
 		SkipVerify:   true,
 		SkipMetadata: true,
-		SkipDepCheck: false,
 		Verbose:      false,
 		IsAgent:      false,
 	}
@@ -573,11 +537,10 @@ func TestRun_InteractiveCancel(t *testing.T) {
 	defer cleanupDl()
 
 	opts := Options{
-		OutDir:       outDir,
-		Sources:      []string{"soundcloud"},
-		Interactive:  true,
-		SkipDepCheck: false,
-		IsAgent:      false,
+		OutDir:      outDir,
+		Sources:     []string{"soundcloud"},
+		Interactive: true,
+		IsAgent:     false,
 	}
 
 	// In non-TTY test runner, interactive candidate prompt will cancel and return error
@@ -665,7 +628,6 @@ func TestRun_DownloadFailure(t *testing.T) {
 		Sources:      []string{"soundcloud"},
 		SkipVerify:   true,
 		SkipMetadata: true,
-		SkipDepCheck: false,
 		IsAgent:      true,
 	}
 
