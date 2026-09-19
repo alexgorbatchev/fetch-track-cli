@@ -16,8 +16,8 @@ var (
 	ErrUserSkipped = errors.New("track skipped by user")
 
 	selectedStyle = lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("86"))
+			Bold(true).
+			Foreground(lipgloss.Color("86"))
 )
 
 // FormRunner abstracts executing the interactive terminal form for testability.
