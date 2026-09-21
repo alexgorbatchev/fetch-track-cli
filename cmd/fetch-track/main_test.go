@@ -76,6 +76,36 @@ func TestNewRootCommand_HelpAndVersion(t *testing.T) {
 	}
 }
 
+func TestNewRootCommand_AgentHelp(t *testing.T) {
+	t.Setenv("AGENT", "1")
+	cmd := newRootCommand()
+	var outBuf bytes.Buffer
+	cmd.SetOut(&outBuf)
+	cmd.SetErr(&outBuf)
+	cmd.SetArgs([]string{"--help"})
+
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf("agent help command returned error: %v", err)
+	}
+	if !strings.Contains(outBuf.String(), "command: fetch-track") {
+		t.Errorf("expected structured agent help output, got:\n%s", outBuf.String())
+	}
+
+	// Test subcommand agent help
+	outBuf.Reset()
+	cmd = newRootCommand()
+	cmd.SetOut(&outBuf)
+	cmd.SetErr(&outBuf)
+	cmd.SetArgs([]string{"verify", "--help"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("subcommand agent help returned error: %v", err)
+	}
+	if !strings.Contains(outBuf.String(), "command: fetch-track verify") {
+		t.Errorf("expected verify agent help output, got:\n%s", outBuf.String())
+	}
+}
+
 func TestNewRootCommand_NoArgs(t *testing.T) {
 	cmd := newRootCommand()
 	var outBuf bytes.Buffer
