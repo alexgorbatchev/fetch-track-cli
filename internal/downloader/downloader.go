@@ -459,8 +459,7 @@ func DownloadAudioStreamWithRunner(ctx context.Context, runner CommandRunner, ta
 }
 
 func isAgentMode() bool {
-	val := strings.ToLower(strings.TrimSpace(os.Getenv("AGENT")))
-	return val == "1" || val == "true" || val == "yes"
+	return deps.IsAgentMode()
 }
 
 func listAudioFiles(dir string) (map[string]bool, error) {

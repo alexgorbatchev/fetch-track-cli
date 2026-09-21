@@ -383,7 +383,51 @@ When a query is provided, fetch-track executes the full acquisition pipeline:
 	rootCmd.AddCommand(depsCmd)
 	rootCmd.AddCommand(upgradeCmd)
 
-	cobrahelptree.Setup(rootCmd)
+	cobrahelptree.Setup(rootCmd, cobrahelptree.TreeOptions{
+		TechCatalog: cobrahelptree.TechCatalog{
+			"fetch-track": {
+				Summary:     "Acquire, verify, and tag native single DJ tracks from URL or query",
+				Description: "Executes parallel source search, candidate scoring, stream-copy download, Goertzel spectral inspection, acoustic recognition, and canonical metadata tagging.",
+				Args:        "<url|query>",
+				Metadata: map[string]string{
+					"output_dir":  "current working directory or -o/--out-dir",
+					"stream_mode": "zero-transcode bitstream preservation (-c:a copy)",
+					"cover_art":   "1400x1400 1:1 normalized square",
+					"telemetry":   "ndjson events via --progress-target URI",
+				},
+			},
+			"fetch-track verify": {
+				Summary:     "Inspect audio bandwidth, loudness, mix duration, and acoustic fingerprint",
+				Description: "Decodes PCM samples to execute Goertzel frequency bin thresholding, peak/RMS calculations, DJ mixer gain offset, and optional Shazam/AcoustID identification.",
+				Args:        "<url|path>",
+				Metadata: map[string]string{
+					"min_bandwidth_khz":  "configurable via --min-bandwidth-khz (default 16.0)",
+					"mix_classification": "Extended, Club, Original, Dub (>4.5m) vs Short Edit (<=4.0m)",
+				},
+			},
+			"fetch-track dependencies": {
+				Summary:     "Inspect status and versions of external binaries",
+				Description: "Checks PATH and managed directory for yt-dlp, ffmpeg, ffprobe, and tag-track, verifying against minimum semantic versions.",
+				Metadata: map[string]string{
+					"managed_path": "$XDG_DATA_HOME/fetch-track/bin",
+				},
+			},
+			"fetch-track dependencies install": {
+				Summary:     "Install missing required external tool binaries",
+				Description: "Downloads prebuilt binary assets for yt-dlp, ffmpeg, ffprobe, and tag-track from official releases into the managed binary folder.",
+				Args:        "[dep...]",
+			},
+			"fetch-track dependencies update": {
+				Summary:     "Update external tool binaries to latest releases",
+				Description: "Checks remote releases for managed tools and performs in-place upgrades.",
+				Args:        "[dep...]",
+			},
+			"fetch-track upgrade": {
+				Summary:     "Self-upgrade running fetch-track CLI binary",
+				Description: "Queries GitHub releases for newer version and performs in-place replacement of current executable.",
+			},
+		},
+	})
 
 	return rootCmd
 }
