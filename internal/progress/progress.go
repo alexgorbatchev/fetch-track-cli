@@ -2,10 +2,12 @@ package progress
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"net/url"
 	"os"
@@ -40,6 +42,7 @@ type CandidateInfo struct {
 
 // ResultInfo describes the final artifact and quality verification metrics.
 type ResultInfo struct {
+	Source          string  `json:"source,omitempty"`
 	Path            string  `json:"path"`
 	Title           string  `json:"title,omitempty"`
 	Artist          string  `json:"artist,omitempty"`
@@ -54,16 +57,20 @@ type ResultInfo struct {
 
 // Event represents an atomic structured telemetry/progress update sent over the socket.
 type Event struct {
-	Timestamp  time.Time      `json:"timestamp"`
-	Type       EventType      `json:"type"`
-	Phase      string         `json:"phase,omitempty"`
-	Step       int            `json:"step,omitempty"`
-	TotalSteps int            `json:"total_steps,omitempty"`
-	Message    string         `json:"message,omitempty"`
-	Percent    float64        `json:"percent,omitempty"`
-	Candidate  *CandidateInfo `json:"candidate,omitempty"`
-	Result     *ResultInfo    `json:"result,omitempty"`
-	Error      string         `json:"error,omitempty"`
+	JobID      string          `json:"job_id"`
+	Sequence   uint64          `json:"sequence"`
+	Timestamp  time.Time       `json:"timestamp"`
+	Type       EventType       `json:"type"`
+	Phase      string          `json:"phase,omitempty"`
+	Subphase   string          `json:"subphase,omitempty"`
+	Step       int             `json:"step,omitempty"`
+	TotalSteps int             `json:"total_steps,omitempty"`
+	Message    string          `json:"message,omitempty"`
+	Percent    float64         `json:"percent"`
+	Candidate  *CandidateInfo  `json:"candidate,omitempty"`
+	Metadata   json.RawMessage `json:"metadata,omitempty"`
+	Result     *ResultInfo     `json:"result,omitempty"`
+	Error      string          `json:"error,omitempty"`
 }
 
 // Reporter handles streaming progress events to a socket, file descriptor, or stream.
@@ -72,6 +79,9 @@ type Reporter struct {
 	closer     io.Closer
 	encoder    *json.Encoder
 	shouldSkip bool
+	percent    float64
+	jobID      string
+	sequence   uint64
 }
 
 // ParseTarget parses a target string into a normalized scheme and address/path.
@@ -110,12 +120,14 @@ func ParseTarget(raw string) (scheme, address string, err error) {
 }
 
 // NewReporter connects to the specified progress target and returns a Reporter.
+// An empty jobID generates a random ID on the first event. Sequence starts at 1
+// for each reporter; callers should use a different job ID for each run.
 // Supported targets:
 //   - "unix:///path/to/socket.sock" or "/path/to/socket.sock"
 //   - "tcp://127.0.0.1:9099" or "127.0.0.1:9099"
 //   - "fd://3"
 //   - "stdout" or "stderr"
-func NewReporter(ctx context.Context, target string) (*Reporter, error) {
+func NewReporter(ctx context.Context, target, jobID string) (*Reporter, error) {
 	scheme, address, err := ParseTarget(target)
 	if err != nil {
 		return nil, err
@@ -170,6 +182,7 @@ func NewReporter(ctx context.Context, target string) (*Reporter, error) {
 	return &Reporter{
 		closer:  closer,
 		encoder: json.NewEncoder(writer),
+		jobID:   jobID,
 	}, nil
 }
 
@@ -179,14 +192,43 @@ func (r *Reporter) Emit(event Event) error {
 		return nil
 	}
 
-	if event.Timestamp.IsZero() {
-		event.Timestamp = time.Now().UTC()
-	}
-
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	return r.encoder.Encode(event)
+	if r.jobID == "" {
+		r.jobID = rand.Text()
+	}
+	event.JobID = r.jobID
+	event.Sequence = r.sequence + 1
+	if event.Timestamp.IsZero() {
+		event.Timestamp = time.Now().UTC()
+	} else {
+		event.Timestamp = event.Timestamp.UTC()
+	}
+	event.Percent = r.completion(event)
+	if err := r.encoder.Encode(event); err != nil {
+		return err
+	}
+	r.percent = event.Percent
+	r.sequence = event.Sequence
+	return nil
+}
+
+// completion measures pipeline milestones, not elapsed time. Retaining the
+// highest value keeps retries and events without step information from regressing.
+func (r *Reporter) completion(event Event) float64 {
+	const complete = 100.0
+	if event.Type == EventComplete {
+		return complete
+	}
+	percent := event.Percent
+	if math.IsNaN(percent) || math.IsInf(percent, 0) {
+		percent = r.percent
+	}
+	if event.Type == EventPhaseStart && event.Step > 0 && event.Step <= event.TotalSteps {
+		percent = max(percent, complete*float64(event.Step-1)/float64(event.TotalSteps))
+	}
+	return min(complete, max(r.percent, percent))
 }
 
 // Close gracefully closes the socket or file descriptor connection if applicable.

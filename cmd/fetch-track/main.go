@@ -48,6 +48,7 @@ var (
 )
 
 func newRootCommand() *cobra.Command {
+	var jobID string
 	rootCmd := &cobra.Command{
 		Use:          "fetch-track <url|query>",
 		Short:        "Fetch and verify high-quality single tracks for DJ collections",
@@ -109,7 +110,7 @@ When a query is provided, fetch-track executes the full acquisition pipeline:
 			var reporter *progress.Reporter
 			if strings.TrimSpace(targetURI) != "" {
 				var err error
-				reporter, err = progress.NewReporter(cmd.Context(), targetURI)
+				reporter, err = progress.NewReporter(cmd.Context(), targetURI, jobID)
 				if err != nil {
 					err = fmt.Errorf("initializing progress reporter for %q: %w", targetURI, err)
 					if jsonOutput {
@@ -156,6 +157,7 @@ When a query is provided, fetch-track executes the full acquisition pipeline:
 	rootCmd.Flags().BoolVar(&noCache, "no-cache", false, "Disable local caching for search queries, metadata, and artwork")
 	rootCmd.Flags().StringVar(&progressTarget, "progress-target", "", "Target URI/address for streaming JSON progress events (e.g. unix:///path/to.sock, tcp://127.0.0.1:9099, fd://3, stdout, stderr)")
 	rootCmd.Flags().StringVar(&progressSocket, "progress-socket", "", "Shorthand alias for --progress-target")
+	rootCmd.Flags().StringVar(&jobID, "job-id", "", "Job ID included in progress events (generated automatically when omitted)")
 	rootCmd.Flags().BoolVar(&autoInstall, "auto-install", false, "Automatically install missing dependencies without prompting")
 	rootCmd.Flags().Float64Var(&minBandwidthKhz, "min-bandwidth-khz", 16.0, "Minimum required audio frequency bandwidth in kHz (e.g. 18.5)")
 	rootCmd.Flags().BoolVar(&confirmFingerprint, "confirm-fingerprint", true, "Verify downloaded audio via acoustic fingerprinting against target track")

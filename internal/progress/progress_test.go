@@ -59,7 +59,7 @@ func TestNewReporter_UnixSocket(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	reporter, err := progress.NewReporter(ctx, "unix://"+sockPath)
+	reporter, err := progress.NewReporter(ctx, "unix://"+sockPath, "")
 	if err != nil {
 		t.Fatalf("NewReporter failed: %v", err)
 	}
@@ -150,7 +150,7 @@ func TestNewReporter_TCPSocket(t *testing.T) {
 	defer cancel()
 
 	addr := fmt.Sprintf("tcp://%s", listener.Addr().String())
-	reporter, err := progress.NewReporter(ctx, addr)
+	reporter, err := progress.NewReporter(ctx, addr, "")
 	if err != nil {
 		t.Fatalf("NewReporter failed: %v", err)
 	}
@@ -196,7 +196,7 @@ func TestNewReporter_FD(t *testing.T) {
 
 	ctx := context.Background()
 	target := fmt.Sprintf("fd://%d", w.Fd())
-	reporter, err := progress.NewReporter(ctx, target)
+	reporter, err := progress.NewReporter(ctx, target, "")
 	if err != nil {
 		w.Close()
 		t.Fatalf("NewReporter with fd failed: %v", err)
@@ -240,7 +240,7 @@ func TestNewReporter_InvalidTarget(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r, err := progress.NewReporter(ctx, tt.target)
+			r, err := progress.NewReporter(ctx, tt.target, "")
 			if err == nil && r != nil {
 				_ = r.Close()
 				t.Fatalf("expected error for target %q, got nil", tt.target)
@@ -282,7 +282,7 @@ func TestReporter_ConcurrentEmits(t *testing.T) {
 	}()
 
 	ctx := context.Background()
-	reporter, err := progress.NewReporter(ctx, sockPath)
+	reporter, err := progress.NewReporter(ctx, sockPath, "")
 	if err != nil {
 		t.Fatalf("NewReporter failed: %v", err)
 	}
@@ -323,7 +323,7 @@ func TestReporter_NilSafe(t *testing.T) {
 
 func TestNewReporter_StdoutStderr(t *testing.T) {
 	ctx := context.Background()
-	rStdout, err := progress.NewReporter(ctx, "stdout")
+	rStdout, err := progress.NewReporter(ctx, "stdout", "")
 	if err != nil {
 		t.Fatalf("stdout reporter failed: %v", err)
 	}
@@ -332,7 +332,7 @@ func TestNewReporter_StdoutStderr(t *testing.T) {
 	}
 	_ = rStdout.Close()
 
-	rStderr, err := progress.NewReporter(ctx, "stderr")
+	rStderr, err := progress.NewReporter(ctx, "stderr", "")
 	if err != nil {
 		t.Fatalf("stderr reporter failed: %v", err)
 	}

@@ -582,9 +582,6 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) (runErr error) {
 		if targetURL != "" {
 			tagArgs = append(tagArgs, "--source-url", targetURL)
 		}
-		if opts.ProgressTarget != "" {
-			tagArgs = append(tagArgs, "--progress-target", opts.ProgressTarget)
-		}
 		if opts.NoCache {
 			tagArgs = append(tagArgs, "--no-cache")
 		}
@@ -592,7 +589,15 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) (runErr error) {
 			tagArgs = append(tagArgs, "-v")
 		}
 
-		tagOutBytes, tagErr := runner(ctx, "tag-track", tagArgs...)
+		var tagOutBytes []byte
+		tagErr := opts.ProgressReporter.RelayMetadata(ctx, func(target, jobID string) error {
+			if target != "" {
+				tagArgs = append(tagArgs, "--progress-target", target, "--job-id", jobID)
+			}
+			var err error
+			tagOutBytes, err = runner(ctx, "tag-track", tagArgs...)
+			return err
+		})
 		if sp != nil {
 			sp.Stop()
 		}

@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -177,7 +178,7 @@ func TestRun_WithProgressReporter(t *testing.T) {
 	})
 	defer cleanupDl()
 
-	reporter, err := progress.NewReporter(context.Background(), sockPath)
+	reporter, err := progress.NewReporter(context.Background(), sockPath, "")
 	if err != nil {
 		t.Fatalf("failed to create progress reporter: %v", err)
 	}
@@ -609,8 +610,16 @@ func TestRun_WithProgressTargetDelegation(t *testing.T) {
 	tagRunner := func(ctx context.Context, name string, args ...string) ([]byte, error) {
 		if name == "tag-track" {
 			for i, arg := range args {
-				if arg == "--progress-target" && i+1 < len(args) && args[i+1] == "tcp://127.0.0.1:9099" {
+				if arg == "--progress-target" && i+1 < len(args) && strings.HasPrefix(args[i+1], "tcp://127.0.0.1:") && args[i+1] != "tcp://127.0.0.1:9099" {
 					tagTrackCalledWithTarget = true
+					conn, err := net.Dial("tcp", strings.TrimPrefix(args[i+1], "tcp://"))
+					if err != nil {
+						return nil, err
+					}
+					defer conn.Close()
+					if _, err := fmt.Fprintln(conn, `{"type":"complete","percent":100}`); err != nil {
+						return nil, err
+					}
 				}
 			}
 			return []byte("output: /path/to/Boris Brejcha - Space X.m4a\ntitle: Space X\nartist: Boris Brejcha\nalbum: Level One\nyear: 2024\nsource: tag-track\n"), nil
@@ -618,19 +627,17 @@ func TestRun_WithProgressTargetDelegation(t *testing.T) {
 		return []byte("version 8.1.2"), nil
 	}
 
+	reporter, err := progress.NewReporter(ctx, "stdout", "delegated-job")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reporter.Close()
 	opts := Options{
-		OutDir:         outDir,
-		Sources:        []string{"soundcloud"},
-		SkipVerify:     false,
-		SkipMetadata:   false,
-		SkipDepCheck:   false,
-		Verbose:        true,
-		IsAgent:        true,
-		ProgressTarget: "tcp://127.0.0.1:9099",
-		Runner:         tagRunner,
+		OutDir: outDir, Sources: []string{"soundcloud"}, Verbose: true, IsAgent: true,
+		ProgressTarget: "tcp://127.0.0.1:9099", ProgressReporter: reporter, Runner: tagRunner,
 	}
 
-	err := Run(ctx, "Boris Brejcha - Space X", opts)
+	err = Run(ctx, "Boris Brejcha - Space X", opts)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

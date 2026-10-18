@@ -27,7 +27,7 @@ A fast, lightweight CLI tool with AI agent support for bedroom and amateur DJs t
 - Extracts PCM audio samples via `ffmpeg` and executes Goertzel frequency bin analysis to detect audio cutoff thresholds and RMS loudness.
 - Generates Chromaprint acoustic fingerprints and landmark constellations to query AcoustID and Shazam recognition services in pure Go.
 - Normalizes and center-crops downloaded album artwork to 1:1 square format (1400x1400) and embeds ID3/MP4 metadata using stream-copy mode (`-c:a copy`).
-- Streams real-time NDJSON progress events over UNIX domain sockets, TCP, or file descriptors when executed by AI agents or supervisor orchestrators.
+- Streams real-time NDJSON progress events over UNIX domain sockets, TCP, or file descriptors when executed by AI agents or supervisor orchestrators. Every `fetch-track` event includes overall milestone completion as `percent` (0–100); see [the progress protocol](PROGRESS.md) for calculation and delegated `tag-track` events.
 
 # Prerequisites
 
@@ -95,6 +95,7 @@ fetch-track upgrade
 | `--no-metadata` | | `false` | Alias for `--skip-metadata` |
 | `--progress-target <uri>` | | `""` | Target URI for streaming NDJSON progress events |
 | `--progress-socket <path>` | | `""` | Shorthand alias for `--progress-target` |
+| `--job-id <id>` | | generated | Job ID attached to every fetch-track progress event; sequence starts at 1 per run |
 | `--verbose` | `-v` | `false` | Enable verbose logging |
 | `--version` | | `false` | Print version information and exit |
 | `--help` | `-h` | `false` | Print command help |
