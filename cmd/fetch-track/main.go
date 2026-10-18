@@ -194,14 +194,14 @@ When a query is provided, fetch-track executes the full acquisition pipeline:
 			}
 
 			var sp *spinner.Spinner
-			if !isAgent && !verbose {
+			if !isAgent && !verbose && !jsonOutput {
 				sp = spinner.New(fmt.Sprintf("Running Audio Quality Verification on %s...", target))
 				sp.Start()
-			} else if !isAgent {
+			} else if !isAgent && !jsonOutput {
 				fmt.Printf("Running Audio Quality Verification on: %s\n\n", target)
 			}
 
-			report, err := verifier.VerifyAudioTrack(cmd.Context(), target, verbose, int(minBandwidthKhz*1000))
+			report, err := verifier.VerifyAudioTrack(cmd.Context(), target, verbose && !jsonOutput, int(minBandwidthKhz*1000))
 			if sp != nil {
 				sp.Stop()
 			}
@@ -505,8 +505,8 @@ func main() {
 
 func ensureDependencies(ctx context.Context) error {
 	_ = deps.InitManagedPath()
-	if debug && !jsonOutput {
-		fmt.Printf("[%dms] Verifying dependencies...\n", time.Since(bootTime).Milliseconds())
+	if debug {
+		fmt.Fprintf(os.Stderr, "[%dms] Verifying dependencies...\n", time.Since(bootTime).Milliseconds())
 	}
 	var sp *spinner.Spinner
 	if !deps.IsAgentMode() && !jsonOutput && !verbose && !debug {
@@ -518,8 +518,8 @@ func ensureDependencies(ctx context.Context) error {
 	if sp != nil {
 		sp.Stop()
 	}
-	if debug && err == nil && !jsonOutput {
-		fmt.Printf("[%dms] Dependencies verified.\n", time.Since(bootTime).Milliseconds())
+	if debug && err == nil {
+		fmt.Fprintf(os.Stderr, "[%dms] Dependencies verified.\n", time.Since(bootTime).Milliseconds())
 	}
 	if err == nil {
 		return nil

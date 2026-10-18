@@ -61,6 +61,7 @@ type logger struct {
 	debug    bool
 	bootTime time.Time
 	sp       *spinner.Spinner
+	output   *os.File
 }
 
 func newLogger(debug bool, bootTime time.Time, sp *spinner.Spinner) *logger {
@@ -71,6 +72,7 @@ func newLogger(debug bool, bootTime time.Time, sp *spinner.Spinner) *logger {
 		debug:    debug,
 		bootTime: bootTime,
 		sp:       sp,
+		output:   os.Stdout,
 	}
 }
 
@@ -94,9 +96,9 @@ func (l *logger) Println(a ...any) {
 			l.sp.PrintAbove(formatted)
 		} else {
 			if i == 0 && line == "" {
-				fmt.Println()
+				fmt.Fprintln(l.output)
 			} else {
-				fmt.Println(formatted)
+				fmt.Fprintln(l.output, formatted)
 			}
 		}
 	}
@@ -114,9 +116,9 @@ func (l *logger) Printf(formatStr string, a ...any) {
 			l.sp.PrintAbove(formatted)
 		} else {
 			if i == 0 && line == "" {
-				fmt.Println()
+				fmt.Fprintln(l.output)
 			} else {
-				fmt.Println(formatted)
+				fmt.Fprintln(l.output, formatted)
 			}
 		}
 	}
@@ -132,6 +134,7 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) (runErr error) {
 	opts.JSONOutput = opts.JSONOutput || opts.ListCandidates
 	if opts.JSONOutput {
 		opts.IsAgent = true
+		opts.Verbose = false
 		defer func() {
 			if runErr != nil {
 				if err := RenderJSONOutput(&JSONExecutionResult{Target: urlOrQuery, Status: "error", Error: runErr.Error()}); err != nil {
@@ -180,10 +183,13 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) (runErr error) {
 	rawSearchQuery := urlOrQuery
 
 	var sp *spinner.Spinner
-	if !opts.IsAgent && !opts.Verbose {
+	if !opts.IsAgent && !opts.Verbose && !opts.JSONOutput {
 		sp = spinner.New("working...")
 	}
 	log := newLogger(opts.Debug, opts.BootTime, sp)
+	if opts.JSONOutput {
+		log.output = os.Stderr
+	}
 
 	runner := opts.Runner
 	if runner == nil {
@@ -261,7 +267,7 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) (runErr error) {
 	var obsMu sync.Mutex
 	var searchObserver *downloader.SearchObserver
 
-	if !opts.IsAgent && sp != nil {
+	if !opts.IsAgent && (sp != nil || opts.JSONOutput) {
 		searchObserver = &downloader.SearchObserver{
 			OnQueryStart: func(src string) {
 				obsMu.Lock()
@@ -284,7 +290,7 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) (runErr error) {
 		}
 	}
 
-	foundCandidates, searchErr := downloader.SearchSourcesInParallelWithObserver(ctx, downloader.GetDefaultRunner(), opts.Sources, artist, title, rawSearchQuery, cacheInst, searchObserver, opts.Verbose)
+	foundCandidates, searchErr := downloader.SearchSourcesInParallelWithObserver(ctx, downloader.GetDefaultRunner(), opts.Sources, artist, title, rawSearchQuery, cacheInst, searchObserver, opts.Verbose && !opts.JSONOutput)
 
 	var candidatePool []downloader.Candidate
 	candidatePool = append(candidatePool, initialCandidates...)
@@ -439,7 +445,7 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) (runErr error) {
 			log.Printf("Trying candidate #%d: %q [%s] (%s)\n", tryIdx+1, cand.Title, cand.Source, currentURL)
 		}
 
-		dlPath, err := downloader.DownloadAudioStreamWithRunner(ctx, downloader.GetDefaultRunner(), currentURL, opts.OutDir, opts.Verbose)
+		dlPath, err := downloader.DownloadAudioStreamWithRunner(ctx, downloader.GetDefaultRunner(), currentURL, opts.OutDir, opts.Verbose && !opts.JSONOutput)
 		if err != nil {
 			lastErr = err
 			if tryIdx < len(candidatesToTry)-1 {

@@ -3,8 +3,10 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -18,6 +20,67 @@ import (
 	"github.com/alexgorbatchev/fetch-track-cli/internal/downloader"
 	"github.com/alexgorbatchev/fetch-track-cli/internal/pipeline"
 )
+
+func TestRootCommandJSONDownload(t *testing.T) {
+	for _, tt := range []struct {
+		name  string
+		mode  string
+		flags []string
+	}{
+		{name: "human", mode: "0"},
+		{name: "agent", mode: "1"},
+		{name: "verbose", mode: "0", flags: []string{"--verbose"}},
+		{name: "debug", mode: "0", flags: []string{"--debug"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			_, cleanup := setupMainTestEnv(t)
+			defer cleanup()
+			t.Setenv("AGENT", tt.mode)
+			outDir := t.TempDir()
+			path := filepath.Join(outDir, "Artist - Track.m4a")
+			restore := downloader.SetDefaultRunner(func(ctx context.Context, name string, args ...string) ([]byte, error) {
+				for _, arg := range args {
+					if arg == "-o" {
+						return nil, os.WriteFile(path, []byte("synthetic audio"), 0o600)
+					}
+				}
+				return []byte(`{"id":"track","title":"Artist - Track","duration":360,"webpage_url":"https://soundcloud.com/artist/track"}`), nil
+			})
+			defer restore()
+			output, err := os.CreateTemp(t.TempDir(), "stdout")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer output.Close()
+			stdout := os.Stdout
+			os.Stdout = output
+			defer func() { os.Stdout = stdout }()
+			cmd := newRootCommand()
+			args := []string{"--json", "--skip-verify", "--skip-metadata", "--confirm-fingerprint=false", "-s", "soundcloud", "-o", outDir, "Artist - Track"}
+			cmd.SetArgs(append(args, tt.flags...))
+			if err := cmd.Execute(); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := output.Seek(0, io.SeekStart); err != nil {
+				t.Fatal(err)
+			}
+			data, err := io.ReadAll(output)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var result pipeline.JSONExecutionResult
+			if err := json.Unmarshal(data, &result); err != nil {
+				t.Fatalf("stdout must contain one JSON result: %v\n%s", err, data)
+			}
+			if result.Status != "success" || result.OutputFile != path || result.SelectedCandidate == nil {
+				t.Fatalf("unexpected download result: %+v", result)
+			}
+			if _, err := os.Stat(result.OutputFile); err != nil {
+				t.Fatalf("downloaded file missing: %v", err)
+			}
+		})
+	}
+}
 
 func createTestAudio(t *testing.T, dir, filename string) string {
 	t.Helper()
