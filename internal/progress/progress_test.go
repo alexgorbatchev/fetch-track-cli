@@ -31,7 +31,7 @@ func TestNewReporter_UnixSocket(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to listen on unix socket: %v", err)
 	}
-	defer listener.Close()
+	defer func() { _ = listener.Close() }()
 
 	var receivedEvents []progress.Event
 	var mu sync.Mutex
@@ -43,7 +43,7 @@ func TestNewReporter_UnixSocket(t *testing.T) {
 		if err != nil {
 			return
 		}
-		defer conn.Close()
+		defer func() { _ = conn.Close() }()
 
 		scanner := bufio.NewScanner(conn)
 		for scanner.Scan() {
@@ -121,7 +121,7 @@ func TestNewReporter_TCPSocket(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to listen on tcp: %v", err)
 	}
-	defer listener.Close()
+	defer func() { _ = listener.Close() }()
 
 	var receivedEvents []progress.Event
 	var mu sync.Mutex
@@ -133,7 +133,7 @@ func TestNewReporter_TCPSocket(t *testing.T) {
 		if err != nil {
 			return
 		}
-		defer conn.Close()
+		defer func() { _ = conn.Close() }()
 
 		scanner := bufio.NewScanner(conn)
 		for scanner.Scan() {
@@ -192,13 +192,13 @@ func TestNewReporter_FD(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create pipe: %v", err)
 	}
-	defer r.Close()
+	defer func() { _ = r.Close() }()
 
 	ctx := context.Background()
 	target := fmt.Sprintf("fd://%d", w.Fd())
 	reporter, err := progress.NewReporter(ctx, target, "")
 	if err != nil {
-		w.Close()
+		_ = w.Close()
 		t.Fatalf("NewReporter with fd failed: %v", err)
 	}
 
@@ -256,7 +256,7 @@ func TestReporter_ConcurrentEmits(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to listen: %v", err)
 	}
-	defer listener.Close()
+	defer func() { _ = listener.Close() }()
 
 	var count int
 	var mu sync.Mutex
@@ -268,7 +268,7 @@ func TestReporter_ConcurrentEmits(t *testing.T) {
 		if err != nil {
 			return
 		}
-		defer conn.Close()
+		defer func() { _ = conn.Close() }()
 
 		scanner := bufio.NewScanner(conn)
 		for scanner.Scan() {

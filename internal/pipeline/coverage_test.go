@@ -20,7 +20,7 @@ func TestLoggerMultilineDebug(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	l := newLogger(true, time.Now(), nil)
 	l.output = f
 	l.Println("\nfirst\nsecond")
@@ -126,7 +126,7 @@ func TestRunMetadataFieldsInAnyOrder(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer output.Close()
+			defer func() { _ = output.Close() }()
 			old := os.Stdout
 			os.Stdout = output
 			defer func() { os.Stdout = old }()

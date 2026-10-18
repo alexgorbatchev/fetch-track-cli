@@ -18,8 +18,15 @@ tracks/
 dist/
 build/
 
+# Test binaries and coverage profiles
+*.test
+*.out
+*.prof
+
 # OS / Editor files
 .DS_Store
+.idea/
+.vscode/
 *.swp
 *.swo
 

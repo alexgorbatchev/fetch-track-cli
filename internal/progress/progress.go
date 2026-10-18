@@ -75,13 +75,12 @@ type Event struct {
 
 // Reporter handles streaming progress events to a socket, file descriptor, or stream.
 type Reporter struct {
-	mu         sync.Mutex
-	closer     io.Closer
-	encoder    *json.Encoder
-	shouldSkip bool
-	percent    float64
-	jobID      string
-	sequence   uint64
+	mu       sync.Mutex
+	closer   io.Closer
+	encoder  *json.Encoder
+	percent  float64
+	jobID    string
+	sequence uint64
 }
 
 // ParseTarget parses a target string into a normalized scheme and address/path.

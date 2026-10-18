@@ -59,7 +59,7 @@ func PromptCandidateSelectionWithRunner(candidates []downloader.Candidate, curre
 		}
 	}
 
-	var selectedIdx int = defaultIdx
+	selectedIdx := defaultIdx
 
 	options := make([]huh.Option[int], 0, len(sortedCands)+1)
 	for i, c := range sortedCands {

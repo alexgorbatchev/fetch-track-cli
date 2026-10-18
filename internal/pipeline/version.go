@@ -6,6 +6,9 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 var versionRegex = regexp.MustCompile(`(?i)\b(instrumental|acapella|a cappella|vip|dub mix|dub|extended mix|club mix)\b`)
@@ -24,7 +27,7 @@ func PreserveVersionInTitle(sourceTitle, enrichedTitle string) string {
 		cleanTag := strings.ToLower(strings.TrimSpace(m))
 		if cleanTag != "" && !strings.Contains(enrichedLower, cleanTag) {
 			// Title casing the tag
-			tagFormatted := strings.Title(cleanTag)
+			tagFormatted := cases.Title(language.Und).String(cleanTag)
 			if cleanTag == "vip" {
 				tagFormatted = "VIP"
 			}

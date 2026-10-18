@@ -33,7 +33,7 @@ func TestProgressJobID(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer output.Close()
+			defer func() { _ = output.Close() }()
 			stdout := os.Stdout
 			os.Stdout = output
 			defer func() { os.Stdout = stdout }()

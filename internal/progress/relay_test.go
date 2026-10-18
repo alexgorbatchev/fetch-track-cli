@@ -24,7 +24,7 @@ func TestRelayMetadata(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		defer conn.Close()
+		defer func() { _ = conn.Close() }()
 		_, err = conn.Write([]byte("{\"job_id\":\"child\",\"sequence\":1,\"type\":\"metadata_found\",\"phase\":\"identify\",\"percent\":50,\"metadata\":{\"title\":\"Track\"}}\n{\"type\":\"complete\",\"percent\":100,\"result\":{\"path\":\"track.m4a\",\"source\":\"Shazam\"}}\n"))
 		return err
 	})

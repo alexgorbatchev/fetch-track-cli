@@ -28,7 +28,7 @@ func (r *Reporter) RelayMetadata(ctx context.Context, run func(target, jobID str
 	if err != nil {
 		return fmt.Errorf("starting metadata progress relay: %w", err)
 	}
-	defer l.Close()
+	defer func() { _ = l.Close() }()
 	stop := context.AfterFunc(ctx, func() { _ = l.Close() }) // unblock Accept on cancellation
 	defer stop()
 	r.mu.Lock()
@@ -44,7 +44,7 @@ func (r *Reporter) RelayMetadata(ctx context.Context, run func(target, jobID str
 			done <- fmt.Errorf("accepting metadata progress: %w", err)
 			return
 		}
-		defer conn.Close()
+		defer func() { _ = conn.Close() }()
 		stop := context.AfterFunc(ctx, func() { _ = conn.Close() }) // unblock Decode on cancellation
 		defer stop()
 		done <- r.readMetadata(conn)

@@ -139,7 +139,7 @@ func TestRun_WithProgressReporter(t *testing.T) {
 		t.Fatalf("failed to listen on socket: %v", err)
 	}
 	defer func() {
-		listener.Close()
+		_ = listener.Close()
 		_ = os.Remove(sockPath)
 	}()
 
@@ -153,7 +153,7 @@ func TestRun_WithProgressReporter(t *testing.T) {
 		if err != nil {
 			return
 		}
-		defer conn.Close()
+		defer func() { _ = conn.Close() }()
 
 		scanner := bufio.NewScanner(conn)
 		for scanner.Scan() {
@@ -182,7 +182,7 @@ func TestRun_WithProgressReporter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create progress reporter: %v", err)
 	}
-	defer reporter.Close()
+	defer func() { _ = reporter.Close() }()
 
 	opts := Options{
 		OutDir:           t.TempDir(),
@@ -616,7 +616,7 @@ func TestRun_WithProgressTargetDelegation(t *testing.T) {
 					if err != nil {
 						return nil, err
 					}
-					defer conn.Close()
+					defer func() { _ = conn.Close() }()
 					if _, err := fmt.Fprintln(conn, `{"type":"complete","percent":100}`); err != nil {
 						return nil, err
 					}
@@ -631,7 +631,7 @@ func TestRun_WithProgressTargetDelegation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer reporter.Close()
+	defer func() { _ = reporter.Close() }()
 	opts := Options{
 		OutDir: outDir, Sources: []string{"soundcloud"}, Verbose: true, IsAgent: true,
 		ProgressTarget: "tcp://127.0.0.1:9099", ProgressReporter: reporter, Runner: tagRunner,
