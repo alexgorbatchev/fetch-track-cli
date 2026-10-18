@@ -114,3 +114,51 @@ func executeJSONCommand(t *testing.T, args []string) (pipeline.JSONExecutionResu
 	}
 	return result, runErr
 }
+
+func TestVerifyJSONStdout(t *testing.T) {
+	for _, tt := range []struct {
+		name  string
+		mode  string
+		flags []string
+	}{
+		{name: "human", mode: "0"},
+		{name: "agent", mode: "1"},
+		{name: "verbose", mode: "0", flags: []string{"--verbose"}},
+		{name: "debug", mode: "0", flags: []string{"--debug"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			_, cleanup := setupMainTestEnv(t)
+			defer cleanup()
+			t.Setenv("AGENT", tt.mode)
+			audio := createTestAudio(t, t.TempDir(), "Artist - Track.m4a")
+			output, err := os.CreateTemp(t.TempDir(), "stdout")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer output.Close()
+			stdout := os.Stdout
+			os.Stdout = output
+			defer func() { os.Stdout = stdout }()
+			cmd := newRootCommand()
+			args := []string{"verify", audio, "--json"}
+			cmd.SetArgs(append(args, tt.flags...))
+			if err := cmd.Execute(); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := output.Seek(0, io.SeekStart); err != nil {
+				t.Fatal(err)
+			}
+			data, err := io.ReadAll(output)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var result pipeline.JSONExecutionResult
+			if err := json.Unmarshal(data, &result); err != nil {
+				t.Fatalf("stdout must contain one JSON result: %v\n%s", err, data)
+			}
+			if result.Target != audio || result.Status != "success" || result.Verification == nil || result.Verification.DurationSeconds <= 0 {
+				t.Fatalf("unexpected verification result: %+v", result)
+			}
+		})
+	}
+}
