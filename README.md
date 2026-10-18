@@ -2,13 +2,13 @@ A fast, lightweight CLI tool with AI agent support for bedroom and amateur DJs t
 
 # What It Does
 
-- Accepts direct track URLs (YouTube, SoundCloud, Bandcamp, Mixcloud) or search queries.
-- Searches YouTube, SoundCloud, and Bandcamp in parallel for full extended DJ mixes with mixable intro/outro sections.
-- Matches artist, title, and remix/version intent while filtering out short radio edits, snippets, or multi-hour mix compilations.
-- Confirms candidate authenticity before finalizing using acoustic audio fingerprinting (Shazam / AcoustID) to eliminate false positives and fake uploads.
-- Downloads native high-bitrate audio streams directly without lossy re-encoding using auto-detected JavaScript runtimes.
-- Analyzes spectral frequency bandwidth (Goertzel algorithm) and computes mixer volume Gain Offset.
-- Identifies tracks via acoustic audio fingerprinting (AcoustID and Apple Shazam) with API fallbacks (iTunes and MusicBrainz) to embed canonical metadata and 1400x1400 album art.
+- **Direct Links & Search Queries:** Accepts direct track URLs (YouTube, SoundCloud, Bandcamp, Mixcloud) or `"Artist - Title"` search queries.
+- **Parallel Extended Mix Discovery:** Searches YouTube, SoundCloud, and Bandcamp in parallel for full extended DJ mixes with mixable intro/outro sections.
+- **Remix & Duration Scoring:** Matches artist, title, and remix/version intent while filtering out short radio edits, snippets, or multi-hour mix compilations.
+- **Acoustic Fingerprint Confirmation:** Confirms candidate authenticity before finalizing using acoustic audio fingerprinting (Shazam / AcoustID) to eliminate false positives and fake uploads.
+- **Zero-Transcode Extraction:** Downloads native high-bitrate audio streams directly without lossy re-encoding using auto-detected JavaScript runtimes.
+- **Spectral & Loudness Analysis:** Analyzes spectral frequency bandwidth (Goertzel algorithm) and computes mixer volume Gain Offset.
+- **Canonical Metadata & Square Artwork:** Identifies tracks via acoustic audio fingerprinting (AcoustID and Apple Shazam) with API fallbacks (iTunes and MusicBrainz) to embed canonical metadata and 1400x1400 album art.
 
 # How It Works
 
@@ -29,20 +29,20 @@ A fast, lightweight CLI tool with AI agent support for bedroom and amateur DJs t
 - Normalizes and center-crops downloaded album artwork to 1:1 square format (1400x1400) and embeds ID3/MP4 metadata using stream-copy mode (`-c:a copy`).
 - Streams real-time NDJSON progress events over UNIX domain sockets, TCP, or file descriptors when executed by AI agents or supervisor orchestrators. Every `fetch-track` event includes overall milestone completion as `percent` (0–100); see [the progress protocol](PROGRESS.md) for calculation and delegated `tag-track` events.
 
-# Prerequisites
-
-- [`yt-dlp`](https://github.com/yt-dlp/yt-dlp#installation) (version 2024.08.01 or newer) - Audio stream extraction backend.
-- [`ffmpeg` & `ffprobe`](https://ffmpeg.org/download.html) (version 4.4 or newer) - Audio analysis and metadata tagging.
-
 # Installation
 
-Download the precompiled binary for your platform from [GitHub Releases](https://github.com/alexgorbatchev/fetch-track-cli/releases/latest):
+Download the prebuilt binary for your platform from the [latest release](https://github.com/alexgorbatchev/fetch-track-cli/releases/latest), replacing `X.X.X` with the version shown on that page:
 
 ```bash
-curl -fsSL https://github.com/alexgorbatchev/fetch-track-cli/releases/latest/download/fetch-track_darwin_arm64.tar.gz | tar -xz
-chmod +x fetch-track
-mv fetch-track ~/.local/bin/
+# macOS (Apple Silicon)
+curl -fsSL https://github.com/alexgorbatchev/fetch-track-cli/releases/latest/download/fetch-track_X.X.X_darwin_arm64.tar.gz | tar -xz -C ~/.local/bin
 ```
+
+# Setup
+
+- [`yt-dlp`](https://github.com/yt-dlp/yt-dlp#installation) (version 2024.08.01 or newer) - Required for searching sources and extracting native audio streams. Run `fetch-track dependencies install yt-dlp` or pass `--auto-install` to install into `$XDG_DATA_HOME/fetch-track/bin`.
+- [`ffmpeg` & `ffprobe`](https://ffmpeg.org/download.html) (version 4.4 or newer) - Required for PCM spectral verification and stream-copy metadata tagging. Run `fetch-track dependencies install ffmpeg ffprobe` or pass `--auto-install`.
+- [`tag-track`](https://github.com/alexgorbatchev/tag-track-cli/releases/latest) (version 1.0.0 or newer) - Required for acoustic fingerprint verification and 1400x1400 cover art enrichment. Run `fetch-track dependencies install tag-track` or pass `--auto-install`.
 
 # Quick Start
 
@@ -60,8 +60,8 @@ fetch-track -s "youtube,soundcloud" "Boris Brejcha - Space X"
 fetch-track -i "Boris Brejcha - Space X"
 
 # Inspect local file or URL quality
-fetch-track verify "Boris Brejcha - Space X.m4a"
-fetch-track verify "https://soundcloud.com/boris-brejcha/space-x-extended-mix"
+fetch-track track verify "Boris Brejcha - Space X.m4a"
+fetch-track track verify "https://soundcloud.com/boris-brejcha/space-x-extended-mix"
 
 # Manage external dependencies
 fetch-track dependencies
@@ -71,8 +71,38 @@ fetch-track deps update yt-dlp
 # Pipeline composition with tag-track
 fetch-track "Boris Brejcha - Space X" --no-metadata -o .tmp/ | tag-track -o tracks/
 
+# Print AI agent skill instructions
+fetch-track skill
+
 # Upgrade CLI binary in-place
 fetch-track upgrade
+```
+
+Sample Output:
+```
+Searching youtube...
+Searching soundcloud...
+Candidates:
+  - "Boris Brejcha - Space X (Extended Mix)" [soundcloud 8:23]
+Got 4 results from soundcloud
+Got 6 results from youtube
+Selected: "Boris Brejcha - Space X (Extended Mix)" [soundcloud 8:23] score=270
+
+Downloading audio stream & artwork
+  - Saved: Boris Brejcha - Space X (Extended Mix).m4a
+
+Running audio quality & spectrum inspection
+  - Duration: 8:23 (Original / Extended DJ Mix)
+  - Bandwidth: High Fidelity (>=18.5 kHz) (20 kHz)
+  - Peak / RMS: -0.10 dBFS / -9.40 dBFS
+  - Gain Offset: -2.6 dB
+  - Status: High fidelity audio suitable for mixing.
+
+Enriching metadata & cover art via tag-track
+  - Matched: "Boris Brejcha - Space X" (Level One, 2024)
+  - Source: Shazam
+
+DONE: ./Boris Brejcha - Space X.m4a
 ```
 
 # Options & Flags
@@ -130,4 +160,4 @@ See [PROGRESS.md](PROGRESS.md) for full protocol specifications and event schema
 
 # License
 
-MIT License (c) 2026 Alex Gorbatchev
+[MIT License](LICENSE) (c) 2026 Alex Gorbatchev
