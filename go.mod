@@ -1,4 +1,4 @@
-module github.com/dj/fetch-track-cli
+module github.com/alexgorbatchev/fetch-track-cli
 
 go 1.26.2
 

@@ -16,9 +16,9 @@ import (
 	"unicode"
 
 	"github.com/alexgorbatchev/godeps"
-	"github.com/dj/fetch-track-cli/internal/cache"
-	"github.com/dj/fetch-track-cli/internal/deps"
-	"github.com/dj/fetch-track-cli/internal/verifier"
+	"github.com/alexgorbatchev/fetch-track-cli/internal/cache"
+	"github.com/alexgorbatchev/fetch-track-cli/internal/deps"
+	"github.com/alexgorbatchev/fetch-track-cli/internal/verifier"
 	"github.com/lithammer/fuzzysearch/fuzzy"
 )
 

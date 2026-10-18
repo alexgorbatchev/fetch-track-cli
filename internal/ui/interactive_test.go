@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/huh"
-	"github.com/dj/fetch-track-cli/internal/downloader"
+	"github.com/alexgorbatchev/fetch-track-cli/internal/downloader"
 )
 
 func TestPromptCandidateSelection_Empty(t *testing.T) {

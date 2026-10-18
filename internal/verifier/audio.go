@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dj/fetch-track-cli/internal/cache"
-	"github.com/dj/fetch-track-cli/internal/deps"
+	"github.com/alexgorbatchev/fetch-track-cli/internal/cache"
+	"github.com/alexgorbatchev/fetch-track-cli/internal/deps"
 )
 
 // TrackMetadata holds probed information about a track.

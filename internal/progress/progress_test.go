@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dj/fetch-track-cli/internal/progress"
+	"github.com/alexgorbatchev/fetch-track-cli/internal/progress"
 )
 
 func shortSocketPath(t *testing.T, prefix string) string {

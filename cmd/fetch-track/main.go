@@ -14,12 +14,12 @@ import (
 	"github.com/spf13/cobra"
 
 	cobrahelptree "github.com/alexgorbatchev/cobra-help-tree"
-	"github.com/dj/fetch-track-cli/internal/cache"
-	"github.com/dj/fetch-track-cli/internal/deps"
-	"github.com/dj/fetch-track-cli/internal/pipeline"
-	"github.com/dj/fetch-track-cli/internal/progress"
-	"github.com/dj/fetch-track-cli/internal/spinner"
-	"github.com/dj/fetch-track-cli/internal/verifier"
+	"github.com/alexgorbatchev/fetch-track-cli/internal/cache"
+	"github.com/alexgorbatchev/fetch-track-cli/internal/deps"
+	"github.com/alexgorbatchev/fetch-track-cli/internal/pipeline"
+	"github.com/alexgorbatchev/fetch-track-cli/internal/progress"
+	"github.com/alexgorbatchev/fetch-track-cli/internal/spinner"
+	"github.com/alexgorbatchev/fetch-track-cli/internal/verifier"
 )
 
 var (

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dj/fetch-track-cli/internal/cache"
+	"github.com/alexgorbatchev/fetch-track-cli/internal/cache"
 )
 
 func TestMapSourceSearchPrefix(t *testing.T) {

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dj/fetch-track-cli/internal/cache"
+	"github.com/alexgorbatchev/fetch-track-cli/internal/cache"
 )
 
 func TestParseVersionOutput(t *testing.T) {

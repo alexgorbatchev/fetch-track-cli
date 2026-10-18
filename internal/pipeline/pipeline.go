@@ -10,13 +10,13 @@ import (
 	"time"
 
 	"github.com/alexgorbatchev/godeps"
-	"github.com/dj/fetch-track-cli/internal/cache"
-	"github.com/dj/fetch-track-cli/internal/deps"
-	"github.com/dj/fetch-track-cli/internal/downloader"
-	"github.com/dj/fetch-track-cli/internal/progress"
-	"github.com/dj/fetch-track-cli/internal/spinner"
-	"github.com/dj/fetch-track-cli/internal/ui"
-	"github.com/dj/fetch-track-cli/internal/verifier"
+	"github.com/alexgorbatchev/fetch-track-cli/internal/cache"
+	"github.com/alexgorbatchev/fetch-track-cli/internal/deps"
+	"github.com/alexgorbatchev/fetch-track-cli/internal/downloader"
+	"github.com/alexgorbatchev/fetch-track-cli/internal/progress"
+	"github.com/alexgorbatchev/fetch-track-cli/internal/spinner"
+	"github.com/alexgorbatchev/fetch-track-cli/internal/ui"
+	"github.com/alexgorbatchev/fetch-track-cli/internal/verifier"
 )
 
 // TrackMetadataResult describes metadata received from tag-track.

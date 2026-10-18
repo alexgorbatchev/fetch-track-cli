@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/dj/fetch-track-cli/internal/downloader"
-	"github.com/dj/fetch-track-cli/internal/verifier"
+	"github.com/alexgorbatchev/fetch-track-cli/internal/downloader"
+	"github.com/alexgorbatchev/fetch-track-cli/internal/verifier"
 )
 
 func TestConvertVerificationReport(t *testing.T) {

@@ -12,10 +12,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dj/fetch-track-cli/internal/cache"
-	"github.com/dj/fetch-track-cli/internal/deps"
-	"github.com/dj/fetch-track-cli/internal/downloader"
-	"github.com/dj/fetch-track-cli/internal/pipeline"
+	"github.com/alexgorbatchev/fetch-track-cli/internal/cache"
+	"github.com/alexgorbatchev/fetch-track-cli/internal/deps"
+	"github.com/alexgorbatchev/fetch-track-cli/internal/downloader"
+	"github.com/alexgorbatchev/fetch-track-cli/internal/pipeline"
 )
 
 func createTestAudio(t *testing.T, dir, filename string) string {
