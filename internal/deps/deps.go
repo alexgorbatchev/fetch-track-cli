@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/alexgorbatchev/godeps"
 	"github.com/alexgorbatchev/fetch-track-cli/internal/cache"
+	"github.com/alexgorbatchev/godeps"
 )
 
 // AppName is the application name used for managed directories and XDG storage.
@@ -302,7 +302,7 @@ func IsAgentMode() bool {
 
 // CleanErrorMessage cleans stderr outputs from external tools using godeps.SanitizeStderr.
 func CleanErrorMessage(msg string) string {
-	return godeps.SanitizeStderr(msg)
+	return FoldHome(godeps.SanitizeStderr(msg))
 }
 
 // CompareVersions compares actual against min version using godeps.CompareVersions.

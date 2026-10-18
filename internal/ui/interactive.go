@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/charmbracelet/huh"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/alexgorbatchev/fetch-track-cli/internal/downloader"
 	"github.com/alexgorbatchev/fetch-track-cli/internal/verifier"
+	"github.com/charmbracelet/huh"
+	"github.com/charmbracelet/lipgloss"
 )
 
 var (

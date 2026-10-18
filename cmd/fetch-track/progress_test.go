@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/dj/fetch-track-cli/internal/downloader"
+	"github.com/alexgorbatchev/fetch-track-cli/internal/downloader"
 )
 
 func TestProgressJobID(t *testing.T) {

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	cobrahelptree "github.com/alexgorbatchev/cobra-help-tree/v2"
 	"io"
 	"os"
 	"os/exec"
@@ -51,7 +52,7 @@ func TestRootCommandJSONDownload(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer output.Close()
+			defer func() { _ = output.Close() }()
 			stdout := os.Stdout
 			os.Stdout = output
 			defer func() { os.Stdout = stdout }()
@@ -142,32 +143,135 @@ func TestNewRootCommand_HelpAndVersion(t *testing.T) {
 
 func TestNewRootCommand_AgentHelp(t *testing.T) {
 	t.Setenv("AGENT", "1")
-	cmd := newRootCommand()
-	var outBuf bytes.Buffer
-	cmd.SetOut(&outBuf)
-	cmd.SetErr(&outBuf)
-	cmd.SetArgs([]string{"--help"})
+	const expectedAlert = "ALERT: Agents must read `AGENT=1 fetch-track skill` before using this tool.\n"
 
-	err := cmd.Execute()
-	if err != nil {
-		t.Fatalf("agent help command returned error: %v", err)
+	for _, tt := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"root", []string{"--help"}, "command: fetch-track"},
+		{"track", []string{"track", "--help"}, "command: fetch-track track"},
+		{"track verify", []string{"track", "verify", "--help"}, "command: fetch-track track verify"},
+		{"verify alias", []string{"verify", "--help"}, "command: fetch-track verify"},
+		{"dependencies", []string{"dependencies", "--help"}, "command: fetch-track dependencies"},
+		{"dependencies install", []string{"dependencies", "install", "--help"}, "command: fetch-track dependencies install"},
+		{"upgrade", []string{"upgrade", "--help"}, "command: fetch-track upgrade"},
+		{"skill", []string{"skill", "--help"}, "command: fetch-track skill"},
+		{"completion", []string{"completion", "--help"}, "command: fetch-track completion"},
+		{"help subcommand", []string{"help", "track"}, "command: fetch-track track"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := newRootCommand()
+			var outBuf bytes.Buffer
+			cmd.SetOut(&outBuf)
+			cmd.SetErr(&outBuf)
+			cmd.SetArgs(tt.args)
+			if err := cmd.Execute(); err != nil {
+				t.Fatalf("agent help command (%v) returned error: %v", tt.args, err)
+			}
+			if !strings.HasPrefix(outBuf.String(), expectedAlert+tt.want) {
+				t.Errorf("expected prefix %q, got:\n%s", expectedAlert+tt.want, outBuf.String())
+			}
+		})
 	}
-	if !strings.Contains(outBuf.String(), "command: fetch-track") {
-		t.Errorf("expected structured agent help output, got:\n%s", outBuf.String())
+}
+
+type failingTestWriter struct{}
+
+func (failingTestWriter) Write([]byte) (int, error) {
+	return 0, io.ErrClosedPipe
+}
+
+func TestSkillCommandAndContract(t *testing.T) {
+	_, cleanup := setupMainTestEnv(t)
+	defer cleanup()
+
+	for _, mode := range []string{"0", "1"} {
+		t.Run("AGENT="+mode, func(t *testing.T) {
+			t.Setenv("AGENT", mode)
+			cmd := newRootCommand()
+			var outBuf, errBuf bytes.Buffer
+			cmd.SetOut(&outBuf)
+			cmd.SetErr(&errBuf)
+			cmd.SetArgs([]string{"skill"})
+			if err := cmd.Execute(); err != nil {
+				t.Fatalf("skill command failed: %v", err)
+			}
+			if outBuf.String() != skillCommandOutput {
+				t.Fatalf("skill output mismatch:\ngot:  %q\nwant: %q", outBuf.String(), skillCommandOutput)
+			}
+			if errBuf.String() != "" {
+				t.Fatalf("unexpected stderr: %q", errBuf.String())
+			}
+		})
 	}
 
-	// Test subcommand agent help
-	outBuf.Reset()
-	cmd = newRootCommand()
-	cmd.SetOut(&outBuf)
-	cmd.SetErr(&outBuf)
-	cmd.SetArgs([]string{"verify", "--help"})
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("subcommand agent help returned error: %v", err)
-	}
-	if !strings.Contains(outBuf.String(), "command: fetch-track verify") {
-		t.Errorf("expected verify agent help output, got:\n%s", outBuf.String())
-	}
+	t.Run("rejects extra arguments", func(t *testing.T) {
+		t.Setenv("AGENT", "0")
+		cmd := newRootCommand()
+		cmd.SetOut(io.Discard)
+		cmd.SetErr(io.Discard)
+		cmd.SetArgs([]string{"skill", "extra"})
+		if err := cmd.Execute(); err == nil {
+			t.Fatal("expected error when passing extra arguments to skill command")
+		}
+	})
+
+	t.Run("propagates write error", func(t *testing.T) {
+		t.Setenv("AGENT", "0")
+		cmd := newRootCommand()
+		cmd.SetOut(failingTestWriter{})
+		cmd.SetErr(io.Discard)
+		cmd.SetArgs([]string{"skill"})
+		if err := cmd.Execute(); !errors.Is(err, io.ErrClosedPipe) {
+			t.Fatalf("expected io.ErrClosedPipe, got %v", err)
+		}
+	})
+
+	t.Run("human help and version omit alert", func(t *testing.T) {
+		t.Setenv("AGENT", "0")
+		cmd := newRootCommand()
+		var outBuf bytes.Buffer
+		cmd.SetOut(&outBuf)
+		cmd.SetArgs([]string{"--help"})
+		if err := cmd.Execute(); err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(outBuf.String(), "ALERT:") {
+			t.Fatalf("human help must not include agent alert:\n%s", outBuf.String())
+		}
+
+		t.Setenv("AGENT", "1")
+		outBuf.Reset()
+		cmdVer := newRootCommand()
+		cmdVer.SetOut(&outBuf)
+		cmdVer.SetArgs([]string{"--version"})
+		if err := cmdVer.Execute(); err != nil {
+			t.Fatal(err)
+		}
+		if outBuf.String() != version+"\n" || strings.Contains(outBuf.String(), "ALERT:") {
+			t.Fatalf("unexpected --version output: %q", outBuf.String())
+		}
+	})
+
+	t.Run("skill file exists and matches live CLI interface", func(t *testing.T) {
+		if !strings.Contains(skillCommandOutput, "--skill fetch-track") || !strings.Contains(skillCommandOutput, "/skills/fetch-track\n") {
+			t.Fatalf("skillCommandOutput missing expected skill identifier or path:\n%s", skillCommandOutput)
+		}
+		skillPath := filepath.Join("..", "..", "skills", "fetch-track", "SKILL.md")
+		skillBytes, err := os.ReadFile(skillPath)
+		if err != nil {
+			t.Fatalf("reading %s: %v", skillPath, err)
+		}
+		skillDoc := string(skillBytes)
+		if !strings.Contains(skillDoc, "\nname: fetch-track\n") {
+			t.Fatalf("SKILL.md frontmatter name must be fetch-track")
+		}
+		if omissions := cobrahelptree.SkillOmissions(newRootCommand(), buildTechCatalog(), skillDoc); len(omissions) > 0 {
+			t.Fatalf("SKILL.md is missing CLI interface elements: %v", omissions)
+		}
+	})
 }
 
 func TestNewRootCommand_NoArgs(t *testing.T) {
@@ -424,21 +528,21 @@ func TestVerifyCommand(t *testing.T) {
 	cmdNoArgs.SetArgs([]string{"verify"})
 	_ = cmdNoArgs.Execute()
 
-	// 2. Verify with local audio file
+	// 2. Verify with local audio file (via track verify and verify alias)
 	audioFile := createTestAudio(t, t.TempDir(), "Boris Brejcha - Space X (Extended Mix).m4a")
-	cmd := newRootCommand()
-	cmd.SetArgs([]string{"verify", audioFile})
-
-	err := cmd.Execute()
-	if err != nil {
-		t.Fatalf("verify command error = %v", err)
+	for _, args := range [][]string{{"track", "verify", audioFile}, {"verify", audioFile}} {
+		cmd := newRootCommand()
+		cmd.SetArgs(args)
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("verify command (%v) error = %v", args, err)
+		}
 	}
 
 	// 3. Verify in Agent Mode
 	t.Setenv("AGENT", "1")
 	cmdAgent := newRootCommand()
-	cmdAgent.SetArgs([]string{"verify", audioFile})
-	err = cmdAgent.Execute()
+	cmdAgent.SetArgs([]string{"track", "verify", audioFile})
+	err := cmdAgent.Execute()
 	if err != nil {
 		t.Fatalf("verify command agent mode error = %v", err)
 	}
@@ -628,5 +732,51 @@ func TestEnsureDependencies_Branches(t *testing.T) {
 	}
 	if !strings.Contains(errOutdated.Error(), "yt-dlp in $PATH (version 2020.01.01) is outdated, must be version 2024.08.01 or newer") {
 		t.Errorf("unexpected error from ensureDependencies: %v", errOutdated)
+	}
+}
+
+func TestHomeDirectoryFoldingInCLIOutput(t *testing.T) {
+	_, cleanup := setupMainTestEnv(t)
+	defer cleanup()
+
+	homeDir := filepath.Join(t.TempDir(), "userhome")
+	tracksDir := filepath.Join(homeDir, "tracks")
+	if err := os.MkdirAll(tracksDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", homeDir)
+	t.Setenv("AGENT", "1")
+
+	missingPath := filepath.Join(tracksDir, "Missing.m4a")
+	output, err := os.CreateTemp(t.TempDir(), "stdout")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = output.Close() }()
+
+	oldStdout := os.Stdout
+	os.Stdout = output
+	defer func() { os.Stdout = oldStdout }()
+
+	cmd := newRootCommand()
+	cmd.SetArgs([]string{"track", "verify", missingPath})
+	err = cmd.Execute()
+	if err == nil {
+		t.Fatal("expected error for missing file")
+	}
+	if !strings.Contains(err.Error(), "~/tracks/Missing.m4a") || strings.Contains(err.Error(), homeDir) {
+		t.Fatalf("expected error to fold home directory to ~, got: %v", err)
+	}
+
+	if _, err := output.Seek(0, io.SeekStart); err != nil {
+		t.Fatal(err)
+	}
+	data, err := io.ReadAll(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stdoutStr := string(data)
+	if !strings.Contains(stdoutStr, "target: ~/tracks/Missing.m4a") || strings.Contains(stdoutStr, homeDir) {
+		t.Fatalf("expected stdout to fold home directory to ~, got:\n%s", stdoutStr)
 	}
 }

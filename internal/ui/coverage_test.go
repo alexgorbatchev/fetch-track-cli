@@ -1,8 +1,8 @@
 package ui
 
 import (
+	"github.com/alexgorbatchev/fetch-track-cli/internal/downloader"
 	"github.com/charmbracelet/huh"
-	"github.com/dj/fetch-track-cli/internal/downloader"
 	"testing"
 )
 

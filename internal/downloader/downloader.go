@@ -15,10 +15,10 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/alexgorbatchev/godeps"
 	"github.com/alexgorbatchev/fetch-track-cli/internal/cache"
 	"github.com/alexgorbatchev/fetch-track-cli/internal/deps"
 	"github.com/alexgorbatchev/fetch-track-cli/internal/verifier"
+	"github.com/alexgorbatchev/godeps"
 	"github.com/lithammer/fuzzysearch/fuzzy"
 )
 
@@ -444,7 +444,7 @@ func DownloadAudioStreamWithRunner(ctx context.Context, runner CommandRunner, ta
 					if !initialFiles[file] {
 						savedPath := filepath.Join(outDir, file)
 						if isVerbose {
-							fmt.Fprintf(os.Stderr, "downloaded: %s\n", savedPath)
+							fmt.Fprintf(os.Stderr, "downloaded: %s\n", deps.FoldHome(savedPath))
 						}
 						return savedPath, nil
 					}

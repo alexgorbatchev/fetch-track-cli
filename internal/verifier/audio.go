@@ -265,7 +265,7 @@ func VerifyAudioTrackWithRunner(ctx context.Context, runner CommandRunner, targe
 	var err error
 
 	if isVerbose {
-		fmt.Fprintf(os.Stderr, "verify: %s\n", target)
+		fmt.Fprintf(os.Stderr, "verify: %s\n", deps.FoldHome(target))
 	}
 
 	if runner == nil {
@@ -312,7 +312,7 @@ func VerifyAudioTrackWithRunner(ctx context.Context, runner CommandRunner, targe
 		isTempDownloadedFile = true
 
 		if isVerbose {
-			fmt.Fprintf(os.Stderr, "sample download: %s\n", localAudioPath)
+			fmt.Fprintf(os.Stderr, "sample download: %s\n", deps.FoldHome(localAudioPath))
 		}
 
 		dlCtx, cancel := context.WithTimeout(ctx, 3*time.Minute)

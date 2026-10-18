@@ -7,7 +7,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/dj/fetch-track-cli/internal/cache"
+	"github.com/alexgorbatchev/fetch-track-cli/internal/cache"
 )
 
 func TestSearchObserverAndCache(t *testing.T) {
@@ -66,6 +66,8 @@ func TestRankingVersionAndDurationReasons(t *testing.T) {
 		{"extended rejects radio", "Artist", "Song (Extended Mix)", "Artist - Song (Radio Edit)", "radio_penalty_on_extended_intent", 200},
 		{"topic", "Artist", "Song", "Artist - Song", "official_topic_channel", 300},
 		{"unrequested remix", "Artist", "Song", "Artist - Song (Someone Remix)", "unrequested_remix", 300},
+		{"missing target remix", "Artist", "Song (Solomun Remix)", "Artist - Song", "missing_target_remix", 300},
+		{"partial artist match", "Artist & Guest", "Song", "Artist - Song", "partial_artist_match", 300},
 		{"fuzzy title", "Artist", "abcd", "Artist - a b c d", "title_fuzzy_match", 300},
 		{"partial title", "Artist", "Skyline Sunset", "Artist - Skyline", "partial_title_tokens", 300},
 	}

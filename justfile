@@ -15,7 +15,7 @@ run-ai *args:
 
 # Run stand-alone DJ audio quality verification
 verify *args:
-    go run ./cmd/fetch-track verify "$@"
+    go run ./cmd/fetch-track track verify "$@"
 
 # Run all unit tests
 test:

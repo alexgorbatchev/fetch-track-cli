@@ -14,7 +14,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	cobrahelptree "github.com/alexgorbatchev/cobra-help-tree"
+	cobrahelptree "github.com/alexgorbatchev/cobra-help-tree/v2"
 	"github.com/alexgorbatchev/fetch-track-cli/internal/cache"
 	"github.com/alexgorbatchev/fetch-track-cli/internal/deps"
 	"github.com/alexgorbatchev/fetch-track-cli/internal/pipeline"
@@ -118,7 +118,7 @@ When a query is provided, fetch-track executes the full acquisition pipeline:
 					}
 					return err
 				}
-				defer reporter.Close()
+				defer func() { _ = reporter.Close() }()
 			}
 
 			opts := pipeline.Options{
@@ -170,104 +170,109 @@ When a query is provided, fetch-track executes the full acquisition pipeline:
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output logging")
 	rootCmd.PersistentFlags().BoolVar(&debug, "debug", false, "Enable debug mode with elapsed millisecond timestamps on log lines")
 
-	verifyCmd := &cobra.Command{
-		Use:          "verify <url|path>",
-		Short:        "Run DJ audio quality and spectrum inspection on a track file or URL",
-		SilenceUsage: true,
-		Args:         cobra.ArbitraryArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(args) == 0 {
-				if jsonOutput {
-					return writeJSONFailure(cmd, "", fmt.Errorf("target is required"))
+	newVerifyCmd := func() *cobra.Command {
+		verifyCmd := &cobra.Command{
+			Use:          "verify <url|path>",
+			Short:        "Run DJ audio quality and spectrum inspection on a track file or URL",
+			SilenceUsage: true,
+			Args:         cobra.ArbitraryArgs,
+			RunE: func(cmd *cobra.Command, args []string) error {
+				if len(args) == 0 {
+					if jsonOutput {
+						return writeJSONFailure(cmd, "", fmt.Errorf("target is required"))
+					}
+					return cmd.Help()
 				}
-				return cmd.Help()
-			}
-			target := strings.Join(args, " ")
-			isAgent := deps.IsAgentMode() || jsonOutput
+				target := strings.Join(args, " ")
+				isAgent := deps.IsAgentMode() || jsonOutput
 
-			if err := ensureDependencies(cmd.Context()); err != nil {
-				if jsonOutput {
-					return writeJSONFailure(cmd, target, err)
+				if err := ensureDependencies(cmd.Context()); err != nil {
+					if jsonOutput {
+						return writeJSONFailure(cmd, target, err)
+					}
+					if isAgent {
+						fmt.Printf("target: %s\nstatus: error\nerror: %v\n", target, err)
+					}
+					return err
 				}
+
+				var sp *spinner.Spinner
+				if !isAgent && !verbose && !jsonOutput {
+					sp = spinner.New(fmt.Sprintf("Running Audio Quality Verification on %s...", deps.FoldHome(target)))
+					sp.Start()
+				} else if !isAgent && !jsonOutput {
+					fmt.Printf("Running Audio Quality Verification on: %s\n\n", deps.FoldHome(target))
+				}
+
+				report, err := verifier.VerifyAudioTrack(cmd.Context(), target, verbose && !jsonOutput, int(minBandwidthKhz*1000))
+				if sp != nil {
+					sp.Stop()
+				}
+				if err != nil {
+					err = fmt.Errorf("audio verification failed: %w", err)
+					if jsonOutput {
+						return writeJSONFailure(cmd, target, err)
+					}
+					if isAgent {
+						fmt.Printf("target: %s\nstatus: error\nerror: %v\n", target, err)
+					}
+					return err
+				}
+
+				if jsonOutput {
+					return json.NewEncoder(cmd.OutOrStdout()).Encode(&pipeline.JSONExecutionResult{
+						Target:       target,
+						Status:       "success",
+						Verification: pipeline.ConvertVerificationReport(report),
+					})
+				}
+
 				if isAgent {
-					fmt.Printf("target: %s\nstatus: error\nerror: %v\n", target, err)
+					fmt.Printf("target: %s\n", deps.FoldHome(target))
+					fmt.Printf("title: %s\n", deps.FoldHome(report.Metadata.Title))
+					fmt.Printf("duration: %s (%s)\n", report.MixStructure.DurationFormatted, report.MixStructure.MixTypeDescription)
+					fmt.Printf("bandwidth: %d kHz (%s)\n", report.Quality.EstimatedBandwidthHz/1000, report.Quality.BandwidthRating)
+					gainSign := ""
+					if report.Quality.SuggestedDJGainDb > 0 {
+						gainSign = "+"
+					}
+					fmt.Printf("dynamics: peak=%.2f dBFS rms=%.2f dBFS gain=%s%.1f dB\n", report.Quality.PeakDbFS, report.Quality.RMSDbFS, gainSign, report.Quality.SuggestedDJGainDb)
+					fmt.Printf("status: %s\n", report.SummaryStatus)
+					for _, rec := range report.Recommendations {
+						fmt.Printf("rec: %s\n", rec)
+					}
+					return nil
 				}
-				return err
-			}
 
-			var sp *spinner.Spinner
-			if !isAgent && !verbose && !jsonOutput {
-				sp = spinner.New(fmt.Sprintf("Running Audio Quality Verification on %s...", target))
-				sp.Start()
-			} else if !isAgent && !jsonOutput {
-				fmt.Printf("Running Audio Quality Verification on: %s\n\n", target)
-			}
-
-			report, err := verifier.VerifyAudioTrack(cmd.Context(), target, verbose && !jsonOutput, int(minBandwidthKhz*1000))
-			if sp != nil {
-				sp.Stop()
-			}
-			if err != nil {
-				err = fmt.Errorf("audio verification failed: %w", err)
-				if jsonOutput {
-					return writeJSONFailure(cmd, target, err)
-				}
-				if isAgent {
-					fmt.Printf("target: %s\nstatus: error\nerror: %v\n", target, err)
-				}
-				return err
-			}
-
-			if jsonOutput {
-				return json.NewEncoder(cmd.OutOrStdout()).Encode(&pipeline.JSONExecutionResult{
-					Target:       target,
-					Status:       "success",
-					Verification: pipeline.ConvertVerificationReport(report),
-				})
-			}
-
-			if isAgent {
-				fmt.Printf("target: %s\n", target)
-				fmt.Printf("title: %s\n", report.Metadata.Title)
-				fmt.Printf("duration: %s (%s)\n", report.MixStructure.DurationFormatted, report.MixStructure.MixTypeDescription)
-				fmt.Printf("bandwidth: %d kHz (%s)\n", report.Quality.EstimatedBandwidthHz/1000, report.Quality.BandwidthRating)
+				fmt.Printf("Title: %s\n", deps.FoldHome(report.Metadata.Title))
+				fmt.Printf("Duration: %s (%s)\n", report.MixStructure.DurationFormatted, report.MixStructure.MixTypeDescription)
+				fmt.Printf("Bandwidth: %s (%d kHz)\n", report.Quality.BandwidthRating, report.Quality.EstimatedBandwidthHz/1000)
+				fmt.Printf("Peak / RMS: %.2f dBFS / %.2f dBFS\n", report.Quality.PeakDbFS, report.Quality.RMSDbFS)
+				fmt.Printf("Sub / Kick: %.2f dBFS / %.2f dBFS\n", report.Quality.SubBassDbFS, report.Quality.KickBassDbFS)
 				gainSign := ""
 				if report.Quality.SuggestedDJGainDb > 0 {
 					gainSign = "+"
 				}
-				fmt.Printf("dynamics: peak=%.2f dBFS rms=%.2f dBFS gain=%s%.1f dB\n", report.Quality.PeakDbFS, report.Quality.RMSDbFS, gainSign, report.Quality.SuggestedDJGainDb)
-				fmt.Printf("status: %s\n", report.SummaryStatus)
+				fmt.Printf("Gain Offset: %s%.1f dB\n", gainSign, report.Quality.SuggestedDJGainDb)
+				fmt.Printf("%s\n\n", report.SummaryStatus)
+
+				fmt.Println("Recommendations:")
 				for _, rec := range report.Recommendations {
-					fmt.Printf("rec: %s\n", rec)
+					fmt.Printf("  %s\n", rec)
+				}
+
+				if report.MixStructure.IsRadioEditWarning {
+					os.Exit(2)
 				}
 				return nil
-			}
+			},
+		}
 
-			fmt.Printf("Title: %s\n", report.Metadata.Title)
-			fmt.Printf("Duration: %s (%s)\n", report.MixStructure.DurationFormatted, report.MixStructure.MixTypeDescription)
-			fmt.Printf("Bandwidth: %s (%d kHz)\n", report.Quality.BandwidthRating, report.Quality.EstimatedBandwidthHz/1000)
-			fmt.Printf("Peak / RMS: %.2f dBFS / %.2f dBFS\n", report.Quality.PeakDbFS, report.Quality.RMSDbFS)
-			fmt.Printf("Sub / Kick: %.2f dBFS / %.2f dBFS\n", report.Quality.SubBassDbFS, report.Quality.KickBassDbFS)
-			gainSign := ""
-			if report.Quality.SuggestedDJGainDb > 0 {
-				gainSign = "+"
-			}
-			fmt.Printf("Gain Offset: %s%.1f dB\n", gainSign, report.Quality.SuggestedDJGainDb)
-			fmt.Printf("%s\n\n", report.SummaryStatus)
+		verifyCmd.Flags().BoolVar(&autoInstall, "auto-install", false, "Automatically install missing dependencies without prompting")
 
-			fmt.Println("Recommendations:")
-			for _, rec := range report.Recommendations {
-				fmt.Printf("  %s\n", rec)
-			}
-
-			if report.MixStructure.IsRadioEditWarning {
-				os.Exit(2)
-			}
-			return nil
-		},
+		verifyCmd.Flags().Float64Var(&minBandwidthKhz, "min-bandwidth-khz", 16.0, "Minimum required audio frequency bandwidth in kHz (e.g. 18.5)")
+		return verifyCmd
 	}
-
-	verifyCmd.Flags().BoolVar(&autoInstall, "auto-install", false, "Automatically install missing dependencies without prompting")
 
 	depsCmd := &cobra.Command{
 		Use:          "dependencies",
@@ -420,58 +425,114 @@ When a query is provided, fetch-track executes the full acquisition pipeline:
 		},
 	}
 
-	verifyCmd.Flags().Float64Var(&minBandwidthKhz, "min-bandwidth-khz", 16.0, "Minimum required audio frequency bandwidth in kHz (e.g. 18.5)")
-	rootCmd.AddCommand(verifyCmd)
+	trackCmd := &cobra.Command{
+		Use:          "track",
+		Short:        "Inspect and verify audio tracks",
+		SilenceUsage: true,
+	}
+	trackCmd.AddCommand(newVerifyCmd())
+
+	topVerifyCmd := newVerifyCmd()
+	topVerifyCmd.Hidden = true
+
+	rootCmd.AddCommand(trackCmd)
+	rootCmd.AddCommand(topVerifyCmd)
 	rootCmd.AddCommand(depsCmd)
 	rootCmd.AddCommand(upgradeCmd)
 
-	cobrahelptree.Setup(rootCmd, cobrahelptree.TreeOptions{
-		TechCatalog: cobrahelptree.TechCatalog{
-			"fetch-track": {
-				Summary:     "Acquire, verify, and tag native single DJ tracks from URL or query",
-				Description: "Executes parallel source search, candidate scoring, stream-copy download, Goertzel spectral inspection, acoustic recognition, and canonical metadata tagging.",
-				Args:        "<url|query>",
-				Metadata: map[string]string{
-					"output_dir":  "current working directory or -o/--out-dir",
-					"stream_mode": "zero-transcode bitstream preservation (-c:a copy)",
-					"cover_art":   "1400x1400 1:1 normalized square",
-					"telemetry":   "ndjson events via --progress-target URI",
-				},
-			},
-			"fetch-track verify": {
-				Summary:     "Inspect audio bandwidth, loudness, mix duration, and acoustic fingerprint",
-				Description: "Decodes PCM samples to execute Goertzel frequency bin thresholding, peak/RMS calculations, DJ mixer gain offset, and optional Shazam/AcoustID identification.",
-				Args:        "<url|path>",
-				Metadata: map[string]string{
-					"min_bandwidth_khz":  "configurable via --min-bandwidth-khz (default 16.0)",
-					"mix_classification": "Extended, Club, Original, Dub (>4.5m) vs Short Edit (<=4.0m)",
-				},
-			},
-			"fetch-track dependencies": {
-				Summary:     "Inspect status and versions of external binaries",
-				Description: "Checks PATH and managed directory for yt-dlp, ffmpeg, ffprobe, and tag-track, verifying against minimum semantic versions.",
-				Metadata: map[string]string{
-					"managed_path": "$XDG_DATA_HOME/fetch-track/bin",
-				},
-			},
-			"fetch-track dependencies install": {
-				Summary:     "Install missing required external tool binaries",
-				Description: "Downloads prebuilt binary assets for yt-dlp, ffmpeg, ffprobe, and tag-track from official releases into the managed binary folder.",
-				Args:        "[dep...]",
-			},
-			"fetch-track dependencies update": {
-				Summary:     "Update external tool binaries to latest releases",
-				Description: "Checks remote releases for managed tools and performs in-place upgrades.",
-				Args:        "[dep...]",
-			},
-			"fetch-track upgrade": {
-				Summary:     "Self-upgrade running fetch-track CLI binary",
-				Description: "Queries GitHub releases for newer version and performs in-place replacement of current executable.",
-			},
+	_ = cobrahelptree.SetupWithOptions(rootCmd, cobrahelptree.HelpOptions{
+		Catalog: buildTechCatalog(),
+		Tree: cobrahelptree.TreeOptions{
+			HideGeneratedCommands: true,
 		},
+		Skill: skillCommandOutput,
 	})
 
 	return rootCmd
+}
+
+const skillCommandOutput = `Install the fetch-track skill using the Skills CLI:
+
+  npx skills add alexgorbatchev/fetch-track-cli --skill fetch-track
+
+Skill:
+
+  https://github.com/alexgorbatchev/fetch-track-cli/tree/main/skills/fetch-track
+`
+
+func buildTechCatalog() cobrahelptree.TechCatalog {
+	return cobrahelptree.TechCatalog{
+		"fetch-track": {
+			Summary:     "Acquire, verify, and tag native single DJ tracks from URL or query",
+			Description: "Executes parallel source search, candidate scoring, stream-copy download, Goertzel spectral inspection, acoustic recognition, and canonical metadata tagging.",
+			Args: []cobrahelptree.ArgSpec{
+				{Name: "<url|query>", Description: "Direct streaming track URL or artist/title search query"},
+			},
+			Env: []cobrahelptree.EnvSpec{
+				{Name: "AGENT", Description: "Set to 1, true, or yes for token-conservative machine output"},
+				{Name: "FETCH_TRACK_PROGRESS_TARGET", Description: "Default target URI for streaming NDJSON progress telemetry"},
+				{Name: "XDG_CACHE_HOME", Description: "Base directory for cached search queries and metadata"},
+				{Name: "XDG_DATA_HOME", Description: "Base directory for managed external tool binaries"},
+			},
+			Metadata: map[string]string{
+				"output_dir":  "current working directory or -o/--out-dir",
+				"stream_mode": "zero-transcode bitstream preservation (-c:a copy)",
+				"cover_art":   "1400x1400 1:1 normalized square",
+				"telemetry":   "ndjson events via --progress-target URI",
+			},
+		},
+		"fetch-track track": {
+			Summary:     "Inspect and verify audio tracks",
+			Description: "Commands for inspecting and verifying local audio files and streaming track URLs.",
+		},
+		"fetch-track track verify": {
+			Summary:     "Inspect audio bandwidth, loudness, mix duration, and acoustic fingerprint",
+			Description: "Decodes PCM samples to execute Goertzel frequency bin thresholding, peak/RMS calculations, DJ mixer gain offset, and optional Shazam/AcoustID identification.",
+			Args: []cobrahelptree.ArgSpec{
+				{Name: "<url|path>", Description: "Local audio file path or direct streaming URL to inspect"},
+			},
+			Metadata: map[string]string{
+				"min_bandwidth_khz":  "configurable via --min-bandwidth-khz (default 16.0)",
+				"mix_classification": "Extended, Club, Original, Dub (>4.5m) vs Short Edit (<=4.0m)",
+			},
+		},
+		"fetch-track verify": {
+			Summary:     "Inspect audio bandwidth, loudness, mix duration, and acoustic fingerprint",
+			Description: "Decodes PCM samples to execute Goertzel frequency bin thresholding, peak/RMS calculations, DJ mixer gain offset, and optional Shazam/AcoustID identification.",
+			Args: []cobrahelptree.ArgSpec{
+				{Name: "<url|path>", Description: "Local audio file path or direct streaming URL to inspect"},
+			},
+			Metadata: map[string]string{
+				"min_bandwidth_khz":  "configurable via --min-bandwidth-khz (default 16.0)",
+				"mix_classification": "Extended, Club, Original, Dub (>4.5m) vs Short Edit (<=4.0m)",
+			},
+		},
+		"fetch-track dependencies": {
+			Summary:     "Inspect status and versions of external binaries",
+			Description: "Checks PATH and managed directory for yt-dlp, ffmpeg, ffprobe, and tag-track, verifying against minimum semantic versions.",
+			Metadata: map[string]string{
+				"managed_path": "$XDG_DATA_HOME/fetch-track/bin",
+			},
+		},
+		"fetch-track dependencies install": {
+			Summary:     "Install missing required external tool binaries",
+			Description: "Downloads prebuilt binary assets for yt-dlp, ffmpeg, ffprobe, and tag-track from official releases into the managed binary folder.",
+			Args: []cobrahelptree.ArgSpec{
+				{Name: "[dep...]", Description: "Optional dependency names to install (yt-dlp, ffmpeg, ffprobe, tag-track)"},
+			},
+		},
+		"fetch-track dependencies update": {
+			Summary:     "Update external tool binaries to latest releases",
+			Description: "Checks remote releases for managed tools and performs in-place upgrades.",
+			Args: []cobrahelptree.ArgSpec{
+				{Name: "[dep...]", Description: "Optional dependency names to update (yt-dlp, ffmpeg, ffprobe, tag-track)"},
+			},
+		},
+		"fetch-track upgrade": {
+			Summary:     "Self-upgrade running fetch-track CLI binary",
+			Description: "Queries GitHub releases for newer version and performs in-place replacement of current executable.",
+		},
+	}
 }
 
 var stdinReader = io.Reader(os.Stdin)

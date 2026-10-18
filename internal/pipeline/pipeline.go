@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/alexgorbatchev/godeps"
 	"github.com/alexgorbatchev/fetch-track-cli/internal/cache"
 	"github.com/alexgorbatchev/fetch-track-cli/internal/deps"
 	"github.com/alexgorbatchev/fetch-track-cli/internal/downloader"
@@ -18,6 +17,7 @@ import (
 	"github.com/alexgorbatchev/fetch-track-cli/internal/spinner"
 	"github.com/alexgorbatchev/fetch-track-cli/internal/ui"
 	"github.com/alexgorbatchev/fetch-track-cli/internal/verifier"
+	"github.com/alexgorbatchev/godeps"
 )
 
 // TrackMetadataResult describes metadata received from tag-track.
@@ -77,6 +77,7 @@ func newLogger(debug bool, bootTime time.Time, sp *spinner.Spinner) *logger {
 }
 
 func (l *logger) formatLine(line string) string {
+	line = deps.FoldHome(line)
 	if l.debug {
 		elapsed := time.Since(l.bootTime).Milliseconds()
 		if line == "" {
@@ -96,9 +97,9 @@ func (l *logger) Println(a ...any) {
 			l.sp.PrintAbove(formatted)
 		} else {
 			if i == 0 && line == "" {
-				fmt.Fprintln(l.output)
+				_, _ = fmt.Fprintln(l.output)
 			} else {
-				fmt.Fprintln(l.output, formatted)
+				_, _ = fmt.Fprintln(l.output, formatted)
 			}
 		}
 	}
@@ -116,9 +117,9 @@ func (l *logger) Printf(formatStr string, a ...any) {
 			l.sp.PrintAbove(formatted)
 		} else {
 			if i == 0 && line == "" {
-				fmt.Fprintln(l.output)
+				_, _ = fmt.Fprintln(l.output)
 			} else {
-				fmt.Fprintln(l.output, formatted)
+				_, _ = fmt.Fprintln(l.output, formatted)
 			}
 		}
 	}
@@ -169,7 +170,7 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) (runErr error) {
 						}
 					}
 				}
-				fmt.Printf("target: %s\nstatus: error\nerror: %v\n", urlOrQuery, err)
+				fmt.Printf("target: %s\nstatus: error\nerror: %s\n", deps.FoldHome(urlOrQuery), deps.FoldHome(err.Error()))
 			}
 			return fmt.Errorf("dependency verification failed: %w", err)
 		}
@@ -383,14 +384,14 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) (runErr error) {
 			if sp != nil {
 				sp.Stop()
 			}
-			err := fmt.Errorf("no matching track candidates found for query: %q", urlOrQuery)
+			err := fmt.Errorf("no matching track candidates found for query: %q", deps.FoldHome(urlOrQuery))
 			_ = opts.ProgressReporter.Emit(progress.Event{
 				Type:  progress.EventError,
 				Phase: "search",
 				Error: err.Error(),
 			})
 			if opts.IsAgent && !opts.JSONOutput {
-				fmt.Printf("target: %s\nstatus: error\nerror: no matching track candidates found\n", urlOrQuery)
+				fmt.Printf("target: %s\nstatus: error\nerror: no matching track candidates found\n", deps.FoldHome(urlOrQuery))
 			}
 			return err
 		}
@@ -742,7 +743,7 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) (runErr error) {
 	}
 
 	if opts.IsAgent && !opts.JSONOutput {
-		fmt.Printf("target: %s\n", urlOrQuery)
+		fmt.Printf("target: %s\n", deps.FoldHome(urlOrQuery))
 		if selectedCandidate != nil {
 			fmt.Printf("candidate: %s [%s] (%s)\n", selectedCandidate.Title, selectedCandidate.Source, selectedCandidate.WebpageURL)
 		}
@@ -763,7 +764,7 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) (runErr error) {
 				fmt.Printf("metadata: \"%s - %s\" (%s, %s) [%s]\n", metaResult.Artist, metaResult.Title, metaResult.Album, metaResult.ReleaseYear, metaResult.Source)
 			}
 		}
-		fmt.Printf("output: %s\n", outDisplayPath)
+		fmt.Printf("output: %s\n", deps.FoldHome(outDisplayPath))
 		return nil
 	}
 
