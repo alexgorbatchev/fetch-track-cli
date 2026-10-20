@@ -54,3 +54,7 @@ clean:
 # Run out-of-band socket progress demo
 demo-progress *args:
     ./scripts/demo-progress-socket.sh "$@"
+
+# Download project dependencies for local development
+setup:
+    go mod download
