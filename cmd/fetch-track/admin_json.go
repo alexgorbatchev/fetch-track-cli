@@ -5,7 +5,7 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/dj/fetch-track-cli/internal/deps"
+	"github.com/alexgorbatchev/fetch-track-cli/internal/deps"
 
 	"github.com/spf13/cobra"
 )

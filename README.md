@@ -82,6 +82,8 @@ fetch-track upgrade
 | `--confirm-fingerprint` | | `true` | Verify downloaded audio via acoustic fingerprinting against target track |
 | `--js-runtime <engine>` | | `auto` | JavaScript runtime for `yt-dlp` (`auto`, `deno`, `node`, `bun`, `quickjs`, `none`) |
 | `--json` | | `false` | Output machine-readable JSON execution result to stdout |
+| `--list-candidates` | | `false` | Return ranked candidates as JSON without downloading; implies `--json` |
+| `--candidate-url <url>` | | `""` | Download only the exact URL from a previous candidate result |
 | `--min-bandwidth-khz <khz>` | | `16.0` | Minimum required audio frequency bandwidth in kHz (e.g. `18.5`) |
 | `--out-dir <path>` | `-o` | `.` | Output directory for downloaded tracks |
 | `--sources <list>` | `-s` | `youtube,soundcloud` | Comma-separated list of sources to search in parallel |
@@ -96,6 +98,22 @@ fetch-track upgrade
 | `--verbose` | `-v` | `false` | Enable verbose logging |
 | `--version` | | `false` | Print version information and exit |
 | `--help` | `-h` | `false` | Print command help |
+
+# Machine Output & Candidate Selection
+
+Use `--json` for one JSON result on stdout, with diagnostics on stderr. Acquisition results include `target`, `status`, and available `output_file`, `selected_candidate`, `verification`, `metadata`, or `error` fields. Failed operations retain their structured result and exit unsuccessfully.
+
+Use `--list-candidates` with the intended search query to inspect ranked candidates without downloading. Its result has `status: "candidates"`, `candidates`, and `candidate_count`. Continue with the same query and `--candidate-url` set to the selected candidate's `webpage_url`; acquisition restricts its candidate pool to that exact URL and fails if the candidate is no longer available.
+
+```bash
+fetch-track --list-candidates "Boris Brejcha - Space X"
+fetch-track --json --candidate-url "https://soundcloud.com/boris-brejcha/space-x-extended-mix" "Boris Brejcha - Space X"
+fetch-track --json dependencies
+fetch-track --json deps install ffmpeg
+fetch-track --json upgrade
+```
+
+Dependency commands return `status`, `dependencies`, `changed`, and optional `error`. Self-upgrade returns `status`, `version`, and optional `error`; `status: "current"` means the installed version is already current. These commands use the same installation and upgrade behavior as their human-readable forms.
 
 # Progress & IPC Telemetry
 

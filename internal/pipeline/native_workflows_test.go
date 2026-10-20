@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dj/fetch-track-cli/internal/deps"
-	"github.com/dj/fetch-track-cli/internal/downloader"
+	"github.com/alexgorbatchev/fetch-track-cli/internal/deps"
+	"github.com/alexgorbatchev/fetch-track-cli/internal/downloader"
 )
 
 func capturePipelineJSON(t *testing.T, query string, opts Options) (JSONExecutionResult, error) {

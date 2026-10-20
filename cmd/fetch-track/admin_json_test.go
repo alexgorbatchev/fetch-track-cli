@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/alexgorbatchev/fetch-track-cli/internal/deps"
 	"github.com/alexgorbatchev/godeps"
-	"github.com/dj/fetch-track-cli/internal/deps"
 )
 
 func TestAdminJSONDependencies(t *testing.T) {
