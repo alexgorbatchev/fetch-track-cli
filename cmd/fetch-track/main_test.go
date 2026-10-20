@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -472,9 +473,13 @@ func TestEnsureDependencies_Branches(t *testing.T) {
 	_ = c.Delete("deps", "tag-track")
 
 	var callCount int
+	var mu sync.Mutex
 	dynamicRunner := func(ctx context.Context, name string, args ...string) ([]byte, error) {
+		mu.Lock()
 		callCount++
-		if callCount <= len(deps.RequiredDependencies) {
+		firstVerify := callCount <= len(deps.RequiredDependencies)
+		mu.Unlock()
+		if firstVerify {
 			// Report missing on first verify
 			return nil, errors.New("not found")
 		}
