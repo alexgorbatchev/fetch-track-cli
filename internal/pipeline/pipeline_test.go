@@ -289,6 +289,15 @@ func TestRun_EndToEndQuery_NonAgent(t *testing.T) {
 }
 
 func TestRun_EndToEndQuery_AgentMode(t *testing.T) {
+	testAgentQuery(t, false)
+}
+
+func TestRun_EndToEndQuery_JSON(t *testing.T) {
+	testAgentQuery(t, true)
+}
+
+func testAgentQuery(t *testing.T, jsonOutput bool) {
+	t.Helper()
 	tempCacheDir, cleanupEnv := setupTestEnvironment(t)
 	defer cleanupEnv()
 	t.Setenv("AGENT", "1")
@@ -330,11 +339,39 @@ func TestRun_EndToEndQuery_AgentMode(t *testing.T) {
 		SkipMetadata: false,
 		Verbose:      true,
 		IsAgent:      true,
+		JSONOutput:   jsonOutput,
+	}
+	if jsonOutput {
+		opts.CandidateURL = "https://soundcloud.com/boris-brejcha/space-x"
 	}
 
+	var output *os.File
+	if jsonOutput {
+		var err error
+		output, err = os.CreateTemp(t.TempDir(), "json")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer output.Close()
+		previous := os.Stdout
+		os.Stdout = output
+		defer func() { os.Stdout = previous }()
+	}
 	err := Run(ctx, "Boris Brejcha - Space X", opts)
 	if err != nil {
 		t.Fatalf("Run agent mode error = %v", err)
+	}
+	if jsonOutput {
+		if _, err := output.Seek(0, 0); err != nil {
+			t.Fatal(err)
+		}
+		var result JSONExecutionResult
+		if err := json.NewDecoder(output).Decode(&result); err != nil {
+			t.Fatal(err)
+		}
+		if result.Status != "success" || result.OutputFile == "" || result.SelectedCandidate == nil || result.Metadata == nil || result.Metadata.Title != "Space X" {
+			t.Fatalf("JSON result: %+v", result)
+		}
 	}
 }
 
