@@ -42,6 +42,8 @@ var (
 	skipFingerprint    bool
 	minBandwidthKhz    float64
 	jsonOutput         bool
+	listCandidates     bool
+	candidateURL       string
 )
 
 func newRootCommand() *cobra.Command {
@@ -73,6 +75,7 @@ When a query is provided, fetch-track executes the full acquisition pipeline:
 				return cmd.Help()
 			}
 
+			jsonOutput = jsonOutput || listCandidates
 			if err := ensureDependencies(cmd.Context()); err != nil {
 				return err
 			}
@@ -123,6 +126,9 @@ When a query is provided, fetch-track executes the full acquisition pipeline:
 				JSRuntime:          jsRuntime,
 				ConfirmFingerprint: confirmFingerprint && !skipFingerprint,
 				MinBandwidthHz:     int(minBandwidthKhz * 1000),
+				JSONOutput:         jsonOutput,
+				ListCandidates:     listCandidates,
+				CandidateURL:       candidateURL,
 			}
 			return pipeline.Run(cmd.Context(), target, opts)
 		},
@@ -147,6 +153,8 @@ When a query is provided, fetch-track executes the full acquisition pipeline:
 	_ = rootCmd.Flags().MarkHidden("skip-fingerprint")
 	rootCmd.Flags().StringVar(&jsRuntime, "js-runtime", "auto", "JavaScript runtime for yt-dlp (auto, deno, node, bun, quickjs, none)")
 	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Output machine-readable JSON result to stdout")
+	rootCmd.Flags().BoolVar(&listCandidates, "list-candidates", false, "List ranked candidates as JSON without downloading")
+	rootCmd.Flags().StringVar(&candidateURL, "candidate-url", "", "Download only this previously listed candidate URL")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output logging")
 	rootCmd.PersistentFlags().BoolVar(&debug, "debug", false, "Enable debug mode with elapsed millisecond timestamps on log lines")
 
@@ -160,7 +168,7 @@ When a query is provided, fetch-track executes the full acquisition pipeline:
 				return cmd.Help()
 			}
 			target := strings.Join(args, " ")
-			isAgent := deps.IsAgentMode()
+			isAgent := deps.IsAgentMode() || jsonOutput
 
 			if err := ensureDependencies(cmd.Context()); err != nil {
 				if isAgent {
@@ -245,7 +253,10 @@ When a query is provided, fetch-track executes the full acquisition pipeline:
 		Short:        "Verify required external binary dependencies (yt-dlp, ffmpeg, ffprobe)",
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			isAgent := deps.IsAgentMode()
+			if jsonOutput {
+				return runDepsJSON(cmd, args, "inspect")
+			}
+			isAgent := deps.IsAgentMode() || jsonOutput
 			reports, err := deps.VerifyDependencies(cmd.Context())
 
 			if isAgent {
@@ -290,6 +301,9 @@ When a query is provided, fetch-track executes the full acquisition pipeline:
 		Short:        "Install missing external dependencies (yt-dlp, ffmpeg, ffprobe)",
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if jsonOutput {
+				return runDepsJSON(cmd, args, "install")
+			}
 			_ = deps.InitManagedPath()
 			if len(args) > 0 {
 				for _, depName := range args {
@@ -322,6 +336,9 @@ When a query is provided, fetch-track executes the full acquisition pipeline:
 		Short:        "Update external dependencies to their latest versions",
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if jsonOutput {
+				return runDepsJSON(cmd, args, "update")
+			}
 			_ = deps.InitManagedPath()
 			if len(args) > 0 {
 				for _, depName := range args {
@@ -353,7 +370,10 @@ When a query is provided, fetch-track executes the full acquisition pipeline:
 		Short:        "Upgrade fetch-track CLI binary to the latest released version",
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			isAgent := deps.IsAgentMode()
+			if jsonOutput {
+				return runUpgradeJSON(cmd, version)
+			}
+			isAgent := deps.IsAgentMode() || jsonOutput
 			if !isAgent {
 				fmt.Printf("Checking for newer fetch-track release (current version: %s)...\n", version)
 			}
@@ -465,11 +485,11 @@ func main() {
 
 func ensureDependencies(ctx context.Context) error {
 	_ = deps.InitManagedPath()
-	if debug {
+	if debug && !jsonOutput {
 		fmt.Printf("[%dms] Verifying dependencies...\n", time.Since(bootTime).Milliseconds())
 	}
 	var sp *spinner.Spinner
-	if !deps.IsAgentMode() && !verbose && !debug {
+	if !deps.IsAgentMode() && !jsonOutput && !verbose && !debug {
 		sp = spinner.New("working... verifying dependencies")
 		sp.Start()
 	}
@@ -478,7 +498,7 @@ func ensureDependencies(ctx context.Context) error {
 	if sp != nil {
 		sp.Stop()
 	}
-	if debug && err == nil {
+	if debug && err == nil && !jsonOutput {
 		fmt.Printf("[%dms] Dependencies verified.\n", time.Since(bootTime).Milliseconds())
 	}
 	if err == nil {
@@ -499,20 +519,20 @@ func ensureDependencies(ctx context.Context) error {
 	}
 
 	if autoInstall {
-		if !deps.IsAgentMode() {
+		if !deps.IsAgentMode() && !jsonOutput {
 			fmt.Printf("Auto-installing missing dependencies: %s...\n", strings.Join(missing, ", "))
 		}
 		installed, installErr := deps.InstallMissingDependencies(ctx)
 		if installErr != nil {
 			return fmt.Errorf("auto-installing dependencies: %w", installErr)
 		}
-		if len(installed) > 0 && !deps.IsAgentMode() {
+		if len(installed) > 0 && !deps.IsAgentMode() && !jsonOutput {
 			fmt.Printf("Successfully installed: %s\n", strings.Join(installed, ", "))
 		}
 		return nil
 	}
 
-	if !deps.IsAgentMode() {
+	if !deps.IsAgentMode() && !jsonOutput {
 		reader := bufio.NewReader(stdinReader)
 		fmt.Printf("\nMissing required dependencies: %s\nWould you like to auto-install them to managed directory? [Y/n]: ", strings.Join(missing, ", "))
 		ans, _ := reader.ReadString('\n')

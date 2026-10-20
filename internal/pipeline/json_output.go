@@ -10,14 +10,15 @@ import (
 
 // JSONExecutionResult represents the machine-readable output when --json is enabled.
 type JSONExecutionResult struct {
-	Target            string                `json:"target"`
-	Status            string                `json:"status"` // "success", "skipped", "error", "quality_warning"
-	Error             string                `json:"error,omitempty"`
-	CandidateCount    int                   `json:"candidate_count,omitempty"`
-	SelectedCandidate *downloader.Candidate `json:"selected_candidate,omitempty"`
-	OutputFile        string                `json:"output_file,omitempty"`
-	Verification      *JSONVerification     `json:"verification,omitempty"`
-	Metadata          *JSONMetadata         `json:"metadata,omitempty"`
+	Target            string                 `json:"target"`
+	Status            string                 `json:"status"` // "success", "skipped", "error", "quality_warning"
+	Error             string                 `json:"error,omitempty"`
+	CandidateCount    int                    `json:"candidate_count,omitempty"`
+	Candidates        []downloader.Candidate `json:"candidates,omitempty"`
+	SelectedCandidate *downloader.Candidate  `json:"selected_candidate,omitempty"`
+	OutputFile        string                 `json:"output_file,omitempty"`
+	Verification      *JSONVerification      `json:"verification,omitempty"`
+	Metadata          *JSONMetadata          `json:"metadata,omitempty"`
 }
 
 type JSONVerification struct {

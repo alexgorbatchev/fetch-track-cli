@@ -105,7 +105,7 @@ func SearchSourcesInParallelWithRunner(ctx context.Context, runner CommandRunner
 func SearchSourcesInParallelWithObserver(ctx context.Context, runner CommandRunner, sources []string, artist, title, rawQuery string, c *cache.Cache, observer *SearchObserver, verbose ...bool) ([]Candidate, error) {
 	isVerbose := len(verbose) > 0 && verbose[0]
 	if isVerbose {
-		fmt.Printf("search: %s\n", strings.Join(sources, ", "))
+		fmt.Fprintf(os.Stderr, "search: %s\n", strings.Join(sources, ", "))
 	}
 
 	if runner == nil {
@@ -120,16 +120,16 @@ func SearchSourcesInParallelWithObserver(ctx context.Context, runner CommandRunn
 	var cachedList []Candidate
 	if c != nil && c.Get("searches", cacheKey, &cachedList) && len(cachedList) > 0 {
 		if isVerbose {
-			fmt.Printf("search cache hit for %q\n", rawQuery)
+			fmt.Fprintf(os.Stderr, "search cache hit for %q\n", rawQuery)
 		} else if !isAgentMode() {
 			if observer != nil && observer.OnCandidate != nil {
 				for _, cand := range cachedList {
 					observer.OnCandidate(cand)
 				}
 			} else {
-				fmt.Printf("Candidates: [cached]\n")
+				fmt.Fprintf(os.Stderr, "Candidates: [cached]\n")
 				for _, cand := range cachedList {
-					fmt.Printf("  - %q [%s %s]\n", cand.Title, cand.Source, verifier.FormatDuration(cand.Duration))
+					fmt.Fprintf(os.Stderr, "  - %q [%s %s]\n", cand.Title, cand.Source, verifier.FormatDuration(cand.Duration))
 				}
 			}
 		}
@@ -184,7 +184,7 @@ func SearchSourcesInParallelWithObserver(ctx context.Context, runner CommandRunn
 			srcCount := 0
 			for _, queryStr := range searchQueries {
 				if isVerbose {
-					fmt.Printf("%s: %q\n", srcName, queryStr)
+					fmt.Fprintf(os.Stderr, "%s: %q\n", srcName, queryStr)
 				}
 				if observer != nil && observer.OnQueryStart != nil {
 					observer.OnQueryStart(srcName)
@@ -206,7 +206,7 @@ func SearchSourcesInParallelWithObserver(ctx context.Context, runner CommandRunn
 				cancel()
 				if err != nil || len(stdoutBytes) == 0 {
 					if isVerbose && err != nil {
-						fmt.Printf("%s search error: %v\n", srcName, err)
+						fmt.Fprintf(os.Stderr, "%s search error: %v\n", srcName, err)
 					}
 					continue
 				}
@@ -293,9 +293,9 @@ func SearchSourcesInParallelWithObserver(ctx context.Context, runner CommandRunn
 									observer.OnCandidate(candObj)
 								} else if !isAgentMode() {
 									headerOnce.Do(func() {
-										fmt.Printf("\r\033[KCandidates:\n")
+										fmt.Fprintf(os.Stderr, "\r\033[KCandidates:\n")
 									})
-									fmt.Printf("\r\033[K  - %q [%s %s]\n", cand.Title, srcName, verifier.FormatDuration(cand.Duration))
+									fmt.Fprintf(os.Stderr, "\r\033[K  - %q [%s %s]\n", cand.Title, srcName, verifier.FormatDuration(cand.Duration))
 								}
 							}
 							mu.Unlock()
@@ -385,7 +385,7 @@ func DownloadAudioStreamWithRunner(ctx context.Context, runner CommandRunner, ta
 	}
 
 	if isVerbose {
-		fmt.Printf("downloading: %s\n", targetURL)
+		fmt.Fprintf(os.Stderr, "downloading: %s\n", targetURL)
 	}
 
 	if runner == nil {
@@ -411,9 +411,9 @@ func DownloadAudioStreamWithRunner(ctx context.Context, runner CommandRunner, ta
 
 		if isVerbose {
 			if extractorArgs != "" {
-				fmt.Printf("download try %d/3: args=%q\n", idx+1, extractorArgs)
+				fmt.Fprintf(os.Stderr, "download try %d/3: args=%q\n", idx+1, extractorArgs)
 			} else {
-				fmt.Printf("download try %d/3: standard fallback\n", idx+1)
+				fmt.Fprintf(os.Stderr, "download try %d/3: standard fallback\n", idx+1)
 			}
 		}
 
@@ -444,14 +444,14 @@ func DownloadAudioStreamWithRunner(ctx context.Context, runner CommandRunner, ta
 					if !initialFiles[file] {
 						savedPath := filepath.Join(outDir, file)
 						if isVerbose {
-							fmt.Printf("downloaded: %s\n", savedPath)
+							fmt.Fprintf(os.Stderr, "downloaded: %s\n", savedPath)
 						}
 						return savedPath, nil
 					}
 				}
 			}
 		} else if isVerbose {
-			fmt.Printf("download retry: attempt %d failed (%v)\n", idx+1, err)
+			fmt.Fprintf(os.Stderr, "download retry: attempt %d failed (%v)\n", idx+1, err)
 		}
 	}
 

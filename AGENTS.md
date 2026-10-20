@@ -1,6 +1,6 @@
 ---
 created_on: 2026-08-14 21:25
-last_modified: 2026-08-18 05:30
+last_modified: 2026-10-19 17:38
 status: current
 ---
 
@@ -23,6 +23,7 @@ Go CLI tool for searching, verifying, downloading, and managing high-fidelity si
 - **Temporary Files:** Temporary file operations use `.tmp/` within the project root.
 
 ## Conventions
+- **Machine API:** `--json` emits one JSON result on stdout; diagnostics go to stderr. `--json --list-candidates` returns ranked candidates without downloading; `--candidate-url` restricts acquisition to that candidate and fails if it is no longer available. Dependencies and self-upgrade support `--json` envelopes too.
 - **Original & Extended Mixes First:** Prefer full-length Extended, Original, Club, or Dub Mixes (4.5 to 13 minutes) with beatmatchable intro/outro sections. Reject short radio edits (< 3.5 minutes).
 - **Zero-Transcode Policy:** Never lossily re-encode MP3, OPUS, or FLAC streams to AAC. Prioritize audio quality at all times. Always use `-c:a copy` during metadata tagging to preserve the original bitstream byte-for-byte.
 - **Filename Sanitization:** Clean output filenames (`<outDir>/<Artist> - <Title>.<ext>`). Stripped of YouTube IDs or brackets `[...]`.

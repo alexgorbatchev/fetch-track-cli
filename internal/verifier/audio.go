@@ -265,7 +265,7 @@ func VerifyAudioTrackWithRunner(ctx context.Context, runner CommandRunner, targe
 	var err error
 
 	if isVerbose {
-		fmt.Printf("verify: %s\n", target)
+		fmt.Fprintf(os.Stderr, "verify: %s\n", target)
 	}
 
 	if runner == nil {
@@ -296,7 +296,7 @@ func VerifyAudioTrackWithRunner(ctx context.Context, runner CommandRunner, targe
 				sourceLabel = "url"
 			}
 		}
-		fmt.Printf("probed: %q [%s] (%s)\n", metadata.Title, sourceLabel, FormatDuration(metadata.DurationSeconds))
+		fmt.Fprintf(os.Stderr, "probed: %q [%s] (%s)\n", metadata.Title, sourceLabel, FormatDuration(metadata.DurationSeconds))
 	}
 
 	localAudioPath := target
@@ -312,7 +312,7 @@ func VerifyAudioTrackWithRunner(ctx context.Context, runner CommandRunner, targe
 		isTempDownloadedFile = true
 
 		if isVerbose {
-			fmt.Printf("sample download: %s\n", localAudioPath)
+			fmt.Fprintf(os.Stderr, "sample download: %s\n", localAudioPath)
 		}
 
 		dlCtx, cancel := context.WithTimeout(ctx, 3*time.Minute)
@@ -342,7 +342,7 @@ func VerifyAudioTrackWithRunner(ctx context.Context, runner CommandRunner, targe
 	}()
 
 	if isVerbose {
-		fmt.Printf("analyzing pcm: goertzel + dynamics\n")
+		fmt.Fprintf(os.Stderr, "analyzing pcm: goertzel + dynamics\n")
 	}
 
 	mixStructure := AnalyzeMixStructure(metadata.Title, metadata.DurationSeconds)

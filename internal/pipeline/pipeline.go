@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -52,6 +53,8 @@ type Options struct {
 	ConfirmFingerprint bool
 	MinBandwidthHz     int
 	JSONOutput         bool
+	ListCandidates     bool
+	CandidateURL       string
 }
 
 type logger struct {
@@ -125,7 +128,18 @@ func IsAgentMode() bool {
 }
 
 // Run executes the full single-track acquisition pipeline.
-func Run(ctx context.Context, urlOrQuery string, opts Options) error {
+func Run(ctx context.Context, urlOrQuery string, opts Options) (runErr error) {
+	opts.JSONOutput = opts.JSONOutput || opts.ListCandidates
+	if opts.JSONOutput {
+		opts.IsAgent = true
+		defer func() {
+			if runErr != nil {
+				if err := RenderJSONOutput(&JSONExecutionResult{Target: urlOrQuery, Status: "error", Error: runErr.Error()}); err != nil {
+					runErr = errors.Join(runErr, err)
+				}
+			}
+		}()
+	}
 	if opts.OutDir == "" {
 		opts.OutDir = "."
 	}
@@ -142,7 +156,7 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 	if !opts.SkipDepCheck {
 		reports, err := deps.VerifyDependencies(ctx, cacheInst)
 		if err != nil {
-			if opts.IsAgent {
+			if opts.IsAgent && !opts.JSONOutput {
 				for _, r := range reports {
 					if !r.Satisfied {
 						if !r.Installed {
@@ -278,6 +292,25 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 		candidatePool = append(candidatePool, foundCandidates...)
 	}
 	candidatePool = downloader.DeduplicateCandidates(candidatePool)
+	candidatePool = downloader.RankAllCandidates(candidatePool, artist, title)
+	if opts.ListCandidates {
+		if searchErr != nil && len(candidatePool) == 0 {
+			return searchErr
+		}
+		return RenderJSONOutput(&JSONExecutionResult{Target: urlOrQuery, Status: "candidates", CandidateCount: len(candidatePool), Candidates: candidatePool})
+	}
+	if opts.CandidateURL != "" {
+		var selected []downloader.Candidate
+		for _, candidate := range candidatePool {
+			if candidate.WebpageURL == opts.CandidateURL {
+				selected = append(selected, candidate)
+			}
+		}
+		if len(selected) == 0 {
+			return fmt.Errorf("selected candidate is no longer available: %s", opts.CandidateURL)
+		}
+		candidatePool = selected
+	}
 
 	for _, cand := range candidatePool {
 		_ = opts.ProgressReporter.Emit(progress.Event{
@@ -350,7 +383,7 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 				Phase: "search",
 				Error: err.Error(),
 			})
-			if opts.IsAgent {
+			if opts.IsAgent && !opts.JSONOutput {
 				fmt.Printf("target: %s\nstatus: error\nerror: no matching track candidates found\n", urlOrQuery)
 			}
 			return err
@@ -420,7 +453,7 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 				Phase: "download",
 				Error: err.Error(),
 			})
-			if opts.IsAgent {
+			if opts.IsAgent && !opts.JSONOutput {
 				fmt.Printf("target: %s\nstatus: error\nerror: %v\n", urlOrQuery, err)
 			}
 			return fmt.Errorf("downloading audio stream: %w", err)
@@ -697,7 +730,7 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) error {
 		return RenderJSONOutput(jsonRes)
 	}
 
-	if opts.IsAgent {
+	if opts.IsAgent && !opts.JSONOutput {
 		fmt.Printf("target: %s\n", urlOrQuery)
 		if selectedCandidate != nil {
 			fmt.Printf("candidate: %s [%s] (%s)\n", selectedCandidate.Title, selectedCandidate.Source, selectedCandidate.WebpageURL)
