@@ -103,6 +103,8 @@ fetch-track upgrade
 
 Use `--json` for one JSON result on stdout, with diagnostics on stderr. Acquisition results include `target`, `status`, and available `output_file`, `selected_candidate`, `verification`, `metadata`, or `error` fields. Failed operations retain their structured result and exit unsuccessfully.
 
+`fetch-track --json verify <path|url>` returns the same envelope with `verification` on success. Acquisition and verification report missing targets and unavailable dependencies as `status: "error"`; acquisition also reports progress-target initialization failures this way. Verification errors include the requested `target` and an actionable `error`.
+
 Use `--list-candidates` with the intended search query to inspect ranked candidates without downloading. Its result has `status: "candidates"`, `candidates`, and `candidate_count`. Continue with the same query and `--candidate-url` set to the selected candidate's `webpage_url`; acquisition restricts its candidate pool to that exact URL and fails if the candidate is no longer available.
 
 ```bash

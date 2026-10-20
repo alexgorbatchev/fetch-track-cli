@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -71,16 +72,21 @@ When a query is provided, fetch-track executes the full acquisition pipeline:
   - Enriches audio files with canonical metadata and 1400x1400 square cover art`,
 		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			jsonOutput = jsonOutput || listCandidates
 			if len(args) == 0 {
+				if jsonOutput {
+					return writeJSONFailure(cmd, "", fmt.Errorf("target is required"))
+				}
 				return cmd.Help()
 			}
 
-			jsonOutput = jsonOutput || listCandidates
+			target := strings.Join(args, " ")
 			if err := ensureDependencies(cmd.Context()); err != nil {
+				if jsonOutput {
+					return writeJSONFailure(cmd, target, err)
+				}
 				return err
 			}
-
-			target := strings.Join(args, " ")
 
 			var sources []string
 			if strings.TrimSpace(sourcesFlag) != "" {
@@ -105,7 +111,11 @@ When a query is provided, fetch-track executes the full acquisition pipeline:
 				var err error
 				reporter, err = progress.NewReporter(cmd.Context(), targetURI)
 				if err != nil {
-					return fmt.Errorf("initializing progress reporter for %q: %w", targetURI, err)
+					err = fmt.Errorf("initializing progress reporter for %q: %w", targetURI, err)
+					if jsonOutput {
+						return writeJSONFailure(cmd, target, err)
+					}
+					return err
 				}
 				defer reporter.Close()
 			}
@@ -165,12 +175,18 @@ When a query is provided, fetch-track executes the full acquisition pipeline:
 		Args:         cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 {
+				if jsonOutput {
+					return writeJSONFailure(cmd, "", fmt.Errorf("target is required"))
+				}
 				return cmd.Help()
 			}
 			target := strings.Join(args, " ")
 			isAgent := deps.IsAgentMode() || jsonOutput
 
 			if err := ensureDependencies(cmd.Context()); err != nil {
+				if jsonOutput {
+					return writeJSONFailure(cmd, target, err)
+				}
 				if isAgent {
 					fmt.Printf("target: %s\nstatus: error\nerror: %v\n", target, err)
 				}
@@ -190,14 +206,18 @@ When a query is provided, fetch-track executes the full acquisition pipeline:
 				sp.Stop()
 			}
 			if err != nil {
+				err = fmt.Errorf("audio verification failed: %w", err)
+				if jsonOutput {
+					return writeJSONFailure(cmd, target, err)
+				}
 				if isAgent {
 					fmt.Printf("target: %s\nstatus: error\nerror: %v\n", target, err)
 				}
-				return fmt.Errorf("audio verification failed: %w", err)
+				return err
 			}
 
 			if jsonOutput {
-				return pipeline.RenderJSONOutput(&pipeline.JSONExecutionResult{
+				return json.NewEncoder(cmd.OutOrStdout()).Encode(&pipeline.JSONExecutionResult{
 					Target:       target,
 					Status:       "success",
 					Verification: pipeline.ConvertVerificationReport(report),
