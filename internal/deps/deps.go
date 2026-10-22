@@ -2,7 +2,6 @@ package deps
 
 import (
 	"context"
-	"errors"
 	"regexp"
 	"strings"
 	"sync"
@@ -203,7 +202,7 @@ func VerifyDependenciesWithRunner(ctx context.Context, runner CommandRunner, c *
 			if err != nil {
 				cleanErr := godeps.SanitizeStderr(err.Error())
 				if cleanErr != "" && cleanErr != err.Error() {
-					return out, errors.New(cleanErr)
+					return out, &sanitizedError{message: cleanErr, cause: err}
 				}
 				return out, err
 			}
@@ -219,6 +218,16 @@ func VerifyDependenciesWithRunner(ctx context.Context, runner CommandRunner, c *
 	})
 	return mgr.Verify(ctx)
 }
+
+// sanitizedError shows a tool failure without its stack trace while keeping the
+// original error, so godeps still recognizes a missing executable.
+type sanitizedError struct {
+	message string
+	cause   error
+}
+
+func (e *sanitizedError) Error() string { return e.message }
+func (e *sanitizedError) Unwrap() error { return e.cause }
 
 // CheckDependenciesWithRunner checks dependencies using a provided CommandRunner.
 func CheckDependenciesWithRunner(ctx context.Context, runner CommandRunner, c *cache.Cache, deps ...Dependency) error {

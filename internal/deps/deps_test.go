@@ -353,6 +353,33 @@ yt_dlp.utils.DownloadError: binary crashed`)
 	}
 }
 
+func TestVerifyDependenciesWithRunner_SanitizedErrorsKeepKind(t *testing.T) {
+	tests := []struct {
+		name        string
+		err         error
+		wantMissing bool
+	}{
+		{"missing executable with stderr", fmt.Errorf("%w: Traceback (most recent call last):\n  File \"x\", line 1\nError: gone", &exec.Error{Name: "yt-dlp", Err: exec.ErrNotFound}), true},
+		{"crashed version check", errors.New("Traceback (most recent call last):\n  File \"x\", line 1\nError: config not found"), false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("AGENT", "0")
+			runner := func(context.Context, string, ...string) ([]byte, error) { return nil, tt.err }
+			reports, err := VerifyDependenciesWithRunner(context.Background(), runner, nil, Dependency{Name: "yt-dlp", MinVersion: "2024.08.01"})
+			if err == nil || len(reports) != 1 {
+				t.Fatalf("reports=%+v err=%v", reports, err)
+			}
+			if missing := strings.Contains(reports[0].Error, "missing in $PATH"); missing != tt.wantMissing {
+				t.Errorf("report error %q, want missing=%v", reports[0].Error, tt.wantMissing)
+			}
+			if strings.Contains(reports[0].Error, "Traceback") {
+				t.Errorf("report error contains stack trace: %q", reports[0].Error)
+			}
+		})
+	}
+}
+
 func TestCheckDependencies_Variants(t *testing.T) {
 	ctx := context.Background()
 	c, _ := cache.New(false)
