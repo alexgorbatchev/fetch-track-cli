@@ -4,7 +4,7 @@ go 1.26.2
 
 require (
 	github.com/alexgorbatchev/cobra-help-tree v1.1.0
-	github.com/alexgorbatchev/godeps v1.0.0
+	github.com/alexgorbatchev/godeps v1.1.0
 	github.com/briandowns/spinner v1.23.2
 	github.com/charmbracelet/huh v1.0.0
 	github.com/charmbracelet/lipgloss v1.1.0

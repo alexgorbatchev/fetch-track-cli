@@ -166,6 +166,9 @@ func TestDepsCommand_NonAgentOutdated(t *testing.T) {
 		if name == "yt-dlp" {
 			return []byte("2020.01.01"), nil
 		}
+		if name == "tag-track" {
+			return []byte("8.1.2"), nil
+		}
 		return []byte(fmt.Sprintf("%s version 8.1.2", name)), nil
 	}
 	cleanupOutdated := deps.SetDefaultRunner(outdatedRunner)
@@ -202,6 +205,9 @@ func TestDepsCommand_AgentMode(t *testing.T) {
 		if name == "yt-dlp" {
 			return []byte("2020.01.01"), nil
 		}
+		if name == "tag-track" {
+			return []byte("8.1.2"), nil
+		}
 		return []byte(fmt.Sprintf("%s version 8.1.2", name)), nil
 	}
 	cleanupOutdated := deps.SetDefaultRunner(outdatedRunner)
@@ -223,7 +229,7 @@ func TestDepsCommand_Failure(t *testing.T) {
 	_ = c.Delete("deps", "tag-track")
 
 	cleanupFail := deps.SetDefaultRunner(func(ctx context.Context, name string, args ...string) ([]byte, error) {
-		return nil, errors.New("missing")
+		return nil, &exec.Error{Name: name, Err: exec.ErrNotFound}
 	})
 	defer cleanupFail()
 
@@ -481,7 +487,7 @@ func TestEnsureDependencies_Branches(t *testing.T) {
 		mu.Unlock()
 		if firstVerify {
 			// Report missing on first verify
-			return nil, errors.New("not found")
+			return nil, &exec.Error{Name: name, Err: exec.ErrNotFound}
 		}
 		if name == "yt-dlp" {
 			return []byte("2026.08.01"), nil
@@ -500,7 +506,7 @@ func TestEnsureDependencies_Branches(t *testing.T) {
 
 	// Set runner to report missing tools
 	failRunner := func(ctx context.Context, name string, args ...string) ([]byte, error) {
-		return nil, errors.New("missing")
+		return nil, &exec.Error{Name: name, Err: exec.ErrNotFound}
 	}
 	cleanupFailDeps := deps.SetDefaultRunner(failRunner)
 
@@ -544,6 +550,9 @@ func TestEnsureDependencies_Branches(t *testing.T) {
 	outdatedRunner := func(ctx context.Context, name string, args ...string) ([]byte, error) {
 		if name == "yt-dlp" {
 			return []byte("2020.01.01"), nil
+		}
+		if name == "tag-track" {
+			return []byte("8.1.2"), nil
 		}
 		return []byte(fmt.Sprintf("%s version 8.1.2", name)), nil
 	}

@@ -86,7 +86,8 @@ func TestCompareVersions(t *testing.T) {
 		{"ffmpeg nightly build N-", "N-112345", "4.4", false},
 		{"ffmpeg git build", "git-2023-01-01", "4.4", false},
 		{"dev build version", "dev", "4.4", false},
-		{"DEV- prefixed version", "DEV-1234", "4.4", false},
+		{"unrecognized DEV- prefixed version", "DEV-1234", "4.4", true},
+		{"empty version", "", "4.4", true},
 		{"build metadata with plus", "4.4.0+build123", "4.4", false},
 		{"older minor", "1.2", "4.4", true},
 	}
@@ -416,6 +417,9 @@ func TestCheckDependencies_DefaultRunner(t *testing.T) {
 	cleanup := SetDefaultRunner(func(ctx context.Context, name string, args ...string) ([]byte, error) {
 		if name == "yt-dlp" {
 			return []byte("2026.08.01"), nil
+		}
+		if name == "tag-track" {
+			return []byte("8.1.2"), nil
 		}
 		return []byte(fmt.Sprintf("%s version 8.1.2", name)), nil
 	})
