@@ -119,8 +119,8 @@ func TestJSONTagMetadataVariantsAndFailure(t *testing.T) {
 				return []byte(`{"id":"one","title":"Artist - Title","duration":300,"webpage_url":"https://example.com/one"}`), nil
 			})
 			defer restore()
-			result, err := capturePipelineJSON(t, "Artist - Title", Options{OutDir: outDir, Sources: []string{"soundcloud"}, SkipDepCheck: true, SkipVerify: true, JSONOutput: true, NoCache: true, Verbose: true, ProgressTarget: "tcp://127.0.0.1:12345", Runner: func(ctx context.Context, name string, args ...string) ([]byte, error) {
-				for _, flag := range []string{"track", "update", "--in-place", "--source-url", "--no-cache", "-v", "--progress-target"} {
+			result, err := capturePipelineJSON(t, "Artist - Title", Options{OutDir: outDir, Sources: []string{"soundcloud"}, SkipDepCheck: true, SkipVerify: true, JSONOutput: true, NoCache: true, Verbose: true, Runner: func(ctx context.Context, name string, args ...string) ([]byte, error) {
+				for _, flag := range []string{"track", "update", "--in-place", "--source-url", "--no-cache", "-v"} {
 					if !slices.Contains(args, flag) {
 						t.Fatalf("missing %s: %v", flag, args)
 					}

@@ -1,9 +1,24 @@
 package deps
 
 import (
+	"errors"
+	"fmt"
 	"path/filepath"
 	"testing"
 )
+
+func TestFoldHomeErrorPreservesCause(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	cause := errors.New("unavailable")
+	err := FoldHomeError(fmt.Errorf("reading %s: %w", filepath.Join(home, "track.flac"), cause))
+	if err.Error() != "reading ~/track.flac: unavailable" || !errors.Is(err, cause) {
+		t.Fatalf("folded error lost display or cause: %v", err)
+	}
+	if FoldHomeError(nil) != nil {
+		t.Fatal("nil error must remain nil")
+	}
+}
 
 func TestFoldHomeWithDir(t *testing.T) {
 	const home = "/home/dev"

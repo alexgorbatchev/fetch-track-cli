@@ -8,6 +8,14 @@ import (
 	"unicode/utf8"
 )
 
+// FoldHomeError preserves error identity while folding paths for terminal output.
+func FoldHomeError(err error) error {
+	if err == nil {
+		return nil
+	}
+	return &sanitizedError{message: FoldHome(err.Error()), cause: err}
+}
+
 // FoldHome replaces whole-segment occurrences of the current user's home
 // directory in text with "~" for terminal display.
 func FoldHome(text string) string {

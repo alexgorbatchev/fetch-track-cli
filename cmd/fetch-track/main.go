@@ -132,7 +132,6 @@ When a query is provided, fetch-track executes the full acquisition pipeline:
 				Debug:              debug,
 				BootTime:           bootTime,
 				IsAgent:            deps.IsAgentMode(),
-				ProgressTarget:     targetURI,
 				ProgressReporter:   reporter,
 				JSRuntime:          jsRuntime,
 				ConfirmFingerprint: confirmFingerprint && !skipFingerprint,
@@ -209,12 +208,12 @@ When a query is provided, fetch-track executes the full acquisition pipeline:
 					sp.Stop()
 				}
 				if err != nil {
-					err = fmt.Errorf("audio verification failed: %w", err)
+					err = deps.FoldHomeError(fmt.Errorf("audio verification failed: %w", err))
 					if jsonOutput {
 						return writeJSONFailure(cmd, target, err)
 					}
 					if isAgent {
-						fmt.Printf("target: %s\nstatus: error\nerror: %v\n", target, err)
+						fmt.Printf("target: %s\nstatus: error\nerror: %v\n", deps.FoldHome(target), err)
 					}
 					return err
 				}

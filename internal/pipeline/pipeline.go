@@ -46,7 +46,6 @@ type Options struct {
 	Debug              bool
 	BootTime           time.Time
 	IsAgent            bool
-	ProgressTarget     string
 	ProgressReporter   *progress.Reporter
 	Runner             deps.CommandRunner
 	JSRuntime          string
@@ -135,7 +134,6 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) (runErr error) {
 	opts.JSONOutput = opts.JSONOutput || opts.ListCandidates
 	if opts.JSONOutput {
 		opts.IsAgent = true
-		opts.Verbose = false
 		defer func() {
 			if runErr != nil {
 				if err := RenderJSONOutput(&JSONExecutionResult{Target: urlOrQuery, Status: "error", Error: runErr.Error()}); err != nil {

@@ -8,7 +8,7 @@ description: >-
 author: alexgorbatchev
 metadata:
   created_on: 2026-10-18 09:20
-  last_modified: 2026-10-18 09:20
+  last_modified: 2026-10-30 12:00
   status: current
 ---
 
@@ -83,6 +83,8 @@ AGENT=1 fetch-track completion zsh [--no-descriptions]
 | `--job-id` | | `string` | `""` | Root | Job identifier attached to every `fetch-track` progress event; auto-generates a random ID when empty |
 | `--js-runtime` | | `string` | `"auto"` | Root | JavaScript runtime passed to `yt-dlp` (`auto`, `deno`, `node`, `bun`, `quickjs`, `none`, `off`) |
 | `--json` | | `bool` | `false` | Global | Emit a single machine-readable JSON result object to `stdout` while routing human logs to `stderr` |
+| `--list-candidates` | | `bool` | `false` | Root | Return ranked candidates without downloading; implies `--json` |
+| `--candidate-url` | | `string` | `""` | Root | Download only this exact URL from a previous candidate result; fail if unavailable |
 | `--min-bandwidth-khz` | | `float64` | `16` | Root, `track verify` | Minimum acceptable audio frequency cutoff in kHz (e.g. `18.5`) before triggering a low-bandwidth warning |
 | `--no-cache` | | `bool` | `false` | Root | Bypass local disk cache for search queries, probed URL metadata, and cover art |
 | `--no-descriptions` | | `bool` | `false` | `completion` | Disable completion descriptions in generated shell scripts |

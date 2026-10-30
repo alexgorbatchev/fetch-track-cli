@@ -634,7 +634,7 @@ func TestRun_WithProgressTargetDelegation(t *testing.T) {
 	defer func() { _ = reporter.Close() }()
 	opts := Options{
 		OutDir: outDir, Sources: []string{"soundcloud"}, Verbose: true, IsAgent: true,
-		ProgressTarget: "tcp://127.0.0.1:9099", ProgressReporter: reporter, Runner: tagRunner,
+		ProgressReporter: reporter, Runner: tagRunner,
 	}
 
 	err = Run(ctx, "Boris Brejcha - Space X", opts)
