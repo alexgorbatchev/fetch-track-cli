@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	cobrahelptree "github.com/alexgorbatchev/cobra-help-tree/v2"
+	cobrahelptree "github.com/alexgorbatchev/cobra-help-tree/v4"
 	"io"
 	"os"
 	"os/exec"
@@ -780,3 +780,12 @@ func TestHomeDirectoryFoldingInCLIOutput(t *testing.T) {
 		t.Fatalf("expected stdout to fold home directory to ~, got:\n%s", stdoutStr)
 	}
 }
+
+const skillCommandOutput = `Install the fetch-track skill using the Skills CLI:
+
+  npx skills add alexgorbatchev/fetch-track-cli --skill fetch-track
+
+Skill:
+
+  https://github.com/alexgorbatchev/fetch-track-cli/tree/main/skills/fetch-track
+`

@@ -14,7 +14,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	cobrahelptree "github.com/alexgorbatchev/cobra-help-tree/v2"
+	cobrahelptree "github.com/alexgorbatchev/cobra-help-tree/v4"
 	"github.com/alexgorbatchev/fetch-track-cli/internal/cache"
 	"github.com/alexgorbatchev/fetch-track-cli/internal/deps"
 	"github.com/alexgorbatchev/fetch-track-cli/internal/pipeline"
@@ -444,20 +444,12 @@ When a query is provided, fetch-track executes the full acquisition pipeline:
 		Tree: cobrahelptree.TreeOptions{
 			HideGeneratedCommands: true,
 		},
-		Skill: skillCommandOutput,
+		Skill: cobrahelptree.SkillSource{Repository: "alexgorbatchev/fetch-track-cli", Branch: "main"},
 	})
 
 	return rootCmd
 }
 
-const skillCommandOutput = `Install the fetch-track skill using the Skills CLI:
-
-  npx skills add alexgorbatchev/fetch-track-cli --skill fetch-track
-
-Skill:
-
-  https://github.com/alexgorbatchev/fetch-track-cli/tree/main/skills/fetch-track
-`
 
 func buildTechCatalog() cobrahelptree.TechCatalog {
 	return cobrahelptree.TechCatalog{
