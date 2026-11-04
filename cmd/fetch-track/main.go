@@ -582,7 +582,7 @@ func ensureDependencies(ctx context.Context) error {
 	}
 	if err == nil {
 		if autoInstall && deps.HasOneFileYtDlp() {
-			return replaceOneFileYtDlp(ctx)
+			replaceOneFileYtDlp(ctx)
 		}
 		return nil
 	}
@@ -637,18 +637,20 @@ func ensureDependencies(ctx context.Context) error {
 
 // replaceOneFileYtDlp installs the unpacked yt-dlp build over a managed
 // one-file build, which unpacks itself into the system temporary directory on
-// every run.
-func replaceOneFileYtDlp(ctx context.Context) error {
+// every run. The one-file build works, so a failed replacement is a warning on
+// standard error, where every output mode keeps diagnostics, and the run
+// continues with it.
+func replaceOneFileYtDlp(ctx context.Context) {
 	human := !deps.IsAgentMode() && !jsonOutput
 	if human {
 		fmt.Println("Replacing the managed one-file yt-dlp build with the unpacked build...")
 	}
 	installed, err := deps.InstallMissingDependencies(ctx)
 	if err != nil {
-		return fmt.Errorf("auto-installing dependencies: %w", err)
+		fmt.Fprintf(os.Stderr, "warning: keeping the one-file yt-dlp build: %s\n", deps.CleanErrorMessage(err.Error()))
+		return
 	}
 	if len(installed) > 0 && human {
 		fmt.Printf("Successfully installed: %s\n", strings.Join(installed, ", "))
 	}
-	return nil
 }

@@ -110,7 +110,35 @@ func TestEnsureDependenciesReplacesOneFileYtDlp(t *testing.T) {
 			deps.RequiredDependencies[i].Installer = godeps.InstallerFunc(func(context.Context, string) error { return errors.New("download failed") })
 		}
 	}
-	if err := ensureDependencies(context.Background()); err == nil || !strings.Contains(err.Error(), "download failed") {
-		t.Fatalf("ensureDependencies() error = %v, want the failed replacement", err)
+	stderr := captureStderr(t, func() {
+		if err := ensureDependencies(context.Background()); err != nil {
+			t.Errorf("ensureDependencies() error = %v; a failed replacement must keep the working one-file build", err)
+		}
+	})
+	if !strings.Contains(stderr, "warning: keeping the one-file yt-dlp build") || !strings.Contains(stderr, "download failed") {
+		t.Fatalf("stderr = %q, want a warning about the failed replacement", stderr)
 	}
+	if !deps.HasOneFileYtDlp() {
+		t.Fatal("the one-file build was removed although its replacement failed")
+	}
+}
+
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+	file, err := os.CreateTemp(t.TempDir(), "stderr")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = file.Close() }()
+	original := os.Stderr
+	os.Stderr = file
+	func() {
+		defer func() { os.Stderr = original }()
+		fn()
+	}()
+	data, err := os.ReadFile(file.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
 }
