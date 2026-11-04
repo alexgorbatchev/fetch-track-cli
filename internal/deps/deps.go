@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -25,12 +28,12 @@ type DependencyReport = godeps.DependencyReport
 // CommandRunner alias for godeps.CommandRunner.
 type CommandRunner = godeps.CommandRunner
 
-// DefaultRunner uses godeps.DefaultRunner.
-var DefaultRunner = godeps.DefaultRunner
+// DefaultRunner is RunCommand.
+var DefaultRunner CommandRunner = RunCommand
 
 var (
 	defaultRunnerMu sync.Mutex
-	currentRunner   = godeps.DefaultRunner
+	currentRunner   CommandRunner = RunCommand
 )
 
 // SetDefaultRunner overrides the default command runner and returns a restore cleanup function.
@@ -52,7 +55,7 @@ func GetRunner() CommandRunner {
 	defaultRunnerMu.Lock()
 	defer defaultRunnerMu.Unlock()
 	if currentRunner == nil {
-		return godeps.DefaultRunner
+		return RunCommand
 	}
 	return currentRunner
 }
@@ -235,11 +238,39 @@ func UpdateDependency(ctx context.Context, depName string) error {
 	return mgr.Update(ctx, depName)
 }
 
-// InstallMissingDependencies installs all unsatisfied dependencies.
+// InstallMissingDependencies installs all unsatisfied dependencies and
+// replaces a managed one-file yt-dlp with the unpacked build.
 func InstallMissingDependencies(ctx context.Context) ([]string, error) {
 	c, _ := cache.New(true)
 	mgr := NewManager(c)
-	return mgr.InstallUnsatisfied(ctx)
+	installed, err := mgr.InstallUnsatisfied(ctx)
+	if err != nil || slices.Contains(installed, ytDlpName) || !HasOneFileYtDlp() {
+		return installed, err
+	}
+	if err := mgr.Install(ctx, ytDlpName); err != nil {
+		return installed, fmt.Errorf("replacing the one-file %s build: %w", ytDlpName, err)
+	}
+	return append(installed, ytDlpName), nil
+}
+
+// ytDlpName is the yt-dlp dependency's name.
+const ytDlpName = "yt-dlp"
+
+// HasOneFileYtDlp reports whether the managed bin directory holds a yt-dlp
+// executable file rather than the unpacked build's package directory. The
+// one-file build unpacks about 70 MB into the system temporary directory on
+// every run, so installation replaces it even when its version is current.
+func HasOneFileYtDlp() bool {
+	binDir, err := godeps.GetManagedBinDir(AppName)
+	if err != nil {
+		return false
+	}
+	for _, name := range []string{ytDlpName, ytDlpName + ".exe"} {
+		if info, err := os.Stat(filepath.Join(binDir, name)); err == nil && info.Mode().IsRegular() {
+			return true
+		}
+	}
+	return false
 }
 
 // UpdateAllDependencies updates all declared dependencies.
@@ -249,13 +280,35 @@ func UpdateAllDependencies(ctx context.Context) ([]string, error) {
 	return mgr.UpdateAll(ctx)
 }
 
+// managedPlacement remembers the PATH that InitManagedPath last produced and
+// the managed directory it placed.
+var managedPlacement struct {
+	sync.Mutex
+	binDir string
+	path   string
+}
+
 // InitManagedPath puts the managed directories on the process PATH so each
 // dependency resolves to the copy it should use: a copy elsewhere on PATH that
 // meets the minimum version wins, and the managed copy is moved ahead only when
 // that copy is missing or too old. Deciding that runs the version commands of
-// dependencies that have both copies, so it needs ctx.
+// dependencies that have both copies, so it needs ctx. It does nothing while
+// PATH and the managed directory are still what its last placement produced.
 func InitManagedPath(ctx context.Context) error {
-	return NewManager(nil).InitManagedPath(ctx)
+	binDir, err := godeps.GetManagedBinDir(AppName)
+	if err != nil {
+		return err
+	}
+	managedPlacement.Lock()
+	defer managedPlacement.Unlock()
+	if managedPlacement.binDir == binDir && managedPlacement.path == os.Getenv("PATH") {
+		return nil
+	}
+	if err := NewManager(nil).InitManagedPath(ctx); err != nil {
+		return err
+	}
+	managedPlacement.binDir, managedPlacement.path = binDir, os.Getenv("PATH")
+	return nil
 }
 
 // RunCommand runs a non-interactive external tool and returns its standard
@@ -271,10 +324,7 @@ func RunCommand(ctx context.Context, name string, args ...string) ([]byte, error
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
 		if msg := strings.TrimSpace(stderr.String()); msg != "" {
-			if cleanErr := CleanErrorMessage(msg); cleanErr != "" {
-				msg = cleanErr
-			}
-			return nil, fmt.Errorf("%w: %s", err, msg)
+			return nil, fmt.Errorf("%w: %s", err, CleanErrorMessage(msg))
 		}
 		return nil, err
 	}

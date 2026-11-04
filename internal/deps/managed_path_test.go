@@ -2,10 +2,15 @@ package deps
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
+
+	"github.com/alexgorbatchev/godeps/v2"
 )
 
 // TestInitManagedPath checks which yt-dlp the process resolves after
@@ -70,10 +75,98 @@ func TestInitManagedPath(t *testing.T) {
 }
 
 func TestInitManagedPathCancelled(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	if err := InitManagedPath(ctx); err == nil {
 		t.Fatal("InitManagedPath() with a cancelled context succeeded")
+	}
+}
+
+// A second placement in the same process must not repeat the version
+// commands, until PATH or the managed directory changes.
+func TestInitManagedPathRunsVersionChecksOnce(t *testing.T) {
+	dataHome := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", dataHome)
+	writeExecutable(t, filepath.Join(dataHome, AppName, "bin", "yt-dlp", "yt-dlp"))
+	globalDir := t.TempDir()
+	writeExecutable(t, filepath.Join(globalDir, "yt-dlp"))
+	t.Setenv("PATH", globalDir)
+	calls := 0
+	t.Cleanup(SetDefaultRunner(func(ctx context.Context, name string, args ...string) ([]byte, error) {
+		calls++
+		return []byte("2026.08.19\n"), nil
+	}))
+
+	steps := []struct {
+		name      string
+		change    func()
+		wantCalls int
+	}{
+		{name: "first placement checks versions", change: func() {}, wantCalls: 1},
+		{name: "repeated placement is skipped", change: func() {}, wantCalls: 0},
+		{name: "changed PATH is placed again", change: func() { t.Setenv("PATH", globalDir+string(os.PathListSeparator)+t.TempDir()) }, wantCalls: 1},
+	}
+	for _, step := range steps {
+		step.change()
+		calls = 0
+		if err := InitManagedPath(context.Background()); err != nil {
+			t.Fatalf("%s: InitManagedPath() error = %v", step.name, err)
+		}
+		if calls != step.wantCalls {
+			t.Fatalf("%s: %d version commands, want %d", step.name, calls, step.wantCalls)
+		}
+	}
+}
+
+func TestInstallMissingDependenciesReplacesOneFileYtDlp(t *testing.T) {
+	dataHome := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", dataHome)
+	t.Setenv("PATH", t.TempDir())
+	binDir := filepath.Join(dataHome, AppName, "bin")
+	oneFile := filepath.Join(binDir, "yt-dlp")
+	writeExecutable(t, oneFile)
+	t.Cleanup(SetDefaultRunner(func(ctx context.Context, name string, args ...string) ([]byte, error) {
+		return []byte("2026.08.19\n"), nil
+	}))
+	installs := 0
+	original := RequiredDependencies
+	t.Cleanup(func() { RequiredDependencies = original })
+	RequiredDependencies = []Dependency{{
+		Name:       "yt-dlp",
+		MinVersion: "2024.08.01",
+		Installer: godeps.InstallerFunc(func(ctx context.Context, dir string) error {
+			installs++
+			if err := os.Remove(filepath.Join(dir, "yt-dlp")); err != nil && !errors.Is(err, os.ErrNotExist) {
+				return err
+			}
+			writeExecutable(t, filepath.Join(dir, "yt-dlp", "yt-dlp"))
+			return nil
+		}),
+	}}
+
+	if !HasOneFileYtDlp() {
+		t.Fatal("HasOneFileYtDlp() = false for a one-file bin/yt-dlp")
+	}
+	installed, err := InstallMissingDependencies(context.Background())
+	if err != nil || !slices.Equal(installed, []string{"yt-dlp"}) || installs != 1 {
+		t.Fatalf("InstallMissingDependencies() = %v, %v with %d installs; want [yt-dlp] once", installed, err, installs)
+	}
+	if HasOneFileYtDlp() {
+		t.Fatal("HasOneFileYtDlp() = true after the unpacked build replaced it")
+	}
+	installed, err = InstallMissingDependencies(context.Background())
+	if err != nil || len(installed) != 0 || installs != 1 {
+		t.Fatalf("second InstallMissingDependencies() = %v, %v with %d installs; want nothing installed", installed, err, installs)
+	}
+
+	RequiredDependencies[0].Installer = godeps.InstallerFunc(func(context.Context, string) error { return errors.New("download failed") })
+	if err := os.RemoveAll(filepath.Join(binDir, "yt-dlp")); err != nil {
+		t.Fatal(err)
+	}
+	writeExecutable(t, oneFile)
+	if _, err := InstallMissingDependencies(context.Background()); err == nil || !strings.Contains(err.Error(), "replacing the one-file yt-dlp build") {
+		t.Fatalf("InstallMissingDependencies() error = %v, want the failed replacement", err)
 	}
 }
 

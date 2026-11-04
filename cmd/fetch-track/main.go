@@ -82,23 +82,6 @@ When a query is provided, fetch-track executes the full acquisition pipeline:
 			}
 
 			target := strings.Join(args, " ")
-			if err := ensureDependencies(cmd.Context()); err != nil {
-				if jsonOutput {
-					return writeJSONFailure(cmd, target, err)
-				}
-				return err
-			}
-
-			var sources []string
-			if strings.TrimSpace(sourcesFlag) != "" {
-				for _, s := range strings.Split(sourcesFlag, ",") {
-					cleaned := strings.TrimSpace(s)
-					if cleaned != "" {
-						sources = append(sources, cleaned)
-					}
-				}
-			}
-
 			targetURI := progressTarget
 			if targetURI == "" {
 				targetURI = progressSocket
@@ -119,6 +102,28 @@ When a query is provided, fetch-track executes the full acquisition pipeline:
 					return err
 				}
 				defer func() { _ = reporter.Close() }()
+			}
+
+			if err := ensureDependencies(cmd.Context()); err != nil {
+				_ = reporter.Emit(progress.Event{
+					Type:  progress.EventError,
+					Phase: "dependencies",
+					Error: deps.FoldHome(err.Error()),
+				})
+				if jsonOutput {
+					return writeJSONFailure(cmd, target, err)
+				}
+				return err
+			}
+
+			var sources []string
+			if strings.TrimSpace(sourcesFlag) != "" {
+				for _, s := range strings.Split(sourcesFlag, ",") {
+					cleaned := strings.TrimSpace(s)
+					if cleaned != "" {
+						sources = append(sources, cleaned)
+					}
+				}
 			}
 
 			opts := pipeline.Options{
@@ -576,6 +581,9 @@ func ensureDependencies(ctx context.Context) error {
 		fmt.Fprintf(os.Stderr, "[%dms] Dependencies verified.\n", time.Since(bootTime).Milliseconds())
 	}
 	if err == nil {
+		if autoInstall && deps.HasOneFileYtDlp() {
+			return replaceOneFileYtDlp(ctx)
+		}
 		return nil
 	}
 
@@ -625,4 +633,22 @@ func ensureDependencies(ctx context.Context) error {
 	}
 
 	return err
+}
+
+// replaceOneFileYtDlp installs the unpacked yt-dlp build over a managed
+// one-file build, which unpacks itself into the system temporary directory on
+// every run.
+func replaceOneFileYtDlp(ctx context.Context) error {
+	human := !deps.IsAgentMode() && !jsonOutput
+	if human {
+		fmt.Println("Replacing the managed one-file yt-dlp build with the unpacked build...")
+	}
+	installed, err := deps.InstallMissingDependencies(ctx)
+	if err != nil {
+		return fmt.Errorf("auto-installing dependencies: %w", err)
+	}
+	if len(installed) > 0 && human {
+		fmt.Printf("Successfully installed: %s\n", strings.Join(installed, ", "))
+	}
+	return nil
 }

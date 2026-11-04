@@ -33,7 +33,7 @@ func TestTerminationProbe(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			probe := NewTerminationProbe(t, "tool", false)
+			probe := NewTerminationProbe(t, "tool", ProbeOptions{})
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			cmd := tt.command(ctx, probe.Path)
@@ -51,7 +51,7 @@ func TestTerminationProbe(t *testing.T) {
 }
 
 func TestTerminationProbeIgnoringTerm(t *testing.T) {
-	probe := NewTerminationProbe(t, "tool", true)
+	probe := NewTerminationProbe(t, "tool", ProbeOptions{IgnoreTerm: true})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	cmd := godeps.CommandContext(ctx, probe.Path)
@@ -71,7 +71,7 @@ func TestTerminationProbeIgnoringTerm(t *testing.T) {
 }
 
 func TestTerminationProbePrependToPath(t *testing.T) {
-	probe := NewTerminationProbe(t, "fetch-track-probe-tool", false)
+	probe := NewTerminationProbe(t, "fetch-track-probe-tool", ProbeOptions{})
 	probe.PrependToPath(t)
 	path, err := exec.LookPath("fetch-track-probe-tool")
 	if err != nil || path != probe.Path {

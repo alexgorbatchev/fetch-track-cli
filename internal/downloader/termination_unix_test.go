@@ -26,7 +26,7 @@ func TestDefaultRunnerStopsCancelledYtDlpGracefully(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Setenv("AGENT", "1")
-			probe := testenv.NewTerminationProbe(t, "yt-dlp", false)
+			probe := testenv.NewTerminationProbe(t, "yt-dlp", testenv.ProbeOptions{})
 			probe.PrependToPath(t)
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()

@@ -26,7 +26,7 @@ func TestVerifierStopsCancelledToolsGracefully(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.tool, func(t *testing.T) {
-			probe := testenv.NewTerminationProbe(t, tt.tool, false)
+			probe := testenv.NewTerminationProbe(t, tt.tool, testenv.ProbeOptions{})
 			probe.PrependToPath(t)
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()

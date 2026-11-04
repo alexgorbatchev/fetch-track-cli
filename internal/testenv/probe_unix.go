@@ -26,8 +26,8 @@ const (
 // TerminationProbe is a fake external tool that records how it was stopped.
 // Like a PyInstaller one-file build, it creates a scratch directory when it
 // starts and removes it only when it is asked to terminate. It also starts a
-// child process without a signal handler of its own, which exits only when a
-// signal reaches the tool's whole process group.
+// child process, which a signal reaches only when it is sent to the tool's
+// whole process group.
 type TerminationProbe struct {
 	// Path is the absolute path of the fake tool.
 	Path  string
@@ -46,10 +46,20 @@ type ProbeOutcome struct {
 	ChildExited bool
 }
 
+// ProbeOptions selects how a TerminationProbe's processes react to SIGTERM.
+type ProbeOptions struct {
+	// IgnoreTerm makes the tool record SIGTERM but keep running, so only
+	// SIGKILL stops it.
+	IgnoreTerm bool
+	// ChildIgnoresTerm makes the tool's child ignore SIGTERM and detach from
+	// the tool's output, so it outlives a tool that exits on SIGTERM unless the
+	// group is also killed.
+	ChildIgnoresTerm bool
+}
+
 // NewTerminationProbe writes an executable named name into a new temporary
-// directory. With ignoreTerm, the tool records SIGTERM but keeps running, so
-// only SIGKILL stops it. Cleanup kills any process the probe left running.
-func NewTerminationProbe(t testing.TB, name string, ignoreTerm bool) *TerminationProbe {
+// directory. Cleanup kills any process the probe left running.
+func NewTerminationProbe(t testing.TB, name string, opts ProbeOptions) *TerminationProbe {
 	t.Helper()
 	root := t.TempDir()
 	p := &TerminationProbe{
@@ -62,18 +72,23 @@ func NewTerminationProbe(t testing.TB, name string, ignoreTerm bool) *Terminatio
 		}
 	}
 	onTerm := `rm -rf "$state/scratch"; exit 143`
-	if ignoreTerm {
+	if opts.IgnoreTerm {
 		onTerm = ":"
+	}
+	child := "sleep 30 &"
+	if opts.ChildIgnoresTerm {
+		// An ignored signal stays ignored in the loop's own sleep commands.
+		child = `sh -c 'trap "" TERM; while :; do sleep 0.05; done' </dev/null >/dev/null 2>&1 &`
 	}
 	script := fmt.Sprintf(`#!/bin/sh
 state=%s
 mkdir "$state/scratch"
-sleep 30 &
+%s
 echo $! > "$state/child.pid"
 trap 'echo TERM >> "$state/signals"; %s' TERM
 echo $$ > "$state/tool.pid.tmp" && mv "$state/tool.pid.tmp" "$state/tool.pid"
 while :; do sleep 0.05; done
-`, shellQuote(p.state), onTerm)
+`, shellQuote(p.state), child, onTerm)
 	if err := os.WriteFile(p.Path, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}

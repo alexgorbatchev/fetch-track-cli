@@ -173,8 +173,11 @@ func FetchLocalMetadata(ctx context.Context, filePath string) (*TrackMetadata, e
 		"-show_streams",
 		filePath,
 	)
-	if err != nil || len(stdout) == 0 {
+	if err != nil {
 		return nil, fmt.Errorf("probing local file %s: %w", filePath, err)
+	}
+	if len(stdout) == 0 {
+		return nil, fmt.Errorf("probing local file %s: empty ffprobe output", filePath)
 	}
 
 	var rawData struct {
