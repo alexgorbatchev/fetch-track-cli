@@ -2,8 +2,8 @@ github.com/MakeNowJust/heredoc v1.0.0 h1:cXCdzVdstXyiTqTvfqk9SDHpKNjxuom+DOlyEeQ
 github.com/MakeNowJust/heredoc v1.0.0/go.mod h1:mG5amYoWBHf8vpLOuehzbGGw0EHxpZZ6lCpQ4fNJ8LE=
 github.com/alexgorbatchev/cobra-help-tree/v4 v4.0.0 h1:lsgP09cFsQq25htGjEYvh8ATiBE7t7R7ECfJBe01QVU=
 github.com/alexgorbatchev/cobra-help-tree/v4 v4.0.0/go.mod h1:iW2OKycMBhufRu+sBuCIqV8uwzqLfLzz24zyP65j/cY=
-github.com/alexgorbatchev/godeps/v2 v2.0.0 h1:g4WKdYFtt3O8DdFEPqnJG1/vL1Icm+jx4FXv+yAYSWw=
-github.com/alexgorbatchev/godeps/v2 v2.0.0/go.mod h1:e1ZRQsVvnKXgE07zb67yiuRS4bOCW1s75baKPWUBHfo=
+github.com/alexgorbatchev/godeps/v2 v2.0.1 h1:6Q4y0WRTWJ4HB/d/ndKrHzWoVO4mVKMD6gZfXpI+Mmo=
+github.com/alexgorbatchev/godeps/v2 v2.0.1/go.mod h1:e1ZRQsVvnKXgE07zb67yiuRS4bOCW1s75baKPWUBHfo=
 github.com/atotto/clipboard v0.1.4 h1:EH0zSVneZPSuFR11BlR9YppQTVDbh5+16AmcJi4g1z4=
 github.com/atotto/clipboard v0.1.4/go.mod h1:ZY9tmq7sm5xIbd9bOK4onWV4S6X0u6GY7Vn0Yu86PYI=
 github.com/aymanbagabas/go-osc52/v2 v2.0.1 h1:HwpRHbFMcZLEVr42D4p7XBqjyuxQH5SMiErDT4WkJ2k=
