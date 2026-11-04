@@ -24,6 +24,7 @@ A fast, lightweight CLI tool with AI agent support for bedroom and amateur DJs t
 - Probes direct streaming links and runs concurrent `yt-dlp` JSON scrapers with multi-angle query expansion, tokenized artist matching, remix intent scoring, and channel authority bonuses.
 - Auto-detects available JavaScript runtimes (`deno`, `node`, `bun`, `quickjs`) on `$PATH` for seamless `yt-dlp` signature challenge solving.
 - Performs pre-tag acoustic fingerprint validation (`--confirm-fingerprint`) to automatically reject and retry mismatched search candidates.
+- Stops external tools gracefully: when a search query reaches its 25-second limit or a run is interrupted with Ctrl+C, each running `yt-dlp`, `ffmpeg`, `ffprobe`, or `tag-track` process group receives SIGTERM, and SIGKILL only if it is still running 5 seconds later, so the tools remove their temporary files. A second Ctrl+C exits immediately.
 - Extracts PCM audio samples via `ffmpeg` and executes Goertzel frequency bin analysis to detect audio cutoff thresholds and RMS loudness.
 - Generates Chromaprint acoustic fingerprints and landmark constellations to query AcoustID and Shazam recognition services in pure Go.
 - Normalizes and center-crops downloaded album artwork to 1:1 square format (1400x1400) and embeds ID3/MP4 metadata using stream-copy mode (`-c:a copy`).
@@ -43,6 +44,7 @@ curl -fsSL https://github.com/alexgorbatchev/fetch-track-cli/releases/latest/dow
 - [`yt-dlp`](https://github.com/yt-dlp/yt-dlp#installation) (version 2024.08.01 or newer) - Required for searching sources and extracting native audio streams. Run `fetch-track dependencies install yt-dlp` or pass `--auto-install` to install into `$XDG_DATA_HOME/fetch-track/bin`.
 - [`ffmpeg` & `ffprobe`](https://ffmpeg.org/download.html) (version 4.4 or newer) - Required for PCM spectral verification and stream-copy metadata tagging. Run `fetch-track dependencies install ffmpeg ffprobe` or pass `--auto-install`.
 - [`tag-track`](https://github.com/alexgorbatchev/tag-track-cli/releases/latest) (version 1.0.0 or newer) - Required for acoustic fingerprint verification and 1400x1400 cover art enrichment. Run `fetch-track dependencies install tag-track` or pass `--auto-install`.
+- A copy of each tool already on `$PATH` that meets the minimum version is used. Managed copies in `$XDG_DATA_HOME/fetch-track/bin` (fallback `~/.local/share/fetch-track/bin`) are used only when that copy is missing or older than the minimum. `yt-dlp` installs unpacked into `bin/yt-dlp/` and writes nothing to the system temporary directory when it runs; `fetch-track deps update yt-dlp` replaces an earlier single-file `bin/yt-dlp` install.
 
 # Quick Start
 

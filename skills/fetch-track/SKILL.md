@@ -49,9 +49,9 @@ AGENT=1 fetch-track dependencies install [dep...]
 AGENT=1 fetch-track dependencies update [dep...]
 ```
 
-- `fetch-track dependencies` (alias: `deps`) verifies installed versions of `yt-dlp`, `ffmpeg`, `ffprobe`, and `tag-track` against minimum version requirements across `$PATH` and `$XDG_DATA_HOME/fetch-track/bin`.
+- `fetch-track dependencies` (alias: `deps`) verifies installed versions of `yt-dlp`, `ffmpeg`, `ffprobe`, and `tag-track` against minimum version requirements across `$PATH` and `$XDG_DATA_HOME/fetch-track/bin`. A copy on `$PATH` that meets the minimum is used; the managed copy is used only when that copy is missing or too old.
 - `fetch-track dependencies install [dep...]` (aliases: `add`, `get`) downloads and installs missing external binaries (or specific `[dep...]` names from `yt-dlp`, `ffmpeg`, `ffprobe`, `tag-track`) into `$XDG_DATA_HOME/fetch-track/bin`.
-- `fetch-track dependencies update [dep...]` (alias: `upgrade`) updates all managed binaries (or specified `[dep...]` names) to their latest upstream releases.
+- `fetch-track dependencies update [dep...]` (alias: `upgrade`) updates all managed binaries (or specified `[dep...]` names) to their latest upstream releases. Updating `yt-dlp` downloads the unpacked build into `bin/yt-dlp/`, replacing an earlier single-file install that unpacked itself into the system temporary directory on every run.
 
 ### Self-Upgrade, Skill, Help, and Shell Completion
 

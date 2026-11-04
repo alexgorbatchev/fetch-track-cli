@@ -8,12 +8,8 @@ import (
 	"math"
 	"time"
 
-	ffmpeg "github.com/u2takey/ffmpeg-go"
+	"github.com/alexgorbatchev/fetch-track-cli/internal/deps"
 )
-
-func init() {
-	ffmpeg.LogCompiledCommand = false
-}
 
 const TargetRMSDb = -12.0
 
@@ -82,27 +78,21 @@ func AnalyzePCMAudio(ctx context.Context, filePath string, durationSec float64, 
 		startTime = "0"
 	}
 
-	var pcmBuf bytes.Buffer
-	err := ffmpeg.OutputContext(cmdCtx, []*ffmpeg.Stream{
-		ffmpeg.Input(filePath, ffmpeg.KwArgs{
-			"ss":          startTime,
-			"v":           "quiet",
-			"hide_banner": "",
-		}),
-	}, "pipe:1", ffmpeg.KwArgs{
-		"t":  "30",
-		"f":  "f32le",
-		"ac": "1",
-		"ar": "48000",
-	}).
-		WithOutput(&pcmBuf).
-		Run()
-
-	if err != nil || pcmBuf.Len() == 0 {
+	rawBytes, err := deps.RunCommand(cmdCtx, "ffmpeg",
+		"-hide_banner",
+		"-v", "quiet",
+		"-ss", startTime,
+		"-i", filePath,
+		"-t", "30",
+		"-f", "f32le",
+		"-ac", "1",
+		"-ar", "48000",
+		"pipe:1",
+	)
+	if err != nil || len(rawBytes) == 0 {
 		return nil, fmt.Errorf("ffmpeg PCM extraction failed for %s: %w", filePath, err)
 	}
 
-	rawBytes := pcmBuf.Bytes()
 	numSamples := len(rawBytes) / 4
 	if numSamples == 0 {
 		return nil, fmt.Errorf("empty PCM buffer extracted from %s", filePath)

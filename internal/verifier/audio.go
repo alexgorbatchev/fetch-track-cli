@@ -1,12 +1,10 @@
 package verifier
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -57,24 +55,8 @@ func IsYouTubeURL(input string) bool {
 // CommandRunner abstracts command execution for testability.
 type CommandRunner func(ctx context.Context, name string, args ...string) ([]byte, error)
 
-func defaultRunner(ctx context.Context, name string, args ...string) ([]byte, error) {
-	cmd := exec.CommandContext(ctx, name, args...)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	err := cmd.Run()
-	if err != nil {
-		if stderr.Len() > 0 {
-			cleanErr := deps.CleanErrorMessage(stderr.String())
-			if cleanErr != "" {
-				return nil, fmt.Errorf("%w: %s", err, cleanErr)
-			}
-			return nil, fmt.Errorf("%w: %s", err, strings.TrimSpace(stderr.String()))
-		}
-		return nil, err
-	}
-	return stdout.Bytes(), nil
-}
+// defaultRunner stops tools gracefully on cancellation and timeout.
+var defaultRunner CommandRunner = deps.RunCommand
 
 var defaultRunnerVar = defaultRunner
 
@@ -184,17 +166,14 @@ func FetchLocalMetadata(ctx context.Context, filePath string) (*TrackMetadata, e
 	cmdCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(cmdCtx, "ffprobe",
+	stdout, err := deps.RunCommand(cmdCtx, "ffprobe",
 		"-v", "quiet",
 		"-print_format", "json",
 		"-show_format",
 		"-show_streams",
 		filePath,
 	)
-
-	var stdout bytes.Buffer
-	cmd.Stdout = &stdout
-	if err := cmd.Run(); err != nil || stdout.Len() == 0 {
+	if err != nil || len(stdout) == 0 {
 		return nil, fmt.Errorf("probing local file %s: %w", filePath, err)
 	}
 
@@ -213,7 +192,7 @@ func FetchLocalMetadata(ctx context.Context, filePath string) (*TrackMetadata, e
 		} `json:"format"`
 	}
 
-	if err := json.Unmarshal(stdout.Bytes(), &rawData); err != nil {
+	if err := json.Unmarshal(stdout, &rawData); err != nil {
 		return nil, fmt.Errorf("parsing ffprobe JSON output: %w", err)
 	}
 

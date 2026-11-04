@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -20,31 +21,15 @@ type dependencyJSONResult struct {
 // runDepsJSON uses the same dependency manager as the interactive commands.
 func runDepsJSON(cmd *cobra.Command, args []string, action string) error {
 	result := dependencyJSONResult{Status: "ok", Changed: []string{}}
+	// Inspection reports the copies acquisition would use, so it needs the
+	// managed directories on PATH too; like acquisition, it still inspects
+	// PATH when they cannot be added.
+	pathErr := deps.InitManagedPath(cmd.Context())
 	var operationErr error
 	if action != "inspect" {
-		operationErr = deps.InitManagedPath()
+		operationErr = pathErr
 		if operationErr == nil {
-			if len(args) == 0 {
-				if action == "install" {
-					result.Changed, operationErr = deps.InstallMissingDependencies(cmd.Context())
-				} else {
-					result.Changed, operationErr = deps.UpdateAllDependencies(cmd.Context())
-				}
-			} else {
-				for _, name := range args {
-					var err error
-					if action == "install" {
-						err = deps.InstallDependency(cmd.Context(), name)
-					} else {
-						err = deps.UpdateDependency(cmd.Context(), name)
-					}
-					if err != nil {
-						operationErr = errors.Join(operationErr, err)
-					} else {
-						result.Changed = append(result.Changed, name)
-					}
-				}
-			}
+			result.Changed, operationErr = changeDependencies(cmd.Context(), args, action)
 		}
 	}
 	reports, verifyErr := deps.VerifyDependencies(cmd.Context())
@@ -80,4 +65,31 @@ func runUpgradeJSON(cmd *cobra.Command, current string) error {
 		result.Error = err.Error()
 	}
 	return errors.Join(err, json.NewEncoder(cmd.OutOrStdout()).Encode(result))
+}
+
+// changeDependencies installs or updates the named dependencies, or every
+// dependency that needs it when names is empty, and returns the changed ones.
+func changeDependencies(ctx context.Context, names []string, action string) ([]string, error) {
+	if len(names) == 0 {
+		if action == "install" {
+			return deps.InstallMissingDependencies(ctx)
+		}
+		return deps.UpdateAllDependencies(ctx)
+	}
+	var changed []string
+	var errs error
+	for _, name := range names {
+		var err error
+		if action == "install" {
+			err = deps.InstallDependency(ctx, name)
+		} else {
+			err = deps.UpdateDependency(ctx, name)
+		}
+		if err != nil {
+			errs = errors.Join(errs, err)
+		} else {
+			changed = append(changed, name)
+		}
+	}
+	return changed, errs
 }

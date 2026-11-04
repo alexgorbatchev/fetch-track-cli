@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/alexgorbatchev/fetch-track-cli/internal/cache"
+	"github.com/alexgorbatchev/godeps/v2"
 )
 
 func TestParseVersionOutput(t *testing.T) {
@@ -479,19 +481,6 @@ func TestUpgradeSelfFunctions(t *testing.T) {
 	}
 }
 
-func TestInstallerDirectCalls(t *testing.T) {
-	ctx := context.Background()
-	tmpDir := t.TempDir()
-
-	yt := &ytDlpInstaller{}
-	_ = yt.Install(ctx, tmpDir)
-	_ = yt.Update(ctx, tmpDir)
-
-	pkg := &pkgInstaller{pkgName: "ffmpeg"}
-	_ = pkg.Install(ctx, tmpDir)
-	_ = pkg.Update(ctx, tmpDir)
-}
-
 func TestManagerOperations(t *testing.T) {
 	ctx := context.Background()
 	c := cache.NewInDir(t.TempDir(), true)
@@ -517,7 +506,7 @@ func TestManagerOperations(t *testing.T) {
 	_ = nilAdapter.Delete("k")
 
 	// InitManagedPath
-	if err := InitManagedPath(); err != nil {
+	if err := InitManagedPath(ctx); err != nil {
 		t.Fatalf("InitManagedPath failed: %v", err)
 	}
 
@@ -529,14 +518,39 @@ func TestManagerOperations(t *testing.T) {
 		t.Error("expected error updating unknown dep")
 	}
 
-	// InstallMissingDependencies & UpdateAllDependencies with mock
+	// InstallMissingDependencies & UpdateAllDependencies with fake installers,
+	// so the test neither downloads releases nor runs a package manager.
 	cleanup := SetDefaultRunner(func(ctx context.Context, name string, args ...string) ([]byte, error) {
+		if filepath.Base(name) == "ffmpeg" {
+			return nil, exec.ErrNotFound
+		}
 		return []byte("2026.08.01"), nil
 	})
 	defer cleanup()
+	var calls []string
+	original := RequiredDependencies
+	t.Cleanup(func() { RequiredDependencies = original })
+	RequiredDependencies = nil
+	for _, name := range []string{"yt-dlp", "ffmpeg"} {
+		RequiredDependencies = append(RequiredDependencies, Dependency{
+			Name:       name,
+			MinVersion: "2024.08.01",
+			Installer: godeps.InstallerFunc(func(context.Context, string) error {
+				calls = append(calls, name)
+				return nil
+			}),
+		})
+	}
 
-	_, _ = InstallMissingDependencies(ctx)
-	_, _ = UpdateAllDependencies(ctx)
+	if installed, err := InstallMissingDependencies(ctx); err != nil || !slices.Equal(installed, []string{"ffmpeg"}) {
+		t.Errorf("InstallMissingDependencies() = %v, %v; want [ffmpeg]", installed, err)
+	}
+	if updated, err := UpdateAllDependencies(ctx); err != nil || !slices.Equal(updated, []string{"yt-dlp", "ffmpeg"}) {
+		t.Errorf("UpdateAllDependencies() = %v, %v; want [yt-dlp ffmpeg]", updated, err)
+	}
+	if want := []string{"ffmpeg", "yt-dlp", "ffmpeg"}; !slices.Equal(calls, want) {
+		t.Errorf("installer calls = %v, want %v", calls, want)
+	}
 
 	// UpgradeSelf with invalid repo / dev version
 	_, _ = UpgradeSelf(ctx, "dev")

@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/alexgorbatchev/fetch-track-cli/internal/deps"
-	"github.com/alexgorbatchev/godeps"
+	"github.com/alexgorbatchev/godeps/v2"
 )
 
 func TestAdminJSONDependencies(t *testing.T) {
@@ -62,6 +62,21 @@ func TestAdminJSONDependencies(t *testing.T) {
 	result, err = run("install")
 	if err != nil || string(result["changed"]) != "[]" {
 		t.Fatalf("satisfied install: %s %v", result, err)
+	}
+	// A new process starts without the managed directories on PATH; inspection
+	// must still find the managed copy.
+	t.Setenv("PATH", t.TempDir())
+	result, err = run()
+	if err != nil || string(result["status"]) != `"ok"` {
+		t.Fatalf("inspection without managed PATH: %s %v", result, err)
+	}
+	t.Setenv("PATH", t.TempDir())
+	human := newRootCommand()
+	human.SetOut(&bytes.Buffer{})
+	human.SetErr(&bytes.Buffer{})
+	human.SetArgs([]string{"deps"})
+	if err := human.Execute(); err != nil {
+		t.Fatalf("human inspection without managed PATH: %v", err)
 	}
 	for _, action := range []string{"install", "update"} {
 		result, err = run(action, "unknown")

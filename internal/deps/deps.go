@@ -1,14 +1,16 @@
 package deps
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"regexp"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/alexgorbatchev/fetch-track-cli/internal/cache"
-	"github.com/alexgorbatchev/godeps"
+	"github.com/alexgorbatchev/godeps/v2"
 )
 
 // AppName is the application name used for managed directories and XDG storage.
@@ -63,7 +65,7 @@ var RequiredDependencies = []Dependency{
 		InstallURL:   "https://github.com/yt-dlp/yt-dlp#installation",
 		VersionArgs:  []string{"--version"},
 		ParseVersion: ParseVersionOutput,
-		Installer:    &ytDlpInstaller{},
+		Installer:    godeps.YtDlp(),
 	},
 	{
 		Name:         "ffmpeg",
@@ -71,7 +73,7 @@ var RequiredDependencies = []Dependency{
 		InstallURL:   "https://ffmpeg.org/download.html",
 		VersionArgs:  []string{"-version"},
 		ParseVersion: ParseVersionOutput,
-		Installer:    &pkgInstaller{pkgName: "ffmpeg"},
+		Installer:    godeps.SystemPackageManager("ffmpeg"),
 	},
 	{
 		Name:         "ffprobe",
@@ -79,7 +81,7 @@ var RequiredDependencies = []Dependency{
 		InstallURL:   "https://ffmpeg.org/download.html",
 		VersionArgs:  []string{"-version"},
 		ParseVersion: ParseVersionOutput,
-		Installer:    &pkgInstaller{pkgName: "ffmpeg"},
+		Installer:    godeps.SystemPackageManager("ffmpeg"),
 	},
 	{
 		Name:         "tag-track",
@@ -89,28 +91,6 @@ var RequiredDependencies = []Dependency{
 		ParseVersion: ParseVersionOutput,
 		Installer:    godeps.GitHubReleaseGoBinary("alexgorbatchev", "tag-track-cli", "tag-track"),
 	},
-}
-
-type ytDlpInstaller struct{}
-
-func (y *ytDlpInstaller) Install(ctx context.Context, targetDir string) error {
-	return godeps.InstallYtDlp(ctx, targetDir)
-}
-
-func (y *ytDlpInstaller) Update(ctx context.Context, targetDir string) error {
-	return godeps.UpdateYtDlp(ctx, GetRunner(), targetDir)
-}
-
-type pkgInstaller struct {
-	pkgName string
-}
-
-func (p *pkgInstaller) Install(ctx context.Context, targetDir string) error {
-	return godeps.InstallPackage(ctx, p.pkgName, GetRunner())
-}
-
-func (p *pkgInstaller) Update(ctx context.Context, targetDir string) error {
-	return godeps.InstallPackage(ctx, p.pkgName, GetRunner())
 }
 
 // cacheAdapter adapts internal/cache.Cache to godeps.Cache.
@@ -269,9 +249,36 @@ func UpdateAllDependencies(ctx context.Context) ([]string, error) {
 	return mgr.UpdateAll(ctx)
 }
 
-// InitManagedPath ensures the managed bin directory is prepended to process PATH.
-func InitManagedPath() error {
-	return godeps.InitManagedPath(AppName)
+// InitManagedPath puts the managed directories on the process PATH so each
+// dependency resolves to the copy it should use: a copy elsewhere on PATH that
+// meets the minimum version wins, and the managed copy is moved ahead only when
+// that copy is missing or too old. Deciding that runs the version commands of
+// dependencies that have both copies, so it needs ctx.
+func InitManagedPath(ctx context.Context) error {
+	return NewManager(nil).InitManagedPath(ctx)
+}
+
+// RunCommand runs a non-interactive external tool and returns its standard
+// output. The tool runs through godeps.CommandContext, so a cancelled or
+// timed-out ctx sends SIGTERM to its whole process group and SIGKILL only after
+// a grace period, giving tools such as yt-dlp time to remove their temporary
+// files. Errors carry the tool's sanitized standard error with the home
+// directory folded.
+func RunCommand(ctx context.Context, name string, args ...string) ([]byte, error) {
+	cmd := godeps.CommandContext(ctx, name, args...)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		if msg := strings.TrimSpace(stderr.String()); msg != "" {
+			if cleanErr := CleanErrorMessage(msg); cleanErr != "" {
+				msg = cleanErr
+			}
+			return nil, fmt.Errorf("%w: %s", err, msg)
+		}
+		return nil, err
+	}
+	return stdout.Bytes(), nil
 }
 
 var upgradeSelfFunc = godeps.UpgradeSelf

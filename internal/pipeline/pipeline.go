@@ -17,7 +17,7 @@ import (
 	"github.com/alexgorbatchev/fetch-track-cli/internal/spinner"
 	"github.com/alexgorbatchev/fetch-track-cli/internal/ui"
 	"github.com/alexgorbatchev/fetch-track-cli/internal/verifier"
-	"github.com/alexgorbatchev/godeps"
+	"github.com/alexgorbatchev/godeps/v2"
 )
 
 // TrackMetadataResult describes metadata received from tag-track.
@@ -152,7 +152,7 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) (runErr error) {
 		opts.IsAgent = true
 	}
 
-	_ = deps.InitManagedPath()
+	_ = deps.InitManagedPath(ctx)
 	cacheInst, _ := cache.New(!opts.NoCache)
 
 	if !opts.SkipDepCheck {
@@ -170,7 +170,15 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) (runErr error) {
 				}
 				fmt.Printf("target: %s\nstatus: error\nerror: %s\n", deps.FoldHome(urlOrQuery), deps.FoldHome(err.Error()))
 			}
-			return fmt.Errorf("dependency verification failed: %w", err)
+			err = fmt.Errorf("dependency verification failed: %w", err)
+			// A run cancelled during verification ends here too, and progress
+			// consumers still need its terminal event.
+			_ = opts.ProgressReporter.Emit(progress.Event{
+				Type:  progress.EventError,
+				Phase: "dependencies",
+				Error: deps.FoldHome(err.Error()),
+			})
+			return err
 		}
 	}
 

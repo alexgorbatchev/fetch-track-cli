@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -18,7 +17,7 @@ import (
 	"github.com/alexgorbatchev/fetch-track-cli/internal/cache"
 	"github.com/alexgorbatchev/fetch-track-cli/internal/deps"
 	"github.com/alexgorbatchev/fetch-track-cli/internal/verifier"
-	"github.com/alexgorbatchev/godeps"
+	"github.com/alexgorbatchev/godeps/v2"
 	"github.com/lithammer/fuzzysearch/fuzzy"
 )
 
@@ -32,24 +31,8 @@ var (
 // CommandRunner abstracts execution of external commands for testability.
 type CommandRunner = godeps.CommandRunner
 
-func defaultRunner(ctx context.Context, name string, args ...string) ([]byte, error) {
-	cmd := exec.CommandContext(ctx, name, args...)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	err := cmd.Run()
-	if err != nil {
-		if stderr.Len() > 0 {
-			cleanErr := deps.CleanErrorMessage(stderr.String())
-			if cleanErr != "" {
-				return nil, fmt.Errorf("%w: %s", err, cleanErr)
-			}
-			return nil, fmt.Errorf("%w: %s", err, strings.TrimSpace(stderr.String()))
-		}
-		return nil, err
-	}
-	return stdout.Bytes(), nil
-}
+// defaultRunner stops tools gracefully on cancellation and timeout.
+var defaultRunner CommandRunner = deps.RunCommand
 
 var defaultRunnerVar = defaultRunner
 

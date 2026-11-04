@@ -193,7 +193,7 @@ Emitted when track downloading, spectral verification, and metadata tagging succ
 ```
 
 ### 6. `error`
-Emitted if an unrecoverable failure occurs.
+Emitted if an unrecoverable failure occurs. A failed dependency check, including a run cancelled while dependencies are verified, reports phase `dependencies`.
 
 ```json
 {"job_id":"abc123","sequence":5,"timestamp":"2026-08-23T14:35:04Z","type":"error","phase":"download","percent":40,"error":"downloading audio stream for https://...: exit status 1"}

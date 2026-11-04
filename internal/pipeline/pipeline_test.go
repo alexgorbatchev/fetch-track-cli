@@ -205,15 +205,16 @@ func TestRun_WithProgressReporter(t *testing.T) {
 		t.Fatal("expected progress events over socket, got 0")
 	}
 
+	// The cancelled context stops the run at dependency verification.
 	hasErrorEvent := false
 	for _, ev := range receivedEvents {
-		if ev.Type == progress.EventError {
+		if ev.Type == progress.EventError && ev.Phase == "dependencies" && strings.Contains(ev.Error, context.Canceled.Error()) {
 			hasErrorEvent = true
 			break
 		}
 	}
 	if !hasErrorEvent {
-		t.Errorf("expected at least one error event when context is canceled, got: %+v", receivedEvents)
+		t.Errorf("expected a dependencies error event when context is canceled, got: %+v", receivedEvents)
 	}
 }
 

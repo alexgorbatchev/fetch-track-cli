@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -20,6 +21,7 @@ import (
 	"github.com/alexgorbatchev/fetch-track-cli/internal/deps"
 	"github.com/alexgorbatchev/fetch-track-cli/internal/downloader"
 	"github.com/alexgorbatchev/fetch-track-cli/internal/pipeline"
+	"github.com/alexgorbatchev/godeps/v2"
 )
 
 func TestRootCommandJSONDownload(t *testing.T) {
@@ -123,7 +125,16 @@ func setupMainTestEnv(t *testing.T) (string, func()) {
 		return []byte(fmt.Sprintf("%s version 8.1.2", name)), nil
 	})
 
+	// Installing must not download releases or run a package manager.
+	originalDeps := deps.RequiredDependencies
+	fakeDeps := slices.Clone(originalDeps)
+	for i := range fakeDeps {
+		fakeDeps[i].Installer = godeps.InstallerFunc(func(context.Context, string) error { return nil })
+	}
+	deps.RequiredDependencies = fakeDeps
+
 	return tempCacheDir, func() {
+		deps.RequiredDependencies = originalDeps
 		cleanupDeps()
 	}
 }

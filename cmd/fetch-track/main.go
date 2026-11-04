@@ -283,6 +283,7 @@ When a query is provided, fetch-track executes the full acquisition pipeline:
 				return runDepsJSON(cmd, args, "inspect")
 			}
 			isAgent := deps.IsAgentMode() || jsonOutput
+			_ = deps.InitManagedPath(cmd.Context())
 			reports, err := deps.VerifyDependencies(cmd.Context())
 
 			if isAgent {
@@ -330,7 +331,7 @@ When a query is provided, fetch-track executes the full acquisition pipeline:
 			if jsonOutput {
 				return runDepsJSON(cmd, args, "install")
 			}
-			_ = deps.InitManagedPath()
+			_ = deps.InitManagedPath(cmd.Context())
 			if len(args) > 0 {
 				for _, depName := range args {
 					fmt.Printf("Installing %s...\n", depName)
@@ -365,7 +366,7 @@ When a query is provided, fetch-track executes the full acquisition pipeline:
 			if jsonOutput {
 				return runDepsJSON(cmd, args, "update")
 			}
-			_ = deps.InitManagedPath()
+			_ = deps.InitManagedPath(cmd.Context())
 			if len(args) > 0 {
 				for _, depName := range args {
 					fmt.Printf("Updating %s...\n", depName)
@@ -449,7 +450,6 @@ When a query is provided, fetch-track executes the full acquisition pipeline:
 
 	return rootCmd
 }
-
 
 func buildTechCatalog() cobrahelptree.TechCatalog {
 	return cobrahelptree.TechCatalog{
@@ -558,7 +558,7 @@ func main() {
 }
 
 func ensureDependencies(ctx context.Context) error {
-	_ = deps.InitManagedPath()
+	_ = deps.InitManagedPath(ctx)
 	if debug {
 		fmt.Fprintf(os.Stderr, "[%dms] Verifying dependencies...\n", time.Since(bootTime).Milliseconds())
 	}
