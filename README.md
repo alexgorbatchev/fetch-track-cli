@@ -7,7 +7,7 @@ A fast, lightweight CLI tool with AI agent support for bedroom and amateur DJs t
 - **Remix & Duration Scoring:** Matches artist, title, and remix/version intent while filtering out short radio edits, snippets, or multi-hour mix compilations.
 - **Acoustic Fingerprint Confirmation:** Confirms candidate authenticity before finalizing using acoustic audio fingerprinting (Shazam / AcoustID) to eliminate false positives and fake uploads.
 - **Zero-Transcode Extraction:** Downloads native high-bitrate audio streams directly without lossy re-encoding using auto-detected JavaScript runtimes.
-- **Spectral & Loudness Analysis:** Analyzes spectral frequency bandwidth (Goertzel algorithm) and computes mixer volume Gain Offset.
+- **Spectral & Loudness Analysis:** Measures where the audio's spectrum ends, which reveals low-bitrate encodes and transcodes, and computes mixer volume Gain Offset.
 - **Canonical Metadata & Square Artwork:** Identifies tracks via acoustic audio fingerprinting (AcoustID and Apple Shazam) with API fallbacks (iTunes and MusicBrainz) to embed canonical metadata and 1400x1400 album art.
 
 # How It Works
@@ -25,7 +25,7 @@ A fast, lightweight CLI tool with AI agent support for bedroom and amateur DJs t
 - Auto-detects available JavaScript runtimes (`deno`, `node`, `bun`, `quickjs`) on `$PATH` for seamless `yt-dlp` signature challenge solving.
 - Performs pre-tag acoustic fingerprint validation (`--confirm-fingerprint`) to automatically reject and retry mismatched search candidates.
 - Stops external tools gracefully on macOS and Linux: when a search query reaches its 25-second limit or a run is interrupted with Ctrl+C, each running `yt-dlp`, `ffmpeg`, `ffprobe`, or `tag-track` process group receives SIGTERM, and SIGKILL only if it is still running 5 seconds later, so the tools remove their temporary files. A second Ctrl+C exits immediately. Windows has no SIGTERM, so there a stopped tool is killed at once.
-- Extracts PCM audio samples via `ffmpeg` and executes Goertzel frequency bin analysis to detect audio cutoff thresholds and RMS loudness.
+- Decodes up to 60 seconds of PCM audio via `ffmpeg` at the source sample rate (at most 48 kHz) and averages Hann-windowed 8192-point power spectra. The reported bandwidth is the highest 50 Hz band, in 100 Hz steps, that stays within 25 dB of the 10–14 kHz level after median smoothing, so tones cannot move it. Typical results: MP3 128 kbps about 16.7 kHz, MP3 192 kbps about 18.8 kHz, MP3 256 kbps about 19.5 kHz, MP3 320 kbps and Opus 160 kbps about 20.2 kHz, lossless audio up to the Nyquist frequency (22 kHz at 44.1 kHz). Re-encoding at a higher bitrate keeps the lower cutoff.
 - Generates Chromaprint acoustic fingerprints and landmark constellations to query AcoustID and Shazam recognition services in pure Go.
 - Normalizes and center-crops downloaded album artwork to 1:1 square format (1400x1400) and embeds ID3/MP4 metadata using stream-copy mode (`-c:a copy`).
 - Streams real-time NDJSON progress events over UNIX domain sockets, TCP, or file descriptors when executed by AI agents or supervisor orchestrators. Every `fetch-track` event includes overall milestone completion as `percent` (0–100); see [the progress protocol](PROGRESS.md) for calculation and delegated `tag-track` events.
@@ -95,7 +95,7 @@ Downloading audio stream & artwork
 
 Running audio quality & spectrum inspection
   - Duration: 8:23 (Original / Extended DJ Mix)
-  - Bandwidth: High Fidelity (>=18.5 kHz) (20 kHz)
+  - Bandwidth: High Fidelity (>=19 kHz) (22 kHz)
   - Peak / RMS: -0.10 dBFS / -9.40 dBFS
   - Gain Offset: -2.6 dB
   - Status: High fidelity audio suitable for mixing.
@@ -116,7 +116,7 @@ DONE: ./Boris Brejcha - Space X.m4a
 | `--json` | | `false` | Output machine-readable JSON execution result to stdout |
 | `--list-candidates` | | `false` | Return ranked candidates as JSON without downloading; implies `--json` |
 | `--candidate-url <url>` | | `""` | Download only the exact URL from a previous candidate result |
-| `--min-bandwidth-khz <khz>` | | `16.0` | Minimum required audio frequency bandwidth in kHz (e.g. `18.5`) |
+| `--min-bandwidth-khz <khz>` | | `19.0` | Minimum audio bandwidth in kHz; lower measured cutoffs are flagged. MP3 224 kbps and above, AAC 256 kbps, Opus 160 kbps and lossless audio meet 19 kHz |
 | `--out-dir <path>` | `-o` | `.` | Output directory for downloaded tracks |
 | `--sources <list>` | `-s` | `youtube,soundcloud` | Comma-separated list of sources to search in parallel |
 | `--interactive` | `-i` | `false` | Interactively approve or choose track candidate before downloading |

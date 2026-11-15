@@ -567,6 +567,24 @@ func TestVerifyCommand(t *testing.T) {
 	}
 }
 
+func TestMinBandwidthFlagDefaultAndRounding(t *testing.T) {
+	for _, path := range [][]string{nil, {"verify"}, {"track", "verify"}} {
+		cmd, _, err := newRootCommand().Find(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := cmd.Flags().Lookup("min-bandwidth-khz").DefValue; got != "19" {
+			t.Errorf("%v --min-bandwidth-khz default %s, want 19", path, got)
+		}
+	}
+	// 16.345 * 1000 is 16344.999... in floating point.
+	for khz, want := range map[float64]int{16.345: 16345, 18.7: 18700, 19: 19000, 0: 0} {
+		if got := bandwidthHz(khz); got != want {
+			t.Errorf("bandwidthHz(%v) = %d, want %d", khz, got, want)
+		}
+	}
+}
+
 func TestRootCommand_Execution(t *testing.T) {
 	tempCacheDir, cleanupEnv := setupMainTestEnv(t)
 	defer cleanupEnv()

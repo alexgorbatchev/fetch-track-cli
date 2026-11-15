@@ -238,7 +238,7 @@ func VerifyAudioTrack(ctx context.Context, target string, verbose bool, minBandw
 // VerifyAudioTrackWithRunner analyzes audio track using a provided CommandRunner.
 func VerifyAudioTrackWithRunner(ctx context.Context, runner CommandRunner, target string, verbose bool, minBandwidthHz ...int) (*VerificationReport, error) {
 	isVerbose := verbose
-	minHz := 16000
+	minHz := DefaultMinBandwidthHz
 	if len(minBandwidthHz) > 0 && minBandwidthHz[0] > 0 {
 		minHz = minBandwidthHz[0]
 	}
@@ -324,7 +324,7 @@ func VerifyAudioTrackWithRunner(ctx context.Context, runner CommandRunner, targe
 	}()
 
 	if isVerbose {
-		fmt.Fprintf(os.Stderr, "analyzing pcm: goertzel + dynamics\n")
+		fmt.Fprintf(os.Stderr, "analyzing pcm: spectrum + dynamics\n")
 	}
 
 	mixStructure := AnalyzeMixStructure(metadata.Title, metadata.DurationSeconds)
@@ -357,7 +357,7 @@ func VerifyAudioTrackWithRunner(ctx context.Context, runner CommandRunner, targe
 		summaryStatus = "STATUS: Downloaded track is a radio edit."
 	case pcmReport.HasLowBandwidthWarning:
 		summaryStatus = "STATUS: Low audio quality detected."
-	case pcmReport.EstimatedBandwidthHz < 18500:
+	case pcmReport.EstimatedBandwidthHz < DefaultMinBandwidthHz:
 		summaryStatus = "STATUS: Standard fidelity audio suitable for mixing."
 	}
 

@@ -6,12 +6,34 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/alexgorbatchev/fetch-track-cli/internal/deps"
 )
 
 const TargetRMSDb = -12.0
+
+const (
+	// DefaultMinBandwidthHz is the club playback bar: MP3 at 224 kbps and
+	// above, Opus at 160 kbps, AAC at 256 kbps and lossless audio reach it.
+	DefaultMinBandwidthHz = 19000
+	// Below this cutoff audio is lower quality than a 128 kbps MP3, typically
+	// a low-bitrate encode or a transcode of one.
+	reducedBandwidthHz = 16000
+
+	excerptStartSeconds = 30
+	// Tracks shorter than this are analysed from their start.
+	shortTrackSeconds = 35
+	// The spectrum averages the whole excerpt; peak, loudness and bass levels
+	// cover its first dynamicsSeconds.
+	excerptSeconds  = 60
+	dynamicsSeconds = 30
+	// Rates above 48 kHz only add content above the audible band.
+	maxAnalysisRate = 48000
+	analysisTimeout = 30 * time.Second
+)
 
 // AudioQualityReport contains frequency spectrum and dynamics analysis results.
 type AudioQualityReport struct {
@@ -26,55 +48,62 @@ type AudioQualityReport struct {
 	SuggestedDJGainDb      float64 `json:"suggestedDjGainDb"`
 }
 
-// ComputeGoertzelDb calculates the magnitude in dBFS at freqHz using Goertzel algorithm over float32 samples.
+// ComputeGoertzelDb returns the level in dBFS of the freqHz component of
+// samples[startIdx:endIdx] using the Goertzel recurrence over every sample.
 func ComputeGoertzelDb(samples []float32, startIdx, endIdx int, freqHz, sampleRate float64) float64 {
-	step := 4
-	count := (endIdx - startIdx) / step
+	endIdx = min(endIdx, len(samples))
+	count := endIdx - startIdx
 	if count <= 0 {
 		return -120.0
 	}
 
-	k := (2.0 * math.Pi * freqHz) / sampleRate
-	var re, im float64
-
-	for i := startIdx; i < endIdx && i < len(samples); i += step {
-		s := float64(samples[i])
-		re += s * math.Cos(k*float64(i))
-		im += s * math.Sin(k*float64(i))
+	coefficient := 2 * math.Cos(2*math.Pi*freqHz/sampleRate)
+	var previous, beforePrevious float64
+	for _, s := range samples[startIdx:endIdx] {
+		previous, beforePrevious = float64(s)+coefficient*previous-beforePrevious, previous
 	}
+	power := previous*previous + beforePrevious*beforePrevious - coefficient*previous*beforePrevious
 
-	magnitude := math.Sqrt(re*re+im*im) / float64(count)
+	magnitude := math.Sqrt(max(power, 0)) / float64(count)
 	return 20.0 * math.Log10(magnitude+1e-9)
 }
 
-// EvaluateBandwidthWarning updates the report bandwidth rating and low-bandwidth warning flag based on minBandwidthHz.
+// EvaluateBandwidthWarning updates the report bandwidth rating and low-bandwidth
+// warning flag; a minBandwidthHz of zero or less applies DefaultMinBandwidthHz.
 func EvaluateBandwidthWarning(report *AudioQualityReport, minBandwidthHz int) {
 	if minBandwidthHz <= 0 {
-		minBandwidthHz = 16000
+		minBandwidthHz = DefaultMinBandwidthHz
 	}
 	report.HasLowBandwidthWarning = report.EstimatedBandwidthHz < minBandwidthHz
 
-	if report.EstimatedBandwidthHz >= 18500 {
-		report.BandwidthRating = "High Fidelity (>=18.5 kHz)"
-	} else if report.EstimatedBandwidthHz >= 16000 {
-		report.BandwidthRating = "Standard YouTube (16-18.5 kHz)"
-	} else {
+	switch {
+	case report.EstimatedBandwidthHz >= DefaultMinBandwidthHz:
+		report.BandwidthRating = "High Fidelity (>=19 kHz)"
+	case report.EstimatedBandwidthHz >= reducedBandwidthHz:
+		report.BandwidthRating = "Reduced Bandwidth (16-19 kHz)"
+	default:
 		report.BandwidthRating = "Low Quality / Transcoded (<16 kHz)"
 	}
 }
 
-// AnalyzePCMAudio extracts 30 seconds of float32 PCM audio via ffmpeg and computes dynamics and bandwidth statistics.
+// AnalyzePCMAudio decodes an excerpt of up to 60 seconds at the source sample
+// rate (at most 48 kHz) and measures its bandwidth and dynamics.
 func AnalyzePCMAudio(ctx context.Context, filePath string, durationSec float64, minBandwidthHz ...int) (*AudioQualityReport, error) {
-	minHz := 16000
+	minHz := DefaultMinBandwidthHz
 	if len(minBandwidthHz) > 0 && minBandwidthHz[0] > 0 {
 		minHz = minBandwidthHz[0]
 	}
-	cmdCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	cmdCtx, cancel := context.WithTimeout(ctx, analysisTimeout)
 	defer cancel()
 
-	// Extract 30 seconds of audio starting at 30 seconds (or 0 if track is <30s)
-	startTime := "30"
-	if durationSec < 35 {
+	sourceRate, err := probeSampleRate(cmdCtx, filePath)
+	if err != nil {
+		return nil, err
+	}
+	sampleRate := min(sourceRate, maxAnalysisRate)
+
+	startTime := strconv.Itoa(excerptStartSeconds)
+	if durationSec < shortTrackSeconds {
 		startTime = "0"
 	}
 
@@ -83,10 +112,10 @@ func AnalyzePCMAudio(ctx context.Context, filePath string, durationSec float64, 
 		"-v", "quiet",
 		"-ss", startTime,
 		"-i", filePath,
-		"-t", "30",
+		"-t", strconv.Itoa(excerptSeconds),
 		"-f", "f32le",
 		"-ac", "1",
-		"-ar", "48000",
+		"-ar", strconv.Itoa(sampleRate),
 		"pipe:1",
 	)
 	if err != nil || len(rawBytes) == 0 {
@@ -104,7 +133,16 @@ func AnalyzePCMAudio(ctx context.Context, filePath string, durationSec float64, 
 		return nil, fmt.Errorf("reading PCM float32 samples: %w", err)
 	}
 
-	sampleRate := 48000.0
+	report := measureDynamics(samples[:min(len(samples), dynamicsSeconds*sampleRate)], sampleRate)
+	report.EstimatedBandwidthHz = estimateBandwidthHz(samples, sampleRate)
+	EvaluateBandwidthWarning(report, minHz)
+
+	return report, nil
+}
+
+// measureDynamics reports peak, loudness, bass levels and the gain that brings
+// the samples to TargetRMSDb.
+func measureDynamics(samples []float32, sampleRate int) *AudioQualityReport {
 	var maxAbs float64
 	var sumSq float64
 
@@ -117,36 +155,36 @@ func AnalyzePCMAudio(ctx context.Context, filePath string, durationSec float64, 
 	}
 
 	peakDbFS := 20.0 * math.Log10(maxAbs+1e-9)
-	rmsDbFS := 20.0 * math.Log10(math.Sqrt(sumSq/float64(numSamples))+1e-9)
+	rmsDbFS := 20.0 * math.Log10(math.Sqrt(sumSq/float64(len(samples)))+1e-9)
 
-	subBassDbFS := ComputeGoertzelDb(samples, 0, len(samples), 45.0, sampleRate)
-	kickBassDbFS := ComputeGoertzelDb(samples, 0, len(samples), 90.0, sampleRate)
-	midRangeDbFS := ComputeGoertzelDb(samples, 0, len(samples), 1000.0, sampleRate)
+	subBassDbFS := ComputeGoertzelDb(samples, 0, len(samples), 45.0, float64(sampleRate))
+	kickBassDbFS := ComputeGoertzelDb(samples, 0, len(samples), 90.0, float64(sampleRate))
 
-	highFreqs := []float64{14000, 16000, 17000, 18000, 19000, 20000}
-	estimatedBandwidthHz := 20000
-
-	for _, f := range highFreqs {
-		db := ComputeGoertzelDb(samples, 0, len(samples), f, sampleRate)
-		if midRangeDbFS-db > 30.0 {
-			estimatedBandwidthHz = int(f)
-			break
-		}
+	return &AudioQualityReport{
+		PeakDbFS:           math.Round(peakDbFS*100) / 100,
+		RMSDbFS:            math.Round(rmsDbFS*100) / 100,
+		HasClippingWarning: peakDbFS >= -0.1,
+		SubBassDbFS:        math.Round(subBassDbFS*100) / 100,
+		KickBassDbFS:       math.Round(kickBassDbFS*100) / 100,
+		SuggestedDJGainDb:  math.Round((TargetRMSDb-rmsDbFS)*10) / 10,
 	}
+}
 
-	hasClippingWarning := peakDbFS >= -0.1
-	suggestedDJGainDb := math.Round((TargetRMSDb-rmsDbFS)*10) / 10
-
-	report := &AudioQualityReport{
-		EstimatedBandwidthHz: estimatedBandwidthHz,
-		PeakDbFS:             math.Round(peakDbFS*100) / 100,
-		RMSDbFS:              math.Round(rmsDbFS*100) / 100,
-		HasClippingWarning:   hasClippingWarning,
-		SubBassDbFS:          math.Round(subBassDbFS*100) / 100,
-		KickBassDbFS:         math.Round(kickBassDbFS*100) / 100,
-		SuggestedDJGainDb:    suggestedDJGainDb,
+// probeSampleRate reads the sample rate of the first audio stream in filePath.
+func probeSampleRate(ctx context.Context, filePath string) (int, error) {
+	out, err := deps.RunCommand(ctx, "ffprobe",
+		"-v", "error",
+		"-select_streams", "a:0",
+		"-show_entries", "stream=sample_rate",
+		"-of", "default=noprint_wrappers=1:nokey=1",
+		filePath,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("probing sample rate of %s: %w", filePath, err)
 	}
-	EvaluateBandwidthWarning(report, minHz)
-
-	return report, nil
+	rate, err := strconv.Atoi(strings.TrimSpace(string(out)))
+	if err != nil || rate <= 0 {
+		return 0, fmt.Errorf("probing sample rate of %s: no audio stream with a sample rate", filePath)
+	}
+	return rate, nil
 }

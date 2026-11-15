@@ -11,6 +11,7 @@ require (
 	github.com/lithammer/fuzzysearch v1.1.8
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/text v0.41.0
+	gonum.org/v1/gonum v0.17.0
 )
 
 require (

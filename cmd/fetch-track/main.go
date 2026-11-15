@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"os/signal"
 	"strings"
@@ -46,6 +47,16 @@ var (
 	listCandidates     bool
 	candidateURL       string
 )
+
+const (
+	defaultMinBandwidthKhz = float64(verifier.DefaultMinBandwidthHz) / 1000
+	minBandwidthUsage      = "Minimum audio bandwidth in kHz; lower measured cutoffs are flagged (19 is met by MP3 224 kbps and above, AAC 256 kbps, Opus 160 kbps and lossless audio)"
+)
+
+// bandwidthHz converts a kHz flag to Hz without truncating values such as 16.345.
+func bandwidthHz(khz float64) int {
+	return int(math.Round(khz * 1000))
+}
 
 func newRootCommand() *cobra.Command {
 	var jobID string
@@ -140,7 +151,7 @@ When a query is provided, fetch-track executes the full acquisition pipeline:
 				ProgressReporter:   reporter,
 				JSRuntime:          jsRuntime,
 				ConfirmFingerprint: confirmFingerprint && !skipFingerprint,
-				MinBandwidthHz:     int(minBandwidthKhz * 1000),
+				MinBandwidthHz:     bandwidthHz(minBandwidthKhz),
 				JSONOutput:         jsonOutput,
 				ListCandidates:     listCandidates,
 				CandidateURL:       candidateURL,
@@ -163,7 +174,7 @@ When a query is provided, fetch-track executes the full acquisition pipeline:
 	rootCmd.Flags().StringVar(&progressSocket, "progress-socket", "", "Shorthand alias for --progress-target")
 	rootCmd.Flags().StringVar(&jobID, "job-id", "", "Job ID included in progress events (generated automatically when omitted)")
 	rootCmd.Flags().BoolVar(&autoInstall, "auto-install", false, "Automatically install missing dependencies without prompting")
-	rootCmd.Flags().Float64Var(&minBandwidthKhz, "min-bandwidth-khz", 16.0, "Minimum required audio frequency bandwidth in kHz (e.g. 18.5)")
+	rootCmd.Flags().Float64Var(&minBandwidthKhz, "min-bandwidth-khz", defaultMinBandwidthKhz, minBandwidthUsage)
 	rootCmd.Flags().BoolVar(&confirmFingerprint, "confirm-fingerprint", true, "Verify downloaded audio via acoustic fingerprinting against target track")
 	rootCmd.Flags().BoolVar(&skipFingerprint, "skip-fingerprint", false, "Skip acoustic fingerprint confirmation")
 	_ = rootCmd.Flags().MarkHidden("skip-fingerprint")
@@ -208,7 +219,7 @@ When a query is provided, fetch-track executes the full acquisition pipeline:
 					fmt.Printf("Running Audio Quality Verification on: %s\n\n", deps.FoldHome(target))
 				}
 
-				report, err := verifier.VerifyAudioTrack(cmd.Context(), target, verbose && !jsonOutput, int(minBandwidthKhz*1000))
+				report, err := verifier.VerifyAudioTrack(cmd.Context(), target, verbose && !jsonOutput, bandwidthHz(minBandwidthKhz))
 				if sp != nil {
 					sp.Stop()
 				}
@@ -274,7 +285,7 @@ When a query is provided, fetch-track executes the full acquisition pipeline:
 
 		verifyCmd.Flags().BoolVar(&autoInstall, "auto-install", false, "Automatically install missing dependencies without prompting")
 
-		verifyCmd.Flags().Float64Var(&minBandwidthKhz, "min-bandwidth-khz", 16.0, "Minimum required audio frequency bandwidth in kHz (e.g. 18.5)")
+		verifyCmd.Flags().Float64Var(&minBandwidthKhz, "min-bandwidth-khz", defaultMinBandwidthKhz, minBandwidthUsage)
 		return verifyCmd
 	}
 
@@ -483,23 +494,23 @@ func buildTechCatalog() cobrahelptree.TechCatalog {
 		},
 		"fetch-track track verify": {
 			Summary:     "Inspect audio bandwidth, loudness, mix duration, and acoustic fingerprint",
-			Description: "Decodes PCM samples to execute Goertzel frequency bin thresholding, peak/RMS calculations, DJ mixer gain offset, and optional Shazam/AcoustID identification.",
+			Description: "Decodes up to 60 seconds of PCM at the source sample rate (at most 48 kHz), reports where the averaged spectrum falls off its high-frequency cliff, and calculates peak/RMS, DJ mixer gain offset, and optional Shazam/AcoustID identification.",
 			Args: []cobrahelptree.ArgSpec{
 				{Name: "<url|path>", Description: "Local audio file path or direct streaming URL to inspect"},
 			},
 			Metadata: map[string]string{
-				"min_bandwidth_khz":  "configurable via --min-bandwidth-khz (default 16.0)",
+				"min_bandwidth_khz":  "configurable via --min-bandwidth-khz (default 19.0)",
 				"mix_classification": "Extended, Club, Original, Dub (>4.5m) vs Short Edit (<=4.0m)",
 			},
 		},
 		"fetch-track verify": {
 			Summary:     "Inspect audio bandwidth, loudness, mix duration, and acoustic fingerprint",
-			Description: "Decodes PCM samples to execute Goertzel frequency bin thresholding, peak/RMS calculations, DJ mixer gain offset, and optional Shazam/AcoustID identification.",
+			Description: "Decodes up to 60 seconds of PCM at the source sample rate (at most 48 kHz), reports where the averaged spectrum falls off its high-frequency cliff, and calculates peak/RMS, DJ mixer gain offset, and optional Shazam/AcoustID identification.",
 			Args: []cobrahelptree.ArgSpec{
 				{Name: "<url|path>", Description: "Local audio file path or direct streaming URL to inspect"},
 			},
 			Metadata: map[string]string{
-				"min_bandwidth_khz":  "configurable via --min-bandwidth-khz (default 16.0)",
+				"min_bandwidth_khz":  "configurable via --min-bandwidth-khz (default 19.0)",
 				"mix_classification": "Extended, Club, Original, Dub (>4.5m) vs Short Edit (<=4.0m)",
 			},
 		},

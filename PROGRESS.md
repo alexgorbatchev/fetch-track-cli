@@ -184,8 +184,8 @@ Emitted when track downloading, spectral verification, and metadata tagging succ
     "album": "Space X - Single",
     "release_year": "2024",
     "duration_seconds": 503,
-    "bandwidth_hz": 20000,
-    "bandwidth_rating": "High Fidelity (>=18.5 kHz)",
+    "bandwidth_hz": 22000,
+    "bandwidth_rating": "High Fidelity (>=19 kHz)",
     "suggested_gain_db": -2.6,
     "status": "STATUS: High fidelity audio suitable for mixing."
   }

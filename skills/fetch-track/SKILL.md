@@ -27,7 +27,7 @@ AGENT=1 fetch-track <url|query> [flags]
   1. Verifies required external tools (`yt-dlp` >= `2024.08.01`, `ffmpeg` >= `4.4`, `ffprobe` >= `4.4`, `tag-track` >= `1.0.0`).
   2. Searches configured sources in parallel and ranks candidates using DJ duration curves (preferring 4.5–9 minute extended, club, original, and dub mixes while penalizing <3.5 minute radio edits, snippets, and continuous mixes).
   3. Downloads the native audio stream without lossy re-encoding (`-c:a copy`), verifying candidate identity via acoustic fingerprinting when `--confirm-fingerprint` is enabled.
-  4. Decodes PCM audio via `ffmpeg` and runs Goertzel spectral bin analysis to measure high-frequency cutoff bandwidth, peak/RMS loudness, and recommended DJ mixer gain offset (`-12.0 dBFS` target RMS).
+  4. Decodes up to 60 seconds of PCM audio via `ffmpeg` at the source sample rate (at most 48 kHz) and measures the high-frequency cutoff of its averaged spectrum (100 Hz steps; MP3 128 kbps about 16.7 kHz, MP3 320 kbps about 20.2 kHz, lossless up to 22 kHz at 44.1 kHz), peak/RMS loudness, and recommended DJ mixer gain offset (`-12.0 dBFS` target RMS).
   5. Enriches the downloaded file via `tag-track` with canonical metadata, `1400x1400` 1:1 square cover art, release date, and provenance comments (`Source: <url> | Metadata: <provider> | Fetched: <date>`), saving to `<out-dir>/<Artist> - <Title>.<ext>` without brackets or video IDs.
 
 ### Track Verification
@@ -38,7 +38,7 @@ AGENT=1 fetch-track track verify <url|path> [flags]
 ```
 
 - `fetch-track track` groups track inspection subcommands.
-- `fetch-track track verify <url|path>` (shorthand alias: `fetch-track verify <url|path>`) inspects a local audio file or remote streaming URL (`<url|path>`) for duration, mix structure classification, Goertzel frequency cutoff bandwidth, peak/RMS loudness, sub/kick bass levels, and DJ mixer gain offset.
+- `fetch-track track verify <url|path>` (shorthand alias: `fetch-track verify <url|path>`) inspects a local audio file or remote streaming URL (`<url|path>`) for duration, mix structure classification, spectral cutoff bandwidth, peak/RMS loudness, sub/kick bass levels, and DJ mixer gain offset.
 - Exits with code `2` in human mode when the target is classified as a short radio edit (`<= 4.0` minutes).
 
 ### Dependency Management
@@ -85,14 +85,14 @@ AGENT=1 fetch-track completion zsh [--no-descriptions]
 | `--json` | | `bool` | `false` | Global | Emit a single machine-readable JSON result object to `stdout` while routing human logs to `stderr` |
 | `--list-candidates` | | `bool` | `false` | Root | Return ranked candidates without downloading; implies `--json` |
 | `--candidate-url` | | `string` | `""` | Root | Download only this exact URL from a previous candidate result; fail if unavailable |
-| `--min-bandwidth-khz` | | `float64` | `16` | Root, `track verify` | Minimum acceptable audio frequency cutoff in kHz (e.g. `18.5`) before triggering a low-bandwidth warning |
+| `--min-bandwidth-khz` | | `float64` | `19` | Root, `track verify` | Minimum acceptable audio frequency cutoff in kHz before triggering a low-bandwidth warning; MP3 224 kbps and above, AAC 256 kbps, Opus 160 kbps and lossless audio meet 19. Ratings: `High Fidelity (>=19 kHz)`, `Reduced Bandwidth (16-19 kHz)`, `Low Quality / Transcoded (<16 kHz)` |
 | `--no-cache` | | `bool` | `false` | Root | Bypass local disk cache for search queries, probed URL metadata, and cover art |
 | `--no-descriptions` | | `bool` | `false` | `completion` | Disable completion descriptions in generated shell scripts |
 | `--out-dir` | `-o` | `string` | `"."` | Root | Destination directory for downloaded and tagged audio files |
 | `--progress-socket` | | `string` | `""` | Root | Shorthand alias for `--progress-target` |
 | `--progress-target` | | `string` | `""` | Root | Destination URI for NDJSON telemetry events (`unix:///path/to.sock`, `/path/to.sock`, `tcp://127.0.0.1:9099`, `fd://3`, `stdout`, `stderr`) |
 | `--skip-metadata` | | `bool` | `false` | Root | Skip `tag-track` metadata identification and cover art embedding (hidden alias: `--no-metadata`) |
-| `--skip-verify` | | `bool` | `false` | Root | Skip PCM decoding and Goertzel spectral quality verification |
+| `--skip-verify` | | `bool` | `false` | Root | Skip PCM decoding and spectral quality verification |
 | `--sources` | `-s` | `string` | `"youtube,soundcloud"` | Root | Comma-separated sources to query in parallel (`youtube`, `soundcloud`, `bandcamp`) |
 | `--verbose` | `-v` | `bool` | `false` | Global | Print detailed subprocess and search diagnostics (suppressed when `--json` is set) |
 | `--version` | | `bool` | `false` | Root | Print raw semantic version string followed by a newline (`1.2.3\n`) and exit |
@@ -119,7 +119,7 @@ AGENT=1 fetch-track completion zsh [--no-descriptions]
 AGENT=1 fetch-track --json -o tracks "Boris Brejcha - Space X"
 
 # Verify audio bandwidth and gain offset of a local track
-AGENT=1 fetch-track track verify --min-bandwidth-khz 18.5 "tracks/Boris Brejcha - Space X.m4a"
+AGENT=1 fetch-track track verify --min-bandwidth-khz 20 "tracks/Boris Brejcha - Space X.m4a"
 
 # Stream acquisition progress over a UNIX socket with an explicit job ID
 AGENT=1 fetch-track --progress-target "unix://.tmp/progress.sock" --job-id "job-42" "Artist - Track"

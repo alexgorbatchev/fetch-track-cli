@@ -48,8 +48,11 @@ func TestBandwidthClassificationThresholds(t *testing.T) {
 		warning              bool
 		rating               string
 	}{
-		{20000, 0, false, "High Fidelity (>=18.5 kHz)"},
-		{17000, 18000, true, "Standard YouTube (16-18.5 kHz)"},
+		{20000, 0, false, "High Fidelity (>=19 kHz)"},
+		{19000, 0, false, "High Fidelity (>=19 kHz)"},
+		{18700, 0, true, "Reduced Bandwidth (16-19 kHz)"},
+		{17000, 16000, false, "Reduced Bandwidth (16-19 kHz)"},
+		{16000, 0, true, "Reduced Bandwidth (16-19 kHz)"},
 		{14000, 16000, true, "Low Quality / Transcoded (<16 kHz)"},
 	}
 	for _, tt := range tests {

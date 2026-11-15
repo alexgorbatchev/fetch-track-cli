@@ -55,8 +55,9 @@ func TestAnalyzePCMAudio_RealAudioFile(t *testing.T) {
 		t.Fatal("expected non-nil AudioQualityReport")
 	}
 
-	if report.EstimatedBandwidthHz <= 0 {
-		t.Errorf("EstimatedBandwidthHz = %d, want > 0", report.EstimatedBandwidthHz)
+	// The fixture is digital silence, which has no bandwidth to measure.
+	if report.EstimatedBandwidthHz != 0 || !report.HasLowBandwidthWarning {
+		t.Errorf("silent fixture report = %+v, want 0 Hz with a low-bandwidth warning", report)
 	}
 }
 
