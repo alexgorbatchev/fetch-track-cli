@@ -50,7 +50,13 @@ var (
 
 const (
 	defaultMinBandwidthKhz = float64(verifier.DefaultMinBandwidthHz) / 1000
-	minBandwidthUsage      = "Minimum audio bandwidth in kHz; lower measured cutoffs are flagged (19 is met by MP3 224 kbps and above, AAC 256 kbps and lossless audio; Opus reaches about 20 kHz at every bitrate, so at 19 and above it also needs an average of 160 kbps)"
+	opusFloorFromKhz       = float64(verifier.OpusFloorFromMinimumHz) / 1000
+	opusMinBitrateKbps     = verifier.OpusMinBitrateBps / 1000
+)
+
+var (
+	minBandwidthUsage = fmt.Sprintf("Minimum audio bandwidth in kHz; lower measured cutoffs are flagged (19 is met by MP3 224 kbps and above, AAC 256 kbps and lossless audio; Opus reaches about 20 kHz at every bitrate, so at %g and above it also needs an average of %d kbps)", opusFloorFromKhz, opusMinBitrateKbps)
+	verifyDescription = fmt.Sprintf("Decodes up to 60 seconds of PCM at the source sample rate (at most 48 kHz), reports where the averaged spectrum falls off its high-frequency cliff and the stream's codec and average bitrate, grades them against the minimum (Opus also needs %d kbps at %g kHz and above), and calculates peak/RMS, DJ mixer gain offset, and optional Shazam/AcoustID identification.", opusMinBitrateKbps, opusFloorFromKhz)
 )
 
 // bandwidthHz converts a kHz flag to Hz without truncating values such as 16.345.
@@ -79,7 +85,7 @@ When a query is provided, fetch-track executes the full acquisition pipeline:
   - Prioritizes full-length extended, original, club, or dub DJ mixes
   - Concurrently inspects candidates for audio bandwidth and track duration
   - Downloads native high-bitrate audio streams with zero lossy transcoding
-  - Measures where the averaged audio spectrum ends and computes mixer gain offset
+  - Measures where the averaged audio spectrum ends, checks the average bitrate of codecs whose cutoff does not reflect quality (Opus), reports whether the audio meets the minimum, and computes mixer gain offset
   - Identifies tracks via acoustic fingerprinting (Shazam/AcoustID) with API fallbacks
   - Enriches audio files with canonical metadata and 1400x1400 square cover art`,
 		Args: cobra.ArbitraryArgs,
@@ -473,7 +479,7 @@ func buildTechCatalog() cobrahelptree.TechCatalog {
 	return cobrahelptree.TechCatalog{
 		"fetch-track": {
 			Summary:     "Acquire, verify, and tag native single DJ tracks from URL or query",
-			Description: "Executes parallel source search, candidate scoring, stream-copy download, spectral cutoff inspection, acoustic recognition, and canonical metadata tagging.",
+			Description: "Executes parallel source search, candidate scoring, stream-copy download, spectral cutoff and codec bitrate inspection with a minimum-quality verdict, acoustic recognition, and canonical metadata tagging.",
 			Args: []cobrahelptree.ArgSpec{
 				{Name: "<url|query>", Description: "Direct streaming track URL or artist/title search query"},
 			},
@@ -496,7 +502,7 @@ func buildTechCatalog() cobrahelptree.TechCatalog {
 		},
 		"fetch-track track verify": {
 			Summary:     "Inspect audio bandwidth, loudness, mix duration, and acoustic fingerprint",
-			Description: "Decodes up to 60 seconds of PCM at the source sample rate (at most 48 kHz), reports where the averaged spectrum falls off its high-frequency cliff and the stream's codec and average bitrate, grades them against the minimum (Opus also needs 160 kbps at 19 kHz and above), and calculates peak/RMS, DJ mixer gain offset, and optional Shazam/AcoustID identification.",
+			Description: verifyDescription,
 			Args: []cobrahelptree.ArgSpec{
 				{Name: "<url|path>", Description: "Local audio file path or direct streaming URL to inspect"},
 			},
@@ -507,7 +513,7 @@ func buildTechCatalog() cobrahelptree.TechCatalog {
 		},
 		"fetch-track verify": {
 			Summary:     "Inspect audio bandwidth, loudness, mix duration, and acoustic fingerprint",
-			Description: "Decodes up to 60 seconds of PCM at the source sample rate (at most 48 kHz), reports where the averaged spectrum falls off its high-frequency cliff and the stream's codec and average bitrate, grades them against the minimum (Opus also needs 160 kbps at 19 kHz and above), and calculates peak/RMS, DJ mixer gain offset, and optional Shazam/AcoustID identification.",
+			Description: verifyDescription,
 			Args: []cobrahelptree.ArgSpec{
 				{Name: "<url|path>", Description: "Local audio file path or direct streaming URL to inspect"},
 			},

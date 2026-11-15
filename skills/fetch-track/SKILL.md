@@ -3,12 +3,13 @@ name: fetch-track
 description: >-
   Use when searching, verifying, downloading, or tagging single DJ audio tracks
   from streaming URLs or search queries with the fetch-track CLI, inspecting
-  audio frequency bandwidth and gain offsets, managing external media
-  dependencies, or streaming NDJSON progress telemetry.
+  audio frequency bandwidth, codec bitrate, the minimum-quality verdict and
+  gain offsets, managing external media dependencies, or streaming NDJSON
+  progress telemetry.
 author: alexgorbatchev
 metadata:
   created_on: 2026-10-18 09:20
-  last_modified: 2026-11-15 13:00
+  last_modified: 2026-11-15 13:16
   status: current
 ---
 
@@ -27,7 +28,7 @@ AGENT=1 fetch-track <url|query> [flags]
   1. Verifies required external tools (`yt-dlp` >= `2024.08.01`, `ffmpeg` >= `4.4`, `ffprobe` >= `4.4`, `tag-track` >= `1.0.0`).
   2. Searches configured sources in parallel and ranks candidates using DJ duration curves (preferring 4.5–9 minute extended, club, original, and dub mixes while penalizing <3.5 minute radio edits, snippets, and continuous mixes).
   3. Downloads the native audio stream without lossy re-encoding (`-c:a copy`), verifying candidate identity via acoustic fingerprinting when `--confirm-fingerprint` is enabled.
-  4. Decodes up to 60 seconds of PCM audio via `ffmpeg` at the source sample rate (at most 48 kHz) and measures the high-frequency cutoff of its averaged spectrum (100 Hz steps; MP3 128 kbps about 16.7 kHz, MP3 320 kbps about 20.2 kHz, lossless up to 22 kHz at 44.1 kHz), peak/RMS loudness, and recommended DJ mixer gain offset (`-12.0 dBFS` target RMS).
+  4. Decodes up to 60 seconds of PCM audio via `ffmpeg` at the source sample rate (at most 48 kHz) and measures the high-frequency cutoff of its averaged spectrum (100 Hz steps; MP3 128 kbps about 16.7 kHz, MP3 320 kbps about 20.2 kHz, lossless up to 22 kHz at 44.1 kHz), probes the codec and, for Opus, its measured average bitrate, grades the audio against `--min-bandwidth-khz` (`meets_minimum`; Opus also needs 160 kbps at minimums of 19 kHz and above), and reports peak/RMS loudness and the recommended DJ mixer gain offset (`-12.0 dBFS` target RMS).
   5. Enriches the downloaded file via `tag-track` with canonical metadata, `1400x1400` 1:1 square cover art, release date, and provenance comments (`Source: <url> | Metadata: <provider> | Fetched: <date>`), saving to `<out-dir>/<Artist> - <Title>.<ext>` without brackets or video IDs.
 
 ### Track Verification

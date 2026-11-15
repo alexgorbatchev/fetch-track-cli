@@ -291,13 +291,13 @@ func TestAnalyzePCMAudioAppliesTheOpusBitrateFloor(t *testing.T) {
 			}
 			want := minimum.want == passes
 			if minimum.want == bitrateDecides {
-				want = report.BitrateBps >= opusMinBitrateBps
+				want = report.BitrateBps >= OpusMinBitrateBps
 			}
 			if report.MeetsMinimum != want {
 				t.Errorf("%s at a %d Hz minimum: meets=%t reasons=%v, want meets=%t", rung.name, minimum.hz, report.MeetsMinimum, report.LowQualityReasons, want)
 			}
 			belowFloor := slices.Contains(report.LowQualityReasons, ReasonBitrateBelowMinimum)
-			if wantBelowFloor := rung.codec == "opus" && minimum.hz >= 19000 && report.BitrateBps < opusMinBitrateBps; belowFloor != wantBelowFloor {
+			if wantBelowFloor := rung.codec == "opus" && minimum.hz >= OpusFloorFromMinimumHz && report.BitrateBps < OpusMinBitrateBps; belowFloor != wantBelowFloor {
 				t.Errorf("%s at a %d Hz minimum: bitrate reason %t, want %t", rung.name, minimum.hz, belowFloor, wantBelowFloor)
 			}
 		}

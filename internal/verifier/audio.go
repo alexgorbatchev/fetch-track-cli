@@ -349,40 +349,58 @@ func VerifyAudioTrackWithRunner(ctx context.Context, runner CommandRunner, targe
 		recommendations = append(recommendations, "MIX LENGTH: Track duration and mix structure are suitable for DJ mixing.")
 	}
 
-	if pcmReport.HasLowBandwidthWarning {
-		recommendations = append(recommendations, fmt.Sprintf("LOW BANDWIDTH: Frequency cutoff (%d Hz) below minimum threshold (%d Hz).", pcmReport.EstimatedBandwidthHz, minHz))
-	} else {
-		recommendations = append(recommendations, fmt.Sprintf("AUDIO BANDWIDTH: Clean frequency response (%s).", pcmReport.BandwidthRating))
-	}
-	if slices.Contains(pcmReport.LowQualityReasons, ReasonBitrateBelowMinimum) {
-		label := bitrateFloors[pcmReport.Codec].label
-		measured := fmt.Sprintf("%s average bitrate (%.1f kbps) below %d kbps, which %s needs", label, pcmReport.BitrateKbps(), pcmReport.MinBitrateBps/1000, label)
-		if pcmReport.BitrateBps <= 0 {
-			measured = fmt.Sprintf("%s average bitrate could not be measured; %s needs %d kbps", label, label, pcmReport.MinBitrateBps/1000)
-		}
-		recommendations = append(recommendations, fmt.Sprintf("LOW BITRATE: %s at a %.1f kHz minimum because its frequency cutoff does not reflect its bitrate.", measured, float64(pcmReport.MinBandwidthHz)/1000))
-	}
-
-	summaryStatus := "STATUS: High fidelity audio suitable for mixing."
-	reasons := strings.Join(lowQualityReasonText(*pcmReport), "; ")
-	switch {
-	case mixStructure.IsRadioEditWarning && !pcmReport.MeetsMinimum:
-		summaryStatus = fmt.Sprintf("STATUS: Low audio quality detected (%s) and is a radio edit.", reasons)
-	case mixStructure.IsRadioEditWarning:
-		summaryStatus = "STATUS: Downloaded track is a radio edit."
-	case !pcmReport.MeetsMinimum:
-		summaryStatus = fmt.Sprintf("STATUS: Low audio quality detected (%s).", reasons)
-	case pcmReport.EstimatedBandwidthHz < DefaultMinBandwidthHz:
-		summaryStatus = "STATUS: Standard fidelity audio suitable for mixing."
-	}
+	recommendations = append(recommendations, qualityRecommendations(*pcmReport)...)
 
 	return &VerificationReport{
 		Metadata:        *metadata,
 		MixStructure:    mixStructure,
 		Quality:         *pcmReport,
-		SummaryStatus:   summaryStatus,
+		SummaryStatus:   fidelityStatus(mixStructure.IsRadioEditWarning, *pcmReport),
 		Recommendations: recommendations,
 	}, nil
+}
+
+// qualityRecommendations describes the report's cutoff against its minimum
+// and, when the bitrate misses its codec's floor, the bitrate. A cutoff that
+// reaches the minimum is called clean only when the audio meets it.
+func qualityRecommendations(report AudioQualityReport) []string {
+	var recommendations []string
+	switch {
+	case report.HasLowBandwidthWarning:
+		recommendations = append(recommendations, fmt.Sprintf("LOW BANDWIDTH: Frequency cutoff (%d Hz) below minimum threshold (%d Hz).", report.EstimatedBandwidthHz, report.MinBandwidthHz))
+	case report.MeetsMinimum:
+		recommendations = append(recommendations, fmt.Sprintf("AUDIO BANDWIDTH: Clean frequency response (%s).", report.BandwidthRating))
+	default:
+		recommendations = append(recommendations, fmt.Sprintf("AUDIO BANDWIDTH: Frequency cutoff %.1f kHz reaches the %.1f kHz minimum; see LOW BITRATE.", report.BandwidthKHz(), kilohertz(report.MinBandwidthHz)))
+	}
+	if slices.Contains(report.LowQualityReasons, ReasonBitrateBelowMinimum) {
+		recommendations = append(recommendations, fmt.Sprintf("LOW BITRATE: %s at a %.1f kHz minimum. %s frequency cutoffs do not reflect bitrate.", bitrateShortfall(report), kilohertz(report.MinBandwidthHz), bitrateFloors[report.Codec].label))
+	}
+	return recommendations
+}
+
+// fidelityStatus summarises the verdict and whether the track is a radio edit.
+// Audio that meets the requested minimum but not the default bar, including
+// its codec's bitrate floor there, is standard fidelity.
+func fidelityStatus(isRadioEdit bool, report AudioQualityReport) string {
+	reasons := strings.Join(lowQualityReasonText(report), "; ")
+	switch {
+	case isRadioEdit && !report.MeetsMinimum:
+		return fmt.Sprintf("STATUS: Low audio quality detected (%s) and is a radio edit.", reasons)
+	case isRadioEdit:
+		return "STATUS: Downloaded track is a radio edit."
+	case !report.MeetsMinimum:
+		return fmt.Sprintf("STATUS: Low audio quality detected (%s).", reasons)
+	case !meetsDefaultBar(report):
+		return "STATUS: Standard fidelity audio suitable for mixing."
+	}
+	return "STATUS: High fidelity audio suitable for mixing."
+}
+
+// meetsDefaultBar grades a copy of the report against DefaultMinBandwidthHz.
+func meetsDefaultBar(report AudioQualityReport) bool {
+	EvaluateQuality(&report, DefaultMinBandwidthHz)
+	return report.MeetsMinimum
 }
 
 // lowQualityReasonText describes each of the report's low-quality reasons.
@@ -391,15 +409,26 @@ func lowQualityReasonText(report AudioQualityReport) []string {
 	for _, reason := range report.LowQualityReasons {
 		switch reason {
 		case ReasonBandwidthBelowMinimum:
-			text = append(text, fmt.Sprintf("frequency cutoff %.1f kHz is below the %.1f kHz minimum", report.BandwidthKHz(), float64(report.MinBandwidthHz)/1000))
+			text = append(text, fmt.Sprintf("frequency cutoff %.1f kHz is below the %.1f kHz minimum", report.BandwidthKHz(), kilohertz(report.MinBandwidthHz)))
 		case ReasonBitrateBelowMinimum:
-			label := bitrateFloors[report.Codec].label
-			if report.BitrateBps <= 0 {
-				text = append(text, fmt.Sprintf("%s average bitrate could not be measured; it needs %d kbps", label, report.MinBitrateBps/1000))
-				continue
-			}
-			text = append(text, fmt.Sprintf("%s average bitrate %.1f kbps is below %d kbps", label, report.BitrateKbps(), report.MinBitrateBps/1000))
+			text = append(text, bitrateShortfall(report))
 		}
 	}
 	return text
+}
+
+// bitrateShortfall states how the report's average bitrate misses its codec's
+// floor, or that it could not be measured.
+func bitrateShortfall(report AudioQualityReport) string {
+	label := bitrateFloors[report.Codec].label
+	floorKbps := report.MinBitrateBps / 1000
+	if report.BitrateBps <= 0 {
+		return fmt.Sprintf("%s average bitrate could not be measured; it needs %d kbps", label, floorKbps)
+	}
+	return fmt.Sprintf("%s average bitrate %.1f kbps is below %d kbps", label, report.BitrateKbps(), floorKbps)
+}
+
+// kilohertz converts hertz to kilohertz for display.
+func kilohertz(hz int) float64 {
+	return float64(hz) / 1000
 }

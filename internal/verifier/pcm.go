@@ -21,7 +21,7 @@ const (
 	// DefaultMinBandwidthHz is the club playback bar: MP3 at 224 kbps and
 	// above, AAC at 256 kbps and lossless audio reach it. Opus codes about
 	// 20 kHz at every music bitrate, so at this bar it also needs
-	// opusMinBitrateBps.
+	// OpusMinBitrateBps (see OpusFloorFromMinimumHz).
 	DefaultMinBandwidthHz = 19000
 	// Below this cutoff audio is lower quality than a 128 kbps MP3, typically
 	// a low-bitrate encode or a transcode of one.
@@ -42,11 +42,19 @@ const (
 	// separate from analysisTimeout so a slow listing cannot spend the
 	// decode's time.
 	probeTimeout = 60 * time.Second
+)
 
-	// opusMinBitrateBps is the average bitrate Opus needs at minimums of
-	// DefaultMinBandwidthHz and above: libopus codes about 20.2 kHz at every
-	// bitrate from 48 to 192 kbps, so its cutoff does not grade it.
-	opusMinBitrateBps = 160000
+const (
+	// OpusMinBitrateBps is the average bitrate Opus needs at minimums of
+	// OpusFloorFromMinimumHz and above.
+	OpusMinBitrateBps = 160000
+	// OpusFloorFromMinimumHz is the lowest minimum at which Opus needs
+	// OpusMinBitrateBps. libopus codes about 20.2 kHz at every bitrate from 48
+	// to 192 kbps, so a 19 kHz minimum, the bar MP3 meets at 224 kbps and AAC
+	// at 256 kbps, cannot grade it by its cutoff. The threshold is that
+	// measurement, not DefaultMinBandwidthHz, and stays put if the default
+	// changes.
+	OpusFloorFromMinimumHz = 19000
 )
 
 // Low-quality reasons, reported in AudioQualityReport.LowQualityReasons.
@@ -69,7 +77,7 @@ type bitrateFloor struct {
 // bitrateFloors lists codecs, by ffprobe codec name, whose measured cutoff does
 // not grade them. Add a codec only with measured encoder evidence.
 var bitrateFloors = map[string]bitrateFloor{
-	"opus": {label: "Opus", fromMinimumHz: DefaultMinBandwidthHz, minBitrateBps: opusMinBitrateBps},
+	"opus": {label: "Opus", fromMinimumHz: OpusFloorFromMinimumHz, minBitrateBps: OpusMinBitrateBps},
 }
 
 // AudioQualityReport contains frequency spectrum and dynamics analysis results.

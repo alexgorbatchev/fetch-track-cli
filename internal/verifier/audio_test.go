@@ -90,28 +90,42 @@ func TestVerifyAudioTrack_LocalFile(t *testing.T) {
 }
 
 // A low-quality verdict names its cause, and keeps the status prefix that
-// consumers match.
+// consumers match. The fidelity tier and the bandwidth line agree with the
+// verdict: Opus that meets a lower minimum but not the default bar's bitrate
+// floor is standard fidelity, and a cutoff that passes beside a failed bitrate
+// is not called clean.
 func TestVerifyAudioTrackStatesWhyQualityIsLow(t *testing.T) {
 	requireFFmpeg(t)
 	source := calibrationFixture(t, "full-band", 44100, fullBand)
 	dir := t.TempDir()
+	const cleanBandwidth = "AUDIO BANDWIDTH: Clean frequency response"
 	tests := []struct {
 		name, file, encoder string
 		args                []string
 		minHz               int
 		wantStatus          []string
 		wantRecommendation  string
+		// wantBandwidth lists text the bandwidth line must contain.
+		wantBandwidth []string
 	}{
 		{"opus below the floor", "Artist - Track (Extended Mix).opus", "libopus", []string{"-b:a", "96k", "-vbr", "off"}, 19000,
-			[]string{"STATUS: Low audio quality detected (Opus average bitrate 96.0 kbps is below 160 kbps)."}, "LOW BITRATE: Opus average bitrate (96.0 kbps) below 160 kbps"},
+			[]string{"STATUS: Low audio quality detected (Opus average bitrate 96.0 kbps is below 160 kbps)."},
+			"LOW BITRATE: Opus average bitrate 96.0 kbps is below 160 kbps at a 19.0 kHz minimum. Opus frequency cutoffs do not reflect bitrate.",
+			[]string{"AUDIO BANDWIDTH: Frequency cutoff 20.", " kHz reaches the 19.0 kHz minimum; see LOW BITRATE."}},
 		{"opus radio edit below the floor", "Artist - Track (Radio Edit).opus", "libopus", []string{"-b:a", "128k", "-vbr", "off"}, 19000,
-			[]string{"STATUS: Low audio quality detected (Opus average bitrate 128.0 kbps is below 160 kbps) and is a radio edit."}, "LOW BITRATE: "},
+			[]string{"STATUS: Low audio quality detected (Opus average bitrate 128.0 kbps is below 160 kbps) and is a radio edit."}, "LOW BITRATE: ",
+			[]string{"see LOW BITRATE."}},
 		{"opus at an 18 kHz minimum", "Artist - Track (Extended Mix).opus", "libopus", []string{"-b:a", "96k", "-vbr", "off"}, 18000,
-			[]string{"STATUS: High fidelity audio suitable for mixing."}, ""},
+			[]string{"STATUS: Standard fidelity audio suitable for mixing."}, "", []string{cleanBandwidth}},
 		{"opus at the floor", "Artist - Track (Extended Mix).opus", "libopus", []string{"-b:a", "160k", "-vbr", "off"}, 19000,
-			[]string{"STATUS: High fidelity audio suitable for mixing."}, ""},
+			[]string{"STATUS: High fidelity audio suitable for mixing."}, "", []string{cleanBandwidth}},
+		{"opus at the floor and an 18 kHz minimum", "Artist - Track (Extended Mix).opus", "libopus", []string{"-b:a", "160k", "-vbr", "off"}, 18000,
+			[]string{"STATUS: High fidelity audio suitable for mixing."}, "", []string{cleanBandwidth}},
+		{"mp3 192 at an 18 kHz minimum", "Artist - Track (Extended Mix).mp3", "libmp3lame", []string{"-b:a", "192k"}, 18000,
+			[]string{"STATUS: Standard fidelity audio suitable for mixing."}, "", []string{cleanBandwidth}},
 		{"mp3 below the cutoff", "Artist - Track (Extended Mix).mp3", "libmp3lame", []string{"-b:a", "128k"}, 19000,
-			[]string{"STATUS: Low audio quality detected (frequency cutoff 16.", " kHz is below the 19.0 kHz minimum)."}, "LOW BANDWIDTH: "},
+			[]string{"STATUS: Low audio quality detected (frequency cutoff 16.", " kHz is below the 19.0 kHz minimum)."}, "LOW BANDWIDTH: ",
+			[]string{"LOW BANDWIDTH: Frequency cutoff ("}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -144,16 +158,84 @@ func TestVerifyAudioTrackStatesWhyQualityIsLow(t *testing.T) {
 			if !found {
 				t.Errorf("recommendations %q lack %q", report.Recommendations, tt.wantRecommendation)
 			}
+			bandwidthLines := 0
+			for _, rec := range report.Recommendations {
+				if !strings.HasPrefix(rec, "AUDIO BANDWIDTH") && !strings.HasPrefix(rec, "LOW BANDWIDTH") {
+					continue
+				}
+				bandwidthLines++
+				for _, want := range tt.wantBandwidth {
+					if !strings.Contains(rec, want) {
+						t.Errorf("bandwidth line %q does not contain %q", rec, want)
+					}
+				}
+			}
+			if bandwidthLines != 1 {
+				t.Errorf("recommendations %q have %d bandwidth lines, want 1", report.Recommendations, bandwidthLines)
+			}
 		})
 	}
 }
 
-func TestQualityReasonTextForAnUnmeasuredBitrate(t *testing.T) {
-	report := AudioQualityReport{Codec: "opus", EstimatedBandwidthHz: 20200}
-	EvaluateQuality(&report, 19000)
-	reasons := lowQualityReasonText(report)
-	if len(reasons) != 1 || reasons[0] != "Opus average bitrate could not be measured; it needs 160 kbps" {
-		t.Errorf("reasons %q", reasons)
+// The status reason and the LOW BITRATE recommendation state the shortfall in
+// the same words, measured or not.
+func TestQualityTextForABitrateBelowTheFloor(t *testing.T) {
+	tests := []struct {
+		name               string
+		bitrateBps         int
+		wantReason         string
+		wantRecommendation string
+	}{
+		{"measured", 96014, "Opus average bitrate 96.0 kbps is below 160 kbps",
+			"LOW BITRATE: Opus average bitrate 96.0 kbps is below 160 kbps at a 19.0 kHz minimum. Opus frequency cutoffs do not reflect bitrate."},
+		{"unmeasured", 0, "Opus average bitrate could not be measured; it needs 160 kbps",
+			"LOW BITRATE: Opus average bitrate could not be measured; it needs 160 kbps at a 19.0 kHz minimum. Opus frequency cutoffs do not reflect bitrate."},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			report := AudioQualityReport{Codec: "opus", BitrateBps: tt.bitrateBps, EstimatedBandwidthHz: 20200}
+			EvaluateQuality(&report, 19000)
+			if reasons := lowQualityReasonText(report); len(reasons) != 1 || reasons[0] != tt.wantReason {
+				t.Errorf("reasons %q, want %q", reasons, tt.wantReason)
+			}
+			want := []string{"AUDIO BANDWIDTH: Frequency cutoff 20.2 kHz reaches the 19.0 kHz minimum; see LOW BITRATE.", tt.wantRecommendation}
+			if got := qualityRecommendations(report); !slices.Equal(got, want) {
+				t.Errorf("recommendations %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+// The fidelity tier follows the default bar, floor included, whatever minimum
+// the verdict applied.
+func TestFidelityStatus(t *testing.T) {
+	tests := []struct {
+		name        string
+		report      AudioQualityReport
+		minHz       int
+		isRadioEdit bool
+		want        string
+	}{
+		{"opus 96 kbps at 18 kHz", AudioQualityReport{Codec: "opus", BitrateBps: 96014, EstimatedBandwidthHz: 20200}, 18000, false, "STATUS: Standard fidelity audio suitable for mixing."},
+		{"opus 160 kbps at 18 kHz", AudioQualityReport{Codec: "opus", BitrateBps: 160000, EstimatedBandwidthHz: 20200}, 18000, false, "STATUS: High fidelity audio suitable for mixing."},
+		{"unmeasured opus at 18 kHz", AudioQualityReport{Codec: "opus", EstimatedBandwidthHz: 20200}, 18000, false, "STATUS: Standard fidelity audio suitable for mixing."},
+		{"mp3 192 at 18 kHz", AudioQualityReport{Codec: "mp3", BitrateBps: 192000, EstimatedBandwidthHz: 18800}, 18000, false, "STATUS: Standard fidelity audio suitable for mixing."},
+		{"mp3 320 at a 20 kHz minimum", AudioQualityReport{Codec: "mp3", BitrateBps: 320000, EstimatedBandwidthHz: 20200}, 20000, false, "STATUS: High fidelity audio suitable for mixing."},
+		{"radio edit that meets the minimum", AudioQualityReport{Codec: "opus", BitrateBps: 96014, EstimatedBandwidthHz: 20200}, 18000, true, "STATUS: Downloaded track is a radio edit."},
+		{"opus below the floor", AudioQualityReport{Codec: "opus", BitrateBps: 96014, EstimatedBandwidthHz: 20200}, 19000, false, "STATUS: Low audio quality detected (Opus average bitrate 96.0 kbps is below 160 kbps)."},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			report := tt.report
+			EvaluateQuality(&report, tt.minHz)
+			before := slices.Clone(report.LowQualityReasons)
+			if got := fidelityStatus(tt.isRadioEdit, report); got != tt.want {
+				t.Errorf("status %q, want %q", got, tt.want)
+			}
+			if report.MinBandwidthHz != tt.minHz || !slices.Equal(report.LowQualityReasons, before) {
+				t.Errorf("grading the default bar changed the report: %+v", report)
+			}
+		})
 	}
 }
 

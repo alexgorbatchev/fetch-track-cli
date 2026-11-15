@@ -21,8 +21,25 @@ import (
 	"github.com/alexgorbatchev/fetch-track-cli/internal/deps"
 	"github.com/alexgorbatchev/fetch-track-cli/internal/downloader"
 	"github.com/alexgorbatchev/fetch-track-cli/internal/pipeline"
+	"github.com/alexgorbatchev/fetch-track-cli/internal/verifier"
 	"github.com/alexgorbatchev/godeps/v2"
 )
+
+// The Opus floor in the help text comes from the verifier's constants, so it
+// cannot drift from the verdict.
+func TestHelpTextStatesTheVerdictsOpusFloor(t *testing.T) {
+	floor := fmt.Sprintf("%d kbps", verifier.OpusMinBitrateBps/1000)
+	from := fmt.Sprintf("%g", float64(verifier.OpusFloorFromMinimumHz)/1000)
+	if want := "at " + from + " and above it also needs an average of " + floor; !strings.Contains(minBandwidthUsage, want) {
+		t.Errorf("flag usage %q does not contain %q", minBandwidthUsage, want)
+	}
+	catalog := buildTechCatalog()
+	for _, name := range []string{"fetch-track verify", "fetch-track track verify"} {
+		if want := "Opus also needs " + floor + " at " + from + " kHz and above"; !strings.Contains(catalog[name].Description, want) {
+			t.Errorf("%s description %q does not contain %q", name, catalog[name].Description, want)
+		}
+	}
+}
 
 func TestRootCommandJSONDownload(t *testing.T) {
 	for _, tt := range []struct {

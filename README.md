@@ -7,7 +7,7 @@ A fast, lightweight CLI tool with AI agent support for bedroom and amateur DJs t
 - **Remix & Duration Scoring:** Matches artist, title, and remix/version intent while filtering out short radio edits, snippets, or multi-hour mix compilations.
 - **Acoustic Fingerprint Confirmation:** Confirms candidate authenticity before finalizing using acoustic audio fingerprinting (Shazam / AcoustID) to eliminate false positives and fake uploads.
 - **Zero-Transcode Extraction:** Downloads native high-bitrate audio streams directly without lossy re-encoding using auto-detected JavaScript runtimes.
-- **Spectral & Loudness Analysis:** Measures where the audio's spectrum ends, which reveals low-bitrate encodes and transcodes, and computes mixer volume Gain Offset.
+- **Spectral & Loudness Analysis:** Measures where the audio's spectrum ends, which reveals low-bitrate MP3 and AAC encodes and transcodes, checks the average bitrate of codecs whose cutoff does not reflect quality (Opus needs 160 kbps at minimums of 19 kHz and above), reports whether the audio meets the minimum, and computes mixer volume Gain Offset.
 - **Canonical Metadata & Square Artwork:** Identifies tracks via acoustic audio fingerprinting (AcoustID and Apple Shazam) with API fallbacks (iTunes and MusicBrainz) to embed canonical metadata and 1400x1400 album art.
 
 # How It Works
@@ -16,7 +16,7 @@ A fast, lightweight CLI tool with AI agent support for bedroom and amateur DJs t
 - Discovers and prioritizes full-length Extended, Original, Club, or Dub DJ mixes over short radio edits using remix intent and duration-curve heuristics.
 - Downloads the highest fidelity native audio stream without lossy re-encoding.
 - Confirms candidate audio authenticity via acoustic fingerprinting against target track metadata before finalizing.
-- Inspects audio frequency response and calculates mixer volume Gain Offset.
+- Inspects audio frequency response and the codec's average bitrate, grades the audio against the minimum, and calculates mixer volume Gain Offset.
 - Enriches the track with high-resolution 1400x1400 artwork and canonical tags before saving.
 
 # How it Really Works
@@ -153,7 +153,7 @@ Use `--json` for one JSON result on stdout, with diagnostics on stderr. Acquisit
 | `meets_minimum` | `true` when the cutoff reaches `min_bandwidth_hz` and the bitrate reaches any `min_bitrate_bps` |
 | `low_quality_reasons` | Each failed criterion: `bandwidth_below_minimum`, `bitrate_below_minimum` (also when an Opus bitrate cannot be measured); empty when `meets_minimum` |
 | `peak_dbfs`, `rms_dbfs`, `gain_offset_db` | Loudness and the suggested DJ gain |
-| `status` | Readable summary; a failed verdict starts with `STATUS: Low audio quality detected` and names its reasons in parentheses |
+| `status` | Readable summary; a failed verdict starts with `STATUS: Low audio quality detected` and names its reasons in parentheses; audio that meets a minimum below the 19 kHz default bar, but not that bar with its codec floor, reads `STATUS: Standard fidelity audio suitable for mixing.` |
 
 A `status` of `success` means verification ran; read `meets_minimum` for the verdict.
 
