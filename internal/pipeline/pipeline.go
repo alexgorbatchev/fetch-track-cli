@@ -697,34 +697,13 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) (runErr error) {
 	finalFilename := filepath.Base(finalPath)
 	outDisplayPath := filepath.Join(opts.OutDir, finalFilename)
 
-	var resultInfo *progress.ResultInfo
-	if metaResult != nil || report != nil {
-		rInfo := &progress.ResultInfo{
-			Path: outDisplayPath,
-		}
-		if metaResult != nil {
-			rInfo.Artist = metaResult.Artist
-			rInfo.Title = metaResult.Title
-			rInfo.Album = metaResult.Album
-			rInfo.ReleaseYear = metaResult.ReleaseYear
-		}
-		if report != nil {
-			rInfo.Duration = report.Metadata.DurationSeconds
-			rInfo.BandwidthHz = report.Quality.EstimatedBandwidthHz
-			rInfo.BandwidthRating = report.Quality.BandwidthRating
-			rInfo.SuggestedGainDb = report.Quality.SuggestedDJGainDb
-			rInfo.Status = report.SummaryStatus
-		}
-		resultInfo = rInfo
-	}
-
 	_ = opts.ProgressReporter.Emit(progress.Event{
 		Type:       progress.EventComplete,
 		Phase:      "complete",
 		Step:       5,
 		TotalSteps: 5,
 		Message:    "track acquisition complete",
-		Result:     resultInfo,
+		Result:     newResultInfo(outDisplayPath, metaResult, report),
 	})
 
 	if opts.JSONOutput {
@@ -779,4 +758,32 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) (runErr error) {
 	log.Printf("\nDONE: %s\n", outDisplayPath)
 
 	return nil
+}
+
+// newResultInfo describes the acquired file for the progress complete event;
+// it returns nil when neither metadata nor verification ran.
+func newResultInfo(path string, meta *TrackMetadataResult, report *verifier.VerificationReport) *progress.ResultInfo {
+	if meta == nil && report == nil {
+		return nil
+	}
+	info := &progress.ResultInfo{Path: path}
+	if meta != nil {
+		info.Artist = meta.Artist
+		info.Title = meta.Title
+		info.Album = meta.Album
+		info.ReleaseYear = meta.ReleaseYear
+	}
+	if report != nil {
+		info.Duration = report.Metadata.DurationSeconds
+		info.BandwidthHz = report.Quality.EstimatedBandwidthHz
+		info.BandwidthRating = report.Quality.BandwidthRating
+		info.SuggestedGainDb = report.Quality.SuggestedDJGainDb
+		info.Status = report.SummaryStatus
+		info.Codec = report.Quality.Codec
+		info.BitrateBps = report.Quality.BitrateBps
+		meets := report.Quality.MeetsMinimum
+		info.MeetsMinimum = &meets
+		info.LowQualityReasons = report.Quality.LowQualityReasons
+	}
+	return info
 }

@@ -38,6 +38,78 @@ func TestConvertVerificationReport(t *testing.T) {
 	}
 }
 
+// The progress complete event carries the verdict, so socket consumers need
+// not parse the status text. A run that skipped verification reports none.
+func TestNewResultInfoCarriesTheVerdict(t *testing.T) {
+	meta := &TrackMetadataResult{Title: "Space X", Artist: "Boris Brejcha", Album: "Space X - Single", ReleaseYear: "2024"}
+	tests := []struct {
+		name   string
+		meta   *TrackMetadataResult
+		report *verifier.VerificationReport
+		want   map[string]any
+		absent []string
+	}{
+		{
+			name: "opus below the floor",
+			meta: meta,
+			report: &verifier.VerificationReport{
+				Metadata: verifier.TrackMetadata{DurationSeconds: 503},
+				Quality: verifier.AudioQualityReport{
+					Codec: "opus", BitrateBps: 144620, EstimatedBandwidthHz: 20200, BandwidthRating: "High Fidelity (>=19 kHz)",
+					SuggestedDJGainDb: -2.6, LowQualityReasons: []string{verifier.ReasonBitrateBelowMinimum},
+				},
+				SummaryStatus: "STATUS: Low audio quality detected (Opus average bitrate 144.6 kbps is below 160 kbps).",
+			},
+			want: map[string]any{
+				"path": "tracks/Boris Brejcha - Space X.opus", "title": "Space X", "artist": "Boris Brejcha", "album": "Space X - Single", "release_year": "2024",
+				"duration_seconds": 503.0, "bandwidth_hz": 20200.0, "bandwidth_rating": "High Fidelity (>=19 kHz)", "suggested_gain_db": -2.6,
+				"status": "STATUS: Low audio quality detected (Opus average bitrate 144.6 kbps is below 160 kbps).",
+				"codec":  "opus", "bitrate_bps": 144620.0, "meets_minimum": false, "low_quality_reasons": []any{"bitrate_below_minimum"},
+			},
+		},
+		{
+			name: "audio that meets the minimum",
+			report: &verifier.VerificationReport{
+				Quality:       verifier.AudioQualityReport{Codec: "aac", BitrateBps: 256297, EstimatedBandwidthHz: 22000, MeetsMinimum: true, LowQualityReasons: []string{}},
+				SummaryStatus: "STATUS: High fidelity audio suitable for mixing.",
+			},
+			want:   map[string]any{"codec": "aac", "bitrate_bps": 256297.0, "meets_minimum": true},
+			absent: []string{"low_quality_reasons", "title"},
+		},
+		{
+			name:   "verification skipped",
+			meta:   meta,
+			want:   map[string]any{"title": "Space X"},
+			absent: []string{"codec", "bitrate_bps", "meets_minimum", "low_quality_reasons", "bandwidth_hz", "status"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data, err := json.Marshal(newResultInfo("tracks/Boris Brejcha - Space X.opus", tt.meta, tt.report))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var got map[string]any
+			if err := json.Unmarshal(data, &got); err != nil {
+				t.Fatal(err)
+			}
+			for key, want := range tt.want {
+				if !reflect.DeepEqual(got[key], want) {
+					t.Errorf("%s = %#v, want %#v in %s", key, got[key], want, data)
+				}
+			}
+			for _, key := range tt.absent {
+				if _, present := got[key]; present {
+					t.Errorf("%s is present in %s", key, data)
+				}
+			}
+		})
+	}
+	if info := newResultInfo("tracks/x.opus", nil, nil); info != nil {
+		t.Errorf("result %+v without metadata or verification, want none", info)
+	}
+}
+
 // The verdict travels with bandwidth_hz: codec, measured bitrate, the
 // minimums applied and why the audio falls short. Existing fields keep their
 // names and meanings.

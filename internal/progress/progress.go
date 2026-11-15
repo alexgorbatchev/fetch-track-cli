@@ -53,6 +53,13 @@ type ResultInfo struct {
 	BandwidthRating string  `json:"bandwidth_rating,omitempty"`
 	SuggestedGainDb float64 `json:"suggested_gain_db,omitempty"`
 	Status          string  `json:"status,omitempty"`
+	// Codec, BitrateBps, MeetsMinimum and LowQualityReasons carry the
+	// verification verdict, as --json verification reports it. MeetsMinimum
+	// is nil when verification did not run.
+	Codec             string   `json:"codec,omitempty"`
+	BitrateBps        int      `json:"bitrate_bps,omitempty"`
+	MeetsMinimum      *bool    `json:"meets_minimum,omitempty"`
+	LowQualityReasons []string `json:"low_quality_reasons,omitempty"`
 }
 
 // Event represents an atomic structured telemetry/progress update sent over the socket.

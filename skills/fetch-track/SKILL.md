@@ -9,7 +9,7 @@ description: >-
 author: alexgorbatchev
 metadata:
   created_on: 2026-10-18 09:20
-  last_modified: 2026-11-15 13:16
+  last_modified: 2026-11-15 13:24
   status: current
 ---
 
@@ -109,7 +109,7 @@ AGENT=1 fetch-track completion zsh [--no-descriptions]
 
 - **Agent Mode (`AGENT=1`)**: Prints flat `key: value` lines (`target:`, `candidate:`, `duration:`, `bandwidth:`, `codec:`, `dynamics:`, `status:`, `metadata:`, `output:`). On failure, prints `target: <input>`, `status: error`, and `error: <sanitized message>` before returning a non-zero exit code.
 - **JSON Mode (`--json`)**: Writes a single `JSONExecutionResult` object (`target`, `status`, `candidate_count`, `selected_candidate`, `output_file`, `verification`, `metadata`, `error`) to `stdout` and sends progress/diagnostic logs to `stderr`. `verification` carries `codec`, the average `bitrate_bps` (measured from the packets for Opus, the container's stated bitrate for other codecs, `0` when unknown), `bandwidth_hz`, `min_bandwidth_hz`, `min_bitrate_bps` (the codec's floor, when one applies), the verdict `meets_minimum`, and `low_quality_reasons` (`bandwidth_below_minimum`, `bitrate_below_minimum`). Read `meets_minimum` for the verdict: a `status` of `success` means verification ran.
-- **Progress Telemetry (`--progress-target`)**: Streams newline-delimited JSON (`phase_start`, `candidate_found`, `candidate_selected`, `progress`, `complete`, `error`) with monotonic `sequence` (starting at `1`), `job_id`, UTC `timestamp`, and milestone `percent` (`0` to `100`).
+- **Progress Telemetry (`--progress-target`)**: Streams newline-delimited JSON (`phase_start`, `candidate_found`, `candidate_selected`, `progress`, `complete`, `error`) with monotonic `sequence` (starting at `1`), `job_id`, UTC `timestamp`, and milestone `percent` (`0` to `100`). The `complete` event's `result` carries the verdict (`meets_minimum`, `low_quality_reasons`) with `codec` and `bitrate_bps`.
 - **Home Directory Folding**: All file paths printed in human and agent text outputs, logs, and errors fold the user's home directory prefix to `~` (e.g. `~/tracks/Artist - Title.m4a`).
 - **Temporary Files**: Creates working files inside `.tmp/` in the current working directory and removes `.tmp/` on exit if it did not exist prior to invocation.
 

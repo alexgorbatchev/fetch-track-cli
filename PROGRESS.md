@@ -118,8 +118,14 @@ interface ResultInfo {
   bandwidth_rating?: string; // Bandwidth quality classification
   suggested_gain_db?: number;// Mixer volume Gain Offset in dB
   status?: string;           // Verification status summary
+  codec?: string;            // ffprobe codec name of the measured audio stream
+  bitrate_bps?: number;      // Average bitrate: measured from packets for Opus, container-stated otherwise; omitted when unknown
+  meets_minimum?: boolean;   // Quality verdict, as --json verification reports it; omitted when verification did not run
+  low_quality_reasons?: string[]; // "bandwidth_below_minimum" and/or "bitrate_below_minimum"; omitted when meets_minimum is true
 }
 ```
+
+Read `meets_minimum` for the verdict instead of parsing `status`.
 
 ---
 
@@ -187,7 +193,10 @@ Emitted when track downloading, spectral verification, and metadata tagging succ
     "bandwidth_hz": 22000,
     "bandwidth_rating": "High Fidelity (>=19 kHz)",
     "suggested_gain_db": -2.6,
-    "status": "STATUS: High fidelity audio suitable for mixing."
+    "status": "STATUS: High fidelity audio suitable for mixing.",
+    "codec": "aac",
+    "bitrate_bps": 256297,
+    "meets_minimum": true
   }
 }
 ```
