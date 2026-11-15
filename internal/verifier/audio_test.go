@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -99,7 +100,10 @@ func TestVerifyAudioTrack_URLWithRunner(t *testing.T) {
 				return []byte(`{"title": "Space X", "uploader": "Boris Brejcha", "duration": 2, "ext": "m4a"}`), nil
 			}
 			if a == "-o" && i+1 < len(args) {
-				outPath := args[i+1]
+				if !slices.Contains(args, "bestaudio/best") || slices.Contains(args, "--audio-format") {
+					t.Fatalf("verification must download the acquisition stream natively: %v", args)
+				}
+				outPath := strings.ReplaceAll(args[i+1], "%(ext)s", "m4a")
 				// Copy dummy audio to outPath
 				data, err := os.ReadFile(dummyAudio)
 				if err != nil {

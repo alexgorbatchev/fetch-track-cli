@@ -282,7 +282,6 @@ func VerifyAudioTrackWithRunner(ctx context.Context, runner CommandRunner, targe
 	}
 
 	localAudioPath := target
-	isTempDownloadedFile := false
 	tmpDir := ".tmp"
 
 	_, errStat := os.Stat(".tmp")
@@ -290,38 +289,44 @@ func VerifyAudioTrackWithRunner(ctx context.Context, runner CommandRunner, targe
 
 	if isURL {
 		_ = os.MkdirAll(tmpDir, 0755)
-		localAudioPath = filepath.Join(tmpDir, fmt.Sprintf("verify_%d.m4a", time.Now().UnixNano()))
-		isTempDownloadedFile = true
+		downloadBase := filepath.Join(tmpDir, fmt.Sprintf("verify_%d", time.Now().UnixNano()))
+		defer func() {
+			downloads, _ := filepath.Glob(downloadBase + ".*")
+			for _, path := range downloads {
+				_ = os.Remove(path)
+			}
+			if !dotTmpExisted {
+				_ = os.Remove(tmpDir)
+			}
+		}()
 
 		if isVerbose {
-			fmt.Fprintf(os.Stderr, "sample download: %s\n", deps.FoldHome(localAudioPath))
+			fmt.Fprintf(os.Stderr, "sample download: %s\n", deps.FoldHome(downloadBase))
 		}
 
+		// Measure the stream acquisition downloads, in its own container.
+		// Forcing m4a would select YouTube's 128 kbps AAC stream or re-encode
+		// other streams, and the measurement would describe that instead.
 		dlCtx, cancel := context.WithTimeout(ctx, 3*time.Minute)
 		_, dlErr := runner(dlCtx, "yt-dlp",
 			"--no-warnings",
 			"--quiet",
 			"--js-runtimes", "node",
-			"-f", "140/bestaudio[ext=m4a]/bestaudio/best",
+			"-f", "bestaudio/best",
 			"-x",
-			"--audio-format", "m4a",
-			"-o", localAudioPath,
+			"-o", downloadBase+".%(ext)s",
 			target,
 		)
 		cancel()
 		if dlErr != nil {
 			return nil, fmt.Errorf("downloading audio sample for verification from %s: %w", target, dlErr)
 		}
-	}
-
-	defer func() {
-		if isTempDownloadedFile {
-			_ = os.Remove(localAudioPath)
-			if !dotTmpExisted {
-				_ = os.Remove(tmpDir)
-			}
+		downloads, _ := filepath.Glob(downloadBase + ".*")
+		if len(downloads) == 0 {
+			return nil, fmt.Errorf("downloading audio sample for verification from %s: no audio file was written", target)
 		}
-	}()
+		localAudioPath = downloads[0]
+	}
 
 	if isVerbose {
 		fmt.Fprintf(os.Stderr, "analyzing pcm: spectrum + dynamics\n")
