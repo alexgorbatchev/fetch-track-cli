@@ -50,7 +50,7 @@ var (
 
 const (
 	defaultMinBandwidthKhz = float64(verifier.DefaultMinBandwidthHz) / 1000
-	minBandwidthUsage      = "Minimum audio bandwidth in kHz; lower measured cutoffs are flagged (19 is met by MP3 224 kbps and above, AAC 256 kbps, Opus 160 kbps and lossless audio)"
+	minBandwidthUsage      = "Minimum audio bandwidth in kHz; lower measured cutoffs are flagged (19 is met by MP3 224 kbps and above, AAC 256 kbps and lossless audio; Opus reaches about 20 kHz at every bitrate)"
 )
 
 // bandwidthHz converts a kHz flag to Hz without truncating values such as 16.345.
@@ -79,7 +79,7 @@ When a query is provided, fetch-track executes the full acquisition pipeline:
   - Prioritizes full-length extended, original, club, or dub DJ mixes
   - Concurrently inspects candidates for audio bandwidth and track duration
   - Downloads native high-bitrate audio streams with zero lossy transcoding
-  - Performs Goertzel spectral frequency analysis and computes mixer gain offset
+  - Measures where the averaged audio spectrum ends and computes mixer gain offset
   - Identifies tracks via acoustic fingerprinting (Shazam/AcoustID) with API fallbacks
   - Enriches audio files with canonical metadata and 1400x1400 square cover art`,
 		Args: cobra.ArbitraryArgs,
@@ -246,7 +246,7 @@ When a query is provided, fetch-track executes the full acquisition pipeline:
 					fmt.Printf("target: %s\n", deps.FoldHome(target))
 					fmt.Printf("title: %s\n", deps.FoldHome(report.Metadata.Title))
 					fmt.Printf("duration: %s (%s)\n", report.MixStructure.DurationFormatted, report.MixStructure.MixTypeDescription)
-					fmt.Printf("bandwidth: %d kHz (%s)\n", report.Quality.EstimatedBandwidthHz/1000, report.Quality.BandwidthRating)
+					fmt.Printf("bandwidth: %.1f kHz (%s)\n", report.Quality.BandwidthKHz(), report.Quality.BandwidthRating)
 					gainSign := ""
 					if report.Quality.SuggestedDJGainDb > 0 {
 						gainSign = "+"
@@ -261,7 +261,7 @@ When a query is provided, fetch-track executes the full acquisition pipeline:
 
 				fmt.Printf("Title: %s\n", deps.FoldHome(report.Metadata.Title))
 				fmt.Printf("Duration: %s (%s)\n", report.MixStructure.DurationFormatted, report.MixStructure.MixTypeDescription)
-				fmt.Printf("Bandwidth: %s (%d kHz)\n", report.Quality.BandwidthRating, report.Quality.EstimatedBandwidthHz/1000)
+				fmt.Printf("Bandwidth: %s (%.1f kHz)\n", report.Quality.BandwidthRating, report.Quality.BandwidthKHz())
 				fmt.Printf("Peak / RMS: %.2f dBFS / %.2f dBFS\n", report.Quality.PeakDbFS, report.Quality.RMSDbFS)
 				fmt.Printf("Sub / Kick: %.2f dBFS / %.2f dBFS\n", report.Quality.SubBassDbFS, report.Quality.KickBassDbFS)
 				gainSign := ""
@@ -471,7 +471,7 @@ func buildTechCatalog() cobrahelptree.TechCatalog {
 	return cobrahelptree.TechCatalog{
 		"fetch-track": {
 			Summary:     "Acquire, verify, and tag native single DJ tracks from URL or query",
-			Description: "Executes parallel source search, candidate scoring, stream-copy download, Goertzel spectral inspection, acoustic recognition, and canonical metadata tagging.",
+			Description: "Executes parallel source search, candidate scoring, stream-copy download, spectral cutoff inspection, acoustic recognition, and canonical metadata tagging.",
 			Args: []cobrahelptree.ArgSpec{
 				{Name: "<url|query>", Description: "Direct streaming track URL or artist/title search query"},
 			},

@@ -545,7 +545,7 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) (runErr error) {
 			report = rep
 			if !opts.IsAgent {
 				log.Printf("  - Duration: %s (%s)\n", report.MixStructure.DurationFormatted, report.MixStructure.MixTypeDescription)
-				log.Printf("  - Bandwidth: %s (%d kHz)\n", report.Quality.BandwidthRating, report.Quality.EstimatedBandwidthHz/1000)
+				log.Printf("  - Bandwidth: %s (%.1f kHz)\n", report.Quality.BandwidthRating, report.Quality.BandwidthKHz())
 				log.Printf("  - Peak / RMS: %.2f dBFS / %.2f dBFS\n", report.Quality.PeakDbFS, report.Quality.RMSDbFS)
 				gainSign := ""
 				if report.Quality.SuggestedDJGainDb > 0 {
@@ -755,7 +755,7 @@ func Run(ctx context.Context, urlOrQuery string, opts Options) (runErr error) {
 		}
 		if report != nil {
 			fmt.Printf("duration: %s (%s)\n", report.MixStructure.DurationFormatted, report.MixStructure.MixTypeDescription)
-			fmt.Printf("bandwidth: %d kHz (%s)\n", report.Quality.EstimatedBandwidthHz/1000, report.Quality.BandwidthRating)
+			fmt.Printf("bandwidth: %.1f kHz (%s)\n", report.Quality.BandwidthKHz(), report.Quality.BandwidthRating)
 			gainSign := ""
 			if report.Quality.SuggestedDJGainDb > 0 {
 				gainSign = "+"

@@ -25,7 +25,7 @@ A fast, lightweight CLI tool with AI agent support for bedroom and amateur DJs t
 - Auto-detects available JavaScript runtimes (`deno`, `node`, `bun`, `quickjs`) on `$PATH` for seamless `yt-dlp` signature challenge solving.
 - Performs pre-tag acoustic fingerprint validation (`--confirm-fingerprint`) to automatically reject and retry mismatched search candidates.
 - Stops external tools gracefully on macOS and Linux: when a search query reaches its 25-second limit or a run is interrupted with Ctrl+C, each running `yt-dlp`, `ffmpeg`, `ffprobe`, or `tag-track` process group receives SIGTERM, and SIGKILL only if it is still running 5 seconds later, so the tools remove their temporary files. A second Ctrl+C exits immediately. Windows has no SIGTERM, so there a stopped tool is killed at once.
-- Decodes up to 60 seconds of PCM audio via `ffmpeg` at the source sample rate (at most 48 kHz) and averages Hann-windowed 8192-point power spectra. The reported bandwidth is the highest 50 Hz band, in 100 Hz steps, that stays within 25 dB of the 10–14 kHz level after median smoothing, so tones cannot move it. Typical results: MP3 128 kbps about 16.7 kHz, MP3 192 kbps about 18.8 kHz, MP3 256 kbps about 19.5 kHz, MP3 320 kbps and Opus 160 kbps about 20.2 kHz, lossless audio up to the Nyquist frequency (22 kHz at 44.1 kHz). Re-encoding at a higher bitrate keeps the lower cutoff.
+- Decodes up to 60 seconds of the first audio stream via `ffmpeg` at its sample rate (at most 48 kHz) and averages Blackman-Harris-windowed 8192-point power spectra. The reported bandwidth is the highest 50 Hz band, in 100 Hz steps, that stays within 25 dB of the 10–14 kHz level after median smoothing, which keeps isolated tones from moving it. Typical results: MP3 128 kbps about 16.7 kHz, MP3 192 kbps about 18.8 kHz, MP3 224 and 256 kbps about 19.5 kHz, MP3 320 kbps about 20.2 kHz, lossless audio up to the Nyquist frequency (22 kHz at 44.1 kHz). Opus reads about 20.2 kHz at every bitrate. Re-encoding at a higher bitrate keeps the lower cutoff. When verifying a URL, the stream that acquisition would download is measured in its own format.
 - Generates Chromaprint acoustic fingerprints and landmark constellations to query AcoustID and Shazam recognition services in pure Go.
 - Normalizes and center-crops downloaded album artwork to 1:1 square format (1400x1400) and embeds ID3/MP4 metadata using stream-copy mode (`-c:a copy`).
 - Streams real-time NDJSON progress events over UNIX domain sockets, TCP, or file descriptors when executed by AI agents or supervisor orchestrators. Every `fetch-track` event includes overall milestone completion as `percent` (0–100); see [the progress protocol](PROGRESS.md) for calculation and delegated `tag-track` events.
@@ -95,7 +95,7 @@ Downloading audio stream & artwork
 
 Running audio quality & spectrum inspection
   - Duration: 8:23 (Original / Extended DJ Mix)
-  - Bandwidth: High Fidelity (>=19 kHz) (22 kHz)
+  - Bandwidth: High Fidelity (>=19 kHz) (22.0 kHz)
   - Peak / RMS: -0.10 dBFS / -9.40 dBFS
   - Gain Offset: -2.6 dB
   - Status: High fidelity audio suitable for mixing.
@@ -116,7 +116,7 @@ DONE: ./Boris Brejcha - Space X.m4a
 | `--json` | | `false` | Output machine-readable JSON execution result to stdout |
 | `--list-candidates` | | `false` | Return ranked candidates as JSON without downloading; implies `--json` |
 | `--candidate-url <url>` | | `""` | Download only the exact URL from a previous candidate result |
-| `--min-bandwidth-khz <khz>` | | `19.0` | Minimum audio bandwidth in kHz; lower measured cutoffs are flagged. MP3 224 kbps and above, AAC 256 kbps, Opus 160 kbps and lossless audio meet 19 kHz |
+| `--min-bandwidth-khz <khz>` | | `19.0` | Minimum audio bandwidth in kHz; lower measured cutoffs are flagged. MP3 224 kbps and above, AAC 256 kbps and lossless audio meet 19 kHz. Opus reaches about 20 kHz at every bitrate, so bandwidth does not grade Opus |
 | `--out-dir <path>` | `-o` | `.` | Output directory for downloaded tracks |
 | `--sources <list>` | `-s` | `youtube,soundcloud` | Comma-separated list of sources to search in parallel |
 | `--interactive` | `-i` | `false` | Interactively approve or choose track candidate before downloading |

@@ -567,6 +567,36 @@ func TestVerifyCommand(t *testing.T) {
 	}
 }
 
+func TestVerifyPrintsBandwidthWithOneDecimal(t *testing.T) {
+	_, cleanupEnv := setupMainTestEnv(t)
+	defer cleanupEnv()
+	path := filepath.Join(t.TempDir(), "white-noise.wav")
+	if err := exec.Command("ffmpeg", "-v", "quiet", "-y", "-f", "lavfi", "-i", "anoisesrc=color=white:sample_rate=44100:duration=5", "-ac", "2", path).Run(); err != nil {
+		t.Skipf("ffmpeg not available: %v", err)
+	}
+	t.Setenv("AGENT", "1")
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stdout := os.Stdout
+	os.Stdout = writer
+	cmd := newRootCommand()
+	cmd.SetArgs([]string{"verify", path})
+	runErr := cmd.Execute()
+	os.Stdout = stdout
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	out, err := io.ReadAll(reader)
+	if err != nil || runErr != nil {
+		t.Fatalf("verify: %v, %v", runErr, err)
+	}
+	if want := "bandwidth: 22.0 kHz (High Fidelity (>=19 kHz))\n"; !strings.Contains(string(out), want) {
+		t.Errorf("output %q does not contain %q", out, want)
+	}
+}
+
 func TestMinBandwidthFlagDefaultAndRounding(t *testing.T) {
 	for _, path := range [][]string{nil, {"verify"}, {"track", "verify"}} {
 		cmd, _, err := newRootCommand().Find(path)

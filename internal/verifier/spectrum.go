@@ -22,9 +22,13 @@ const (
 	// itself lies in a codec's stopband (cutoffs below about 12 kHz), where a
 	// threshold relative to that band would accept silence.
 	stopbandFloorDb = 70.0
+	// dynamicRangeDb bounds how far below the loudest band a band may fall and
+	// still count as content. It applies when both reference bands hold nothing
+	// but rounding noise, such as audio that stops below 1 kHz.
+	dynamicRangeDb = 120.0
 	// cutoffSmoothingBands is the width of the median filter applied across
-	// bands. A tone, or a cluster of up to four 50 Hz bands, cannot move the
-	// cliff, while a sustained edge passes through unchanged.
+	// bands. Content confined to four or fewer 50 Hz bands, such as a tone,
+	// cannot move the cliff, while a sustained edge passes through unchanged.
 	cutoffSmoothingBands = 9
 	bandwidthStepHz      = 100
 	// referenceTopHz scales the reference bands: 10-14 kHz and 1-4 kHz below
@@ -47,12 +51,13 @@ func estimateBandwidthHz(samples []float32, sampleRate int) int {
 		return 0
 	}
 	top := min(nyquist, referenceTopHz)
-	reference := medianBandLevel(levels, top*10/22, top*14/22)
-	program := medianBandLevel(levels, top*1/22, top*4/22)
-	if max(reference, program) <= silentLevelDb {
+	loudest := slices.Max(levels)
+	if loudest <= silentLevelDb {
 		return 0
 	}
-	threshold := max(reference-cutoffDropDb, program-stopbandFloorDb)
+	reference := medianBandLevel(levels, top*10/22, top*14/22)
+	program := medianBandLevel(levels, top*1/22, top*4/22)
+	threshold := max(reference-cutoffDropDb, program-stopbandFloorDb, loudest-dynamicRangeDb)
 
 	smoothed := medianFilter(levels, cutoffSmoothingBands)
 	edge := 0
@@ -66,23 +71,21 @@ func estimateBandwidthHz(samples []float32, sampleRate int) int {
 	return min(reported, int(nyquist)/bandwidthStepHz*bandwidthStepHz)
 }
 
-// averagedPowerSpectrum returns the mean power of Hann-windowed frames with 50%
+// averagedPowerSpectrum returns the mean power of windowed frames with 50%
 // overlap (Welch's method) for frequency bins 0 through the Nyquist frequency.
-// Input shorter than one frame is zero-padded.
+// Input shorter than one frame is windowed over its own length and
+// zero-padded.
 func averagedPowerSpectrum(samples []float32) []float64 {
 	fft := fourier.NewFFT(spectrumFrameSize)
-	window := make([]float64, spectrumFrameSize)
-	for i := range window {
-		window[i] = 0.5 - 0.5*math.Cos(2*math.Pi*float64(i)/spectrumFrameSize)
-	}
+	window := blackmanHarris(min(len(samples), spectrumFrameSize))
 	frame := make([]float64, spectrumFrameSize)
 	coefficients := make([]complex128, spectrumFrameSize/2+1)
 	power := make([]float64, len(coefficients))
 	frames := 0
 	for start := 0; start <= max(len(samples)-spectrumFrameSize, 0); start += spectrumHop {
 		clear(frame)
-		for i, s := range samples[start:min(start+spectrumFrameSize, len(samples))] {
-			frame[i] = float64(s) * window[i]
+		for i, w := range window {
+			frame[i] = float64(samples[start+i]) * w
 		}
 		fft.Coefficients(coefficients, frame)
 		for k, c := range coefficients {
@@ -94,6 +97,18 @@ func averagedPowerSpectrum(samples []float32) []float64 {
 		power[k] /= float64(frames)
 	}
 	return power
+}
+
+// blackmanHarris returns a periodic 4-term Blackman-Harris window. Its
+// sidelobes stay about 92 dB down, so a loud tone's leakage stays within a few
+// bins instead of spreading across neighbouring 50 Hz bands.
+func blackmanHarris(n int) []float64 {
+	window := make([]float64, n)
+	for i := range window {
+		x := 2 * math.Pi * float64(i) / float64(n)
+		window[i] = 0.35875 - 0.48829*math.Cos(x) + 0.14128*math.Cos(2*x) - 0.01168*math.Cos(3*x)
+	}
+	return window
 }
 
 // bandLevelsDb averages spectrum bins into consecutive 50 Hz bands below the

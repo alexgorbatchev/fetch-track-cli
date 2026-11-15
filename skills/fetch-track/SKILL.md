@@ -85,7 +85,7 @@ AGENT=1 fetch-track completion zsh [--no-descriptions]
 | `--json` | | `bool` | `false` | Global | Emit a single machine-readable JSON result object to `stdout` while routing human logs to `stderr` |
 | `--list-candidates` | | `bool` | `false` | Root | Return ranked candidates without downloading; implies `--json` |
 | `--candidate-url` | | `string` | `""` | Root | Download only this exact URL from a previous candidate result; fail if unavailable |
-| `--min-bandwidth-khz` | | `float64` | `19` | Root, `track verify` | Minimum acceptable audio frequency cutoff in kHz before triggering a low-bandwidth warning; MP3 224 kbps and above, AAC 256 kbps, Opus 160 kbps and lossless audio meet 19. Ratings: `High Fidelity (>=19 kHz)`, `Reduced Bandwidth (16-19 kHz)`, `Low Quality / Transcoded (<16 kHz)` |
+| `--min-bandwidth-khz` | | `float64` | `19` | Root, `track verify` | Minimum acceptable audio frequency cutoff in kHz before triggering a low-bandwidth warning; MP3 224 kbps and above, AAC 256 kbps and lossless audio meet 19. Opus reaches about 20 kHz at every bitrate, so bandwidth does not grade Opus. Ratings: `High Fidelity (>=19 kHz)`, `Reduced Bandwidth (16-19 kHz)`, `Low Quality / Transcoded (<16 kHz)` |
 | `--no-cache` | | `bool` | `false` | Root | Bypass local disk cache for search queries, probed URL metadata, and cover art |
 | `--no-descriptions` | | `bool` | `false` | `completion` | Disable completion descriptions in generated shell scripts |
 | `--out-dir` | `-o` | `string` | `"."` | Root | Destination directory for downloaded and tagged audio files |

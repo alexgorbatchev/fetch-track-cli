@@ -127,6 +127,34 @@ func TestEstimateBandwidthIgnoresTones(t *testing.T) {
 	}
 }
 
+// A tone far louder than the noise in any 50 Hz band leaks into its
+// neighbours through the window's sidelobes; the leakage must stay too narrow
+// to survive the median smoothing.
+func TestEstimateBandwidthIgnoresLoudToneLeakage(t *testing.T) {
+	samples := synthesizeNoise(t, calibrationRate, calibrationSamples, 30, lowPass(16500))
+	for i := range samples {
+		samples[i] *= 0.01
+	}
+	// About 75 dB above the noise in a 50 Hz band; a Hann window spreads it
+	// past the median filter and reads 19300 Hz.
+	addTones(samples, calibrationRate, 0.2, 19000)
+	assertCutoff(t, "loud tone", estimateBandwidthHz(samples, calibrationRate), 16500)
+}
+
+// Content that stops below the 1-4 kHz program band leaves both reference
+// bands with nothing but rounding noise.
+func TestEstimateBandwidthNarrowContent(t *testing.T) {
+	low := synthesizeNoise(t, calibrationRate, calibrationSamples, 50, lowPass(2000))
+	assertCutoff(t, "content below 2 kHz", estimateBandwidthHz(low, calibrationRate), 2000)
+	dc := make([]float32, calibrationRate*2)
+	for i := range dc {
+		dc[i] = 0.002
+	}
+	if got := estimateBandwidthHz(dc, calibrationRate); got != 0 {
+		t.Errorf("a constant offset measured %d Hz, want 0", got)
+	}
+}
+
 // Below about 12 kHz the 10-14 kHz reference band lies in the codec's stopband;
 // silence there must not make the remaining stopband count as program content.
 func TestEstimateBandwidthLowBandwidthAudio(t *testing.T) {

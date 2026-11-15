@@ -17,7 +17,8 @@ const TargetRMSDb = -12.0
 
 const (
 	// DefaultMinBandwidthHz is the club playback bar: MP3 at 224 kbps and
-	// above, Opus at 160 kbps, AAC at 256 kbps and lossless audio reach it.
+	// above, AAC at 256 kbps and lossless audio reach it. Opus codes about
+	// 20 kHz at every music bitrate, so bandwidth cannot grade Opus.
 	DefaultMinBandwidthHz = 19000
 	// Below this cutoff audio is lower quality than a 128 kbps MP3, typically
 	// a low-bitrate encode or a transcode of one.
@@ -46,6 +47,12 @@ type AudioQualityReport struct {
 	SubBassDbFS            float64 `json:"subBassDbFS"`
 	KickBassDbFS           float64 `json:"kickBassDbFS"`
 	SuggestedDJGainDb      float64 `json:"suggestedDjGainDb"`
+}
+
+// BandwidthKHz returns the estimated bandwidth in kHz for display; it keeps the
+// estimate's 100 Hz resolution when printed with one decimal.
+func (r AudioQualityReport) BandwidthKHz() float64 {
+	return float64(r.EstimatedBandwidthHz) / 1000
 }
 
 // ComputeGoertzelDb returns the level in dBFS of the freqHz component of
@@ -112,6 +119,8 @@ func AnalyzePCMAudio(ctx context.Context, filePath string, durationSec float64, 
 		"-v", "quiet",
 		"-ss", startTime,
 		"-i", filePath,
+		// Decode the stream whose sample rate was probed.
+		"-map", "0:a:0",
 		"-t", strconv.Itoa(excerptSeconds),
 		"-f", "f32le",
 		"-ac", "1",
@@ -182,7 +191,12 @@ func probeSampleRate(ctx context.Context, filePath string) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("probing sample rate of %s: %w", filePath, err)
 	}
-	rate, err := strconv.Atoi(strings.TrimSpace(string(out)))
+	// Containers with programs, such as MPEG-TS, list the stream once per program.
+	fields := strings.Fields(string(out))
+	if len(fields) == 0 {
+		return 0, fmt.Errorf("probing sample rate of %s: no audio stream with a sample rate", filePath)
+	}
+	rate, err := strconv.Atoi(fields[0])
 	if err != nil || rate <= 0 {
 		return 0, fmt.Errorf("probing sample rate of %s: no audio stream with a sample rate", filePath)
 	}

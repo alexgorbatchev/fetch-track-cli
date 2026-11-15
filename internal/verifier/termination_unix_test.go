@@ -20,20 +20,23 @@ func TestVerifierStopsCancelledToolsGracefully(t *testing.T) {
 	writeFloatWAV(t, readable, 44100, make([]float32, 4096))
 	tests := []struct {
 		name, tool string
-		run        func(ctx context.Context)
+		// needsFFprobe marks cases that reach the probed tool only after a real
+		// ffprobe reads the file.
+		needsFFprobe bool
+		run          func(ctx context.Context)
 	}{
 		{name: "metadata ffprobe", tool: "ffprobe", run: func(ctx context.Context) { _, _ = FetchLocalMetadata(ctx, audioPath) }},
 		{name: "sample rate ffprobe", tool: "ffprobe", run: func(ctx context.Context) { _, _ = AnalyzePCMAudio(ctx, audioPath, 60) }},
-		{name: "pcm ffmpeg", tool: "ffmpeg", run: func(ctx context.Context) {
-			requireFFmpeg(t)
-			_, _ = AnalyzePCMAudio(ctx, readable, 60)
-		}},
+		{name: "pcm ffmpeg", tool: "ffmpeg", needsFFprobe: true, run: func(ctx context.Context) { _, _ = AnalyzePCMAudio(ctx, readable, 60) }},
 		{name: "yt-dlp", tool: "yt-dlp", run: func(ctx context.Context) {
 			_, _ = FetchURLMetadataWithRunner(ctx, nil, "https://www.youtube.com/watch?v=example")
 		}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.needsFFprobe {
+				requireFFmpeg(t)
+			}
 			probe := testenv.NewTerminationProbe(t, tt.tool, testenv.ProbeOptions{})
 			probe.PrependToPath(t)
 			ctx, cancel := context.WithCancel(context.Background())
