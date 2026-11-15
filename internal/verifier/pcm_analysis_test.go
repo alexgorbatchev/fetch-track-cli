@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -118,8 +119,8 @@ func TestAnalyzePCMAudioRejectsFilesWithoutAudio(t *testing.T) {
 	if err := os.WriteFile(path, []byte("not audio"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := AnalyzePCMAudio(context.Background(), path, 60); err == nil || !strings.Contains(err.Error(), "sample rate") {
-		t.Fatalf("error = %v, want a sample rate probe failure", err)
+	if _, err := AnalyzePCMAudio(context.Background(), path, 60); err == nil || !strings.Contains(err.Error(), "probing audio stream") {
+		t.Fatalf("error = %v, want an audio stream probe failure", err)
 	}
 }
 
@@ -218,6 +219,90 @@ func TestAnalyzePCMAudioEncoderLadder(t *testing.T) {
 	}
 }
 
+type floorVerdict int
+
+const (
+	fails floorVerdict = iota
+	passes
+	// bitrateDecides marks VBR encodes at the floor: libopus spends more or
+	// fewer bits than requested depending on the content, so the measured
+	// average decides.
+	bitrateDecides
+)
+
+// bitrateFloorLadder encodes one full-band fixture at the Opus bitrates the
+// floor separates, in VBR and CBR, with MP3 and AAC controls that bandwidth
+// alone grades.
+var bitrateFloorLadder = []struct {
+	name, encoder, extension, codec string
+	args                            []string
+	nominalBps                      int
+	// bitrateTolerance bounds the measured average against nominalBps:
+	// constant bitrates land on it, VBR averages depend on the content.
+	bitrateTolerance float64
+	at19, at18       floorVerdict
+}{
+	{"opus-cbr-96", "libopus", ".opus", "opus", []string{"-b:a", "96k", "-vbr", "off"}, 96000, 0.01, fails, passes},
+	{"opus-cbr-128", "libopus", ".opus", "opus", []string{"-b:a", "128k", "-vbr", "off"}, 128000, 0.01, fails, passes},
+	{"opus-cbr-160", "libopus", ".opus", "opus", []string{"-b:a", "160k", "-vbr", "off"}, 160000, 0.01, passes, passes},
+	{"opus-cbr-192", "libopus", ".opus", "opus", []string{"-b:a", "192k", "-vbr", "off"}, 192000, 0.01, passes, passes},
+	{"opus-vbr-96", "libopus", ".opus", "opus", []string{"-b:a", "96k", "-vbr", "on"}, 96000, 0.2, fails, passes},
+	{"opus-vbr-128", "libopus", ".opus", "opus", []string{"-b:a", "128k", "-vbr", "on"}, 128000, 0.2, fails, passes},
+	{"opus-vbr-160", "libopus", ".opus", "opus", []string{"-b:a", "160k", "-vbr", "on"}, 160000, 0.2, bitrateDecides, passes},
+	{"opus-vbr-192", "libopus", ".opus", "opus", []string{"-b:a", "192k", "-vbr", "on"}, 192000, 0.2, passes, passes},
+	{"opus-vbr-128-webm", "libopus", ".webm", "opus", []string{"-b:a", "128k", "-vbr", "on"}, 128000, 0.2, fails, passes},
+	{"mp3-128", "libmp3lame", ".mp3", "mp3", []string{"-b:a", "128k"}, 128000, 0.01, fails, fails},
+	{"mp3-320", "libmp3lame", ".mp3", "mp3", []string{"-b:a", "320k"}, 320000, 0.01, passes, passes},
+	{"aac-256", "aac", ".m4a", "aac", []string{"-b:a", "256k"}, 256000, 0.1, passes, passes},
+}
+
+func TestAnalyzePCMAudioAppliesTheOpusBitrateFloor(t *testing.T) {
+	requireFFmpeg(t)
+	dir := t.TempDir()
+	source := calibrationFixture(t, "full-band", 44100, fullBand)
+	duration := float64(calibrationSamples) / 44100
+	encoded := 0
+	for _, rung := range bitrateFloorLadder {
+		if !hasEncoder(t, rung.encoder) {
+			t.Logf("skipping %s: ffmpeg lacks %s", rung.name, rung.encoder)
+			continue
+		}
+		encoded++
+		path := filepath.Join(dir, rung.name+rung.extension)
+		encode(t, source, path, rung.encoder, rung.args...)
+		for _, minimum := range []struct {
+			hz   int
+			want floorVerdict
+		}{{19000, rung.at19}, {18000, rung.at18}} {
+			report, err := AnalyzePCMAudio(context.Background(), path, duration, minimum.hz)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Logf("%s at %d Hz: %s %d bps, %d Hz, meets=%t reasons=%v", rung.name, minimum.hz, report.Codec, report.BitrateBps, report.EstimatedBandwidthHz, report.MeetsMinimum, report.LowQualityReasons)
+			if report.Codec != rung.codec {
+				t.Errorf("%s codec %q, want %q", rung.name, report.Codec, rung.codec)
+			}
+			if deviation := math.Abs(float64(report.BitrateBps-rung.nominalBps)) / float64(rung.nominalBps); deviation > rung.bitrateTolerance {
+				t.Errorf("%s measured %d bps, want %d bps +/- %.0f%%", rung.name, report.BitrateBps, rung.nominalBps, rung.bitrateTolerance*100)
+			}
+			want := minimum.want == passes
+			if minimum.want == bitrateDecides {
+				want = report.BitrateBps >= opusMinBitrateBps
+			}
+			if report.MeetsMinimum != want {
+				t.Errorf("%s at a %d Hz minimum: meets=%t reasons=%v, want meets=%t", rung.name, minimum.hz, report.MeetsMinimum, report.LowQualityReasons, want)
+			}
+			belowFloor := slices.Contains(report.LowQualityReasons, ReasonBitrateBelowMinimum)
+			if wantBelowFloor := rung.codec == "opus" && minimum.hz >= 19000 && report.BitrateBps < opusMinBitrateBps; belowFloor != wantBelowFloor {
+				t.Errorf("%s at a %d Hz minimum: bitrate reason %t, want %t", rung.name, minimum.hz, belowFloor, wantBelowFloor)
+			}
+		}
+	}
+	if encoded == 0 {
+		t.Skip("ffmpeg has none of the ladder's encoders")
+	}
+}
+
 func TestBandwidthKHzKeepsHundredHertzSteps(t *testing.T) {
 	if got := (AudioQualityReport{EstimatedBandwidthHz: 18800}).BandwidthKHz(); got != 18.8 {
 		t.Errorf("BandwidthKHz() = %v, want 18.8", got)
@@ -266,7 +351,7 @@ func TestAnalyzePCMAudioDecodesTheProbedStream(t *testing.T) {
 	}
 }
 
-func TestProbeSampleRateReadsProgramContainers(t *testing.T) {
+func TestProbeAudioStreamReadsProgramContainers(t *testing.T) {
 	requireFFmpeg(t)
 	source := filepath.Join(t.TempDir(), "source.wav")
 	writeFloatWAV(t, source, 44100, make([]float32, 44100))
@@ -274,19 +359,103 @@ func TestProbeSampleRateReadsProgramContainers(t *testing.T) {
 	if out, err := exec.Command("ffmpeg", "-hide_banner", "-v", "error", "-y", "-i", source, "-c:a", "aac", "-f", "mpegts", path).CombinedOutput(); err != nil {
 		t.Fatalf("building fixture: %v %s", err, out)
 	}
-	if got, err := probeSampleRate(context.Background(), path); err != nil || got != 44100 {
-		t.Errorf("MPEG-TS rate %d, %v; want 44100", got, err)
+	got, err := probeAudioStream(context.Background(), path, 1)
+	if err != nil || got.SampleRate != 44100 || got.Codec != "aac" || got.BitrateBps <= 0 {
+		t.Errorf("MPEG-TS stream %+v, %v; want 44100 Hz AAC with a bitrate", got, err)
 	}
 }
 
-func TestProbeSampleRateReportsSourceRate(t *testing.T) {
+// One second of mono 32-bit float PCM carries exactly 32 bits per sample.
+func TestProbeAudioStreamReportsSourceRateCodecAndBitrate(t *testing.T) {
 	requireFFmpeg(t)
 	for _, rate := range []int{22050, 44100, 96000} {
 		path := filepath.Join(t.TempDir(), strconv.Itoa(rate)+".wav")
-		writeFloatWAV(t, path, rate, make([]float32, 1024))
-		got, err := probeSampleRate(context.Background(), path)
-		if err != nil || got != rate {
-			t.Errorf("rate %d: got %d, %v", rate, got, err)
+		writeFloatWAV(t, path, rate, make([]float32, rate))
+		got, err := probeAudioStream(context.Background(), path, 1)
+		if err != nil || got.SampleRate != rate || got.Codec != "pcm_f32le" || got.BitrateBps != 32*rate {
+			t.Errorf("rate %d: got %+v, %v; want pcm_f32le at %d bps", rate, got, err, 32*rate)
 		}
+	}
+}
+
+// Cover art and container overhead stay out of the bitrate: only the audio
+// stream's packets count.
+func TestProbeAudioStreamIgnoresCoverArt(t *testing.T) {
+	requireFFmpeg(t)
+	if !hasEncoder(t, "mjpeg") {
+		t.Skip("ffmpeg lacks mjpeg")
+	}
+	dir := t.TempDir()
+	source := calibrationFixture(t, "full-band", 44100, fullBand)
+	audio := filepath.Join(dir, "plain.m4a")
+	encode(t, source, audio, "aac", "-b:a", "128k")
+	cover := filepath.Join(dir, "cover.jpg")
+	if out, err := exec.Command("ffmpeg", "-hide_banner", "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=1400x1400:duration=1", "-frames:v", "1", "-q:v", "1", cover).CombinedOutput(); err != nil {
+		t.Fatalf("building cover: %v %s", err, out)
+	}
+	tagged := filepath.Join(dir, "tagged.m4a")
+	if out, err := exec.Command("ffmpeg", "-hide_banner", "-v", "error", "-y", "-i", audio, "-i", cover, "-map", "0:a", "-map", "1:v", "-c", "copy", "-disposition:v", "attached_pic", tagged).CombinedOutput(); err != nil {
+		t.Fatalf("attaching cover: %v %s", err, out)
+	}
+	duration := float64(calibrationSamples) / 44100
+	plain, err := probeAudioStream(context.Background(), audio, duration)
+	if err != nil {
+		t.Fatal(err)
+	}
+	withCover, err := probeAudioStream(context.Background(), tagged, duration)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if withCover.BitrateBps != plain.BitrateBps || math.Abs(float64(plain.BitrateBps-128000)) > 13000 {
+		t.Errorf("bitrate with cover %d bps, without %d bps; want the same bitrate near 128000 bps", withCover.BitrateBps, plain.BitrateBps)
+	}
+	// The container's overall bitrate includes the cover, which is what a
+	// format-level measurement would report.
+	out, err := exec.Command("ffprobe", "-v", "error", "-show_entries", "format=bit_rate", "-of", "default=noprint_wrappers=1:nokey=1", tagged).Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if containerBps, err := strconv.Atoi(strings.TrimSpace(string(out))); err != nil || containerBps < plain.BitrateBps+20000 {
+		t.Fatalf("fixture container bitrate %q does not include the cover (%v)", out, err)
+	}
+}
+
+func TestParseAudioStream(t *testing.T) {
+	const stream = `"streams":[{"codec_name":"opus","sample_rate":"48000","time_base":"1/48000"}]`
+	opus := audioStream{Codec: "opus", SampleRate: 48000}
+	at := func(bps int) audioStream { s := opus; s.BitrateBps = bps; return s }
+	tests := []struct {
+		name            string
+		data            string
+		fallbackSeconds float64
+		want            audioStream
+		wantErr         string
+	}{
+		{"packet durations", `{"packets":[{"size":"400","duration":960},{"size":"400","duration":960}],` + stream + `}`, 0, at(160000), ""},
+		{"quoted values", `{"packets":[{"size":"400","duration":"960"}],"streams":[{"codec_name":"opus","sample_rate":48000,"time_base":"1/48000"}]}`, 0, at(160000), ""},
+		{"missing durations use the stream duration", `{"packets":[{"size":"1000"},{"size":"1000","duration":2400}],` + stream + `}`, 0.1, at(160000), ""},
+		{"unknown durations use the stream duration", `{"packets":[{"size":"2000","duration":"N/A"}],` + stream + `}`, 0.1, at(160000), ""},
+		{"unreadable time base uses the stream duration", `{"packets":[{"size":"2000","duration":960}],"streams":[{"codec_name":"opus","sample_rate":"48000","time_base":"0/0"}]}`, 0.1, at(160000), ""},
+		{"missing time base uses the stream duration", `{"packets":[{"size":"2000","duration":960}],"streams":[{"codec_name":"opus","sample_rate":"48000"}]}`, 0.1, at(160000), ""},
+		{"no duration leaves the bitrate unmeasured", `{"packets":[{"size":"2000"}],` + stream + `}`, 0, opus, ""},
+		{"no packets leave the bitrate unmeasured", `{` + stream + `}`, 10, opus, ""},
+		{"first of repeated streams", `{"packets":[],"streams":[{"codec_name":"aac","sample_rate":"44100"},{"codec_name":"aac","sample_rate":"44100"}]}`, 0, audioStream{Codec: "aac", SampleRate: 44100}, ""},
+		{"no stream", `{"packets":[]}`, 0, audioStream{}, "no audio stream with a sample rate"},
+		{"no sample rate", `{"streams":[{"codec_name":"opus","sample_rate":"0"}]}`, 0, audioStream{}, "no audio stream with a sample rate"},
+		{"invalid output", `not json`, 0, audioStream{}, "reading ffprobe output"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseAudioStream([]byte(tt.data), tt.fallbackSeconds)
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("error = %v, want %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil || got != tt.want {
+				t.Fatalf("got %+v, %v; want %+v", got, err, tt.want)
+			}
+		})
 	}
 }

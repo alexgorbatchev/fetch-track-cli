@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -353,15 +354,24 @@ func VerifyAudioTrackWithRunner(ctx context.Context, runner CommandRunner, targe
 	} else {
 		recommendations = append(recommendations, fmt.Sprintf("AUDIO BANDWIDTH: Clean frequency response (%s).", pcmReport.BandwidthRating))
 	}
+	if slices.Contains(pcmReport.LowQualityReasons, ReasonBitrateBelowMinimum) {
+		label := bitrateFloors[pcmReport.Codec].label
+		measured := fmt.Sprintf("%s average bitrate (%.1f kbps) below %d kbps, which %s needs", label, pcmReport.BitrateKbps(), pcmReport.MinBitrateBps/1000, label)
+		if pcmReport.BitrateBps <= 0 {
+			measured = fmt.Sprintf("%s average bitrate could not be measured; %s needs %d kbps", label, label, pcmReport.MinBitrateBps/1000)
+		}
+		recommendations = append(recommendations, fmt.Sprintf("LOW BITRATE: %s at a %.1f kHz minimum because its frequency cutoff does not reflect its bitrate.", measured, float64(pcmReport.MinBandwidthHz)/1000))
+	}
 
 	summaryStatus := "STATUS: High fidelity audio suitable for mixing."
+	reasons := strings.Join(lowQualityReasonText(*pcmReport), "; ")
 	switch {
-	case mixStructure.IsRadioEditWarning && pcmReport.HasLowBandwidthWarning:
-		summaryStatus = "STATUS: Low audio quality detected and is a radio edit."
+	case mixStructure.IsRadioEditWarning && !pcmReport.MeetsMinimum:
+		summaryStatus = fmt.Sprintf("STATUS: Low audio quality detected (%s) and is a radio edit.", reasons)
 	case mixStructure.IsRadioEditWarning:
 		summaryStatus = "STATUS: Downloaded track is a radio edit."
-	case pcmReport.HasLowBandwidthWarning:
-		summaryStatus = "STATUS: Low audio quality detected."
+	case !pcmReport.MeetsMinimum:
+		summaryStatus = fmt.Sprintf("STATUS: Low audio quality detected (%s).", reasons)
 	case pcmReport.EstimatedBandwidthHz < DefaultMinBandwidthHz:
 		summaryStatus = "STATUS: Standard fidelity audio suitable for mixing."
 	}
@@ -373,4 +383,23 @@ func VerifyAudioTrackWithRunner(ctx context.Context, runner CommandRunner, targe
 		SummaryStatus:   summaryStatus,
 		Recommendations: recommendations,
 	}, nil
+}
+
+// lowQualityReasonText describes each of the report's low-quality reasons.
+func lowQualityReasonText(report AudioQualityReport) []string {
+	var text []string
+	for _, reason := range report.LowQualityReasons {
+		switch reason {
+		case ReasonBandwidthBelowMinimum:
+			text = append(text, fmt.Sprintf("frequency cutoff %.1f kHz is below the %.1f kHz minimum", report.BandwidthKHz(), float64(report.MinBandwidthHz)/1000))
+		case ReasonBitrateBelowMinimum:
+			label := bitrateFloors[report.Codec].label
+			if report.BitrateBps <= 0 {
+				text = append(text, fmt.Sprintf("%s average bitrate could not be measured; it needs %d kbps", label, report.MinBitrateBps/1000))
+				continue
+			}
+			text = append(text, fmt.Sprintf("%s average bitrate %.1f kbps is below %d kbps", label, report.BitrateKbps(), report.MinBitrateBps/1000))
+		}
+	}
+	return text
 }

@@ -592,8 +592,11 @@ func TestVerifyPrintsBandwidthWithOneDecimal(t *testing.T) {
 	if err != nil || runErr != nil {
 		t.Fatalf("verify: %v, %v", runErr, err)
 	}
-	if want := "bandwidth: 22.0 kHz (High Fidelity (>=19 kHz))\n"; !strings.Contains(string(out), want) {
-		t.Errorf("output %q does not contain %q", out, want)
+	// 16-bit stereo PCM at 44.1 kHz carries 1411.2 kbps.
+	for _, want := range []string{"bandwidth: 22.0 kHz (High Fidelity (>=19 kHz))\n", "codec: pcm_s16le 1411.2 kbps\n"} {
+		if !strings.Contains(string(out), want) {
+			t.Errorf("output %q does not contain %q", out, want)
+		}
 	}
 }
 

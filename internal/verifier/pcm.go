@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"strconv"
@@ -18,7 +20,8 @@ const TargetRMSDb = -12.0
 const (
 	// DefaultMinBandwidthHz is the club playback bar: MP3 at 224 kbps and
 	// above, AAC at 256 kbps and lossless audio reach it. Opus codes about
-	// 20 kHz at every music bitrate, so bandwidth cannot grade Opus.
+	// 20 kHz at every music bitrate, so at this bar it also needs
+	// opusMinBitrateBps.
 	DefaultMinBandwidthHz = 19000
 	// Below this cutoff audio is lower quality than a 128 kbps MP3, typically
 	// a low-bitrate encode or a transcode of one.
@@ -34,25 +37,72 @@ const (
 	// Rates above 48 kHz only add content above the audible band.
 	maxAnalysisRate = 48000
 	analysisTimeout = 30 * time.Second
+
+	// opusMinBitrateBps is the average bitrate Opus needs at minimums of
+	// DefaultMinBandwidthHz and above: libopus codes about 20.2 kHz at every
+	// bitrate from 48 to 192 kbps, so its cutoff does not grade it.
+	opusMinBitrateBps = 160000
 )
+
+// Low-quality reasons, reported in AudioQualityReport.LowQualityReasons.
+const (
+	// ReasonBandwidthBelowMinimum: the measured cutoff is below the minimum.
+	ReasonBandwidthBelowMinimum = "bandwidth_below_minimum"
+	// ReasonBitrateBelowMinimum: the codec's average bitrate is below the
+	// floor it needs at this minimum, or could not be measured.
+	ReasonBitrateBelowMinimum = "bitrate_below_minimum"
+)
+
+// bitrateFloor is the average bitrate a codec needs at minimums of at least
+// fromMinimumHz because its measured cutoff does not reflect its quality.
+type bitrateFloor struct {
+	label         string
+	fromMinimumHz int
+	minBitrateBps int
+}
+
+// bitrateFloors lists codecs, by ffprobe codec name, whose measured cutoff does
+// not grade them. Add a codec only with measured encoder evidence.
+var bitrateFloors = map[string]bitrateFloor{
+	"opus": {label: "Opus", fromMinimumHz: DefaultMinBandwidthHz, minBitrateBps: opusMinBitrateBps},
+}
 
 // AudioQualityReport contains frequency spectrum and dynamics analysis results.
 type AudioQualityReport struct {
-	EstimatedBandwidthHz   int     `json:"estimatedBandwidthHz"`
-	BandwidthRating        string  `json:"bandwidthRating"`
-	HasLowBandwidthWarning bool    `json:"hasLowBandwidthWarning"`
-	PeakDbFS               float64 `json:"peakDbFS"`
-	RMSDbFS                float64 `json:"rmsDbFS"`
-	HasClippingWarning     bool    `json:"hasClippingWarning"`
-	SubBassDbFS            float64 `json:"subBassDbFS"`
-	KickBassDbFS           float64 `json:"kickBassDbFS"`
-	SuggestedDJGainDb      float64 `json:"suggestedDjGainDb"`
+	// Codec is the ffprobe codec name of the analysed audio stream.
+	Codec string `json:"codec"`
+	// BitrateBps is the stream's average bitrate: its packet bytes over its
+	// duration, so VBR streams report their actual average and cover art and
+	// container overhead are excluded. Zero when it cannot be measured.
+	BitrateBps           int    `json:"bitrateBps"`
+	EstimatedBandwidthHz int    `json:"estimatedBandwidthHz"`
+	BandwidthRating      string `json:"bandwidthRating"`
+	// HasLowBandwidthWarning reports a cutoff below MinBandwidthHz only;
+	// MeetsMinimum also applies the codec's bitrate floor.
+	HasLowBandwidthWarning bool `json:"hasLowBandwidthWarning"`
+	MinBandwidthHz         int  `json:"minBandwidthHz"`
+	// MinBitrateBps is the bitrate floor applied at MinBandwidthHz, or zero.
+	MinBitrateBps      int      `json:"minBitrateBps,omitempty"`
+	MeetsMinimum       bool     `json:"meetsMinimum"`
+	LowQualityReasons  []string `json:"lowQualityReasons"`
+	PeakDbFS           float64  `json:"peakDbFS"`
+	RMSDbFS            float64  `json:"rmsDbFS"`
+	HasClippingWarning bool     `json:"hasClippingWarning"`
+	SubBassDbFS        float64  `json:"subBassDbFS"`
+	KickBassDbFS       float64  `json:"kickBassDbFS"`
+	SuggestedDJGainDb  float64  `json:"suggestedDjGainDb"`
 }
 
 // BandwidthKHz returns the estimated bandwidth in kHz for display; it keeps the
 // estimate's 100 Hz resolution when printed with one decimal.
 func (r AudioQualityReport) BandwidthKHz() float64 {
 	return float64(r.EstimatedBandwidthHz) / 1000
+}
+
+// BitrateKbps returns the average bitrate in kbps, truncated to 0.1 kbps so a
+// bitrate below a floor never displays as the floor.
+func (r AudioQualityReport) BitrateKbps() float64 {
+	return float64(r.BitrateBps/100) / 10
 }
 
 // ComputeGoertzelDb returns the level in dBFS of the freqHz component of
@@ -75,12 +125,17 @@ func ComputeGoertzelDb(samples []float32, startIdx, endIdx int, freqHz, sampleRa
 	return 20.0 * math.Log10(magnitude+1e-9)
 }
 
-// EvaluateBandwidthWarning updates the report bandwidth rating and low-bandwidth
-// warning flag; a minBandwidthHz of zero or less applies DefaultMinBandwidthHz.
-func EvaluateBandwidthWarning(report *AudioQualityReport, minBandwidthHz int) {
+// EvaluateQuality grades the report's codec, bitrate and bandwidth against
+// minBandwidthHz; zero or less applies DefaultMinBandwidthHz. Audio meets the
+// minimum when its measured cutoff reaches it and, for codecs listed in
+// bitrateFloors at minimums of at least their fromMinimumHz, its average
+// bitrate reaches the codec's floor. The bandwidth rating describes the cutoff
+// alone.
+func EvaluateQuality(report *AudioQualityReport, minBandwidthHz int) {
 	if minBandwidthHz <= 0 {
 		minBandwidthHz = DefaultMinBandwidthHz
 	}
+	report.MinBandwidthHz = minBandwidthHz
 	report.HasLowBandwidthWarning = report.EstimatedBandwidthHz < minBandwidthHz
 
 	switch {
@@ -91,10 +146,26 @@ func EvaluateBandwidthWarning(report *AudioQualityReport, minBandwidthHz int) {
 	default:
 		report.BandwidthRating = "Low Quality / Transcoded (<16 kHz)"
 	}
+
+	report.MinBitrateBps = 0
+	if floor, ok := bitrateFloors[report.Codec]; ok && minBandwidthHz >= floor.fromMinimumHz {
+		report.MinBitrateBps = floor.minBitrateBps
+	}
+
+	report.LowQualityReasons = []string{}
+	if report.HasLowBandwidthWarning {
+		report.LowQualityReasons = append(report.LowQualityReasons, ReasonBandwidthBelowMinimum)
+	}
+	if report.BitrateBps < report.MinBitrateBps {
+		report.LowQualityReasons = append(report.LowQualityReasons, ReasonBitrateBelowMinimum)
+	}
+	report.MeetsMinimum = len(report.LowQualityReasons) == 0
 }
 
-// AnalyzePCMAudio decodes an excerpt of up to 60 seconds at the source sample
-// rate (at most 48 kHz) and measures its bandwidth and dynamics.
+// AnalyzePCMAudio probes the first audio stream's codec and average bitrate,
+// decodes an excerpt of up to 60 seconds at the source sample rate (at most
+// 48 kHz), measures its bandwidth and dynamics, and grades it against the
+// minimum.
 func AnalyzePCMAudio(ctx context.Context, filePath string, durationSec float64, minBandwidthHz ...int) (*AudioQualityReport, error) {
 	minHz := DefaultMinBandwidthHz
 	if len(minBandwidthHz) > 0 && minBandwidthHz[0] > 0 {
@@ -103,11 +174,11 @@ func AnalyzePCMAudio(ctx context.Context, filePath string, durationSec float64, 
 	cmdCtx, cancel := context.WithTimeout(ctx, analysisTimeout)
 	defer cancel()
 
-	sourceRate, err := probeSampleRate(cmdCtx, filePath)
+	stream, err := probeAudioStream(cmdCtx, filePath, durationSec)
 	if err != nil {
 		return nil, err
 	}
-	sampleRate := min(sourceRate, maxAnalysisRate)
+	sampleRate := min(stream.SampleRate, maxAnalysisRate)
 
 	startTime := strconv.Itoa(excerptStartSeconds)
 	if durationSec < shortTrackSeconds {
@@ -143,8 +214,10 @@ func AnalyzePCMAudio(ctx context.Context, filePath string, durationSec float64, 
 	}
 
 	report := measureDynamics(samples[:min(len(samples), dynamicsSeconds*sampleRate)], sampleRate)
+	report.Codec = stream.Codec
+	report.BitrateBps = stream.BitrateBps
 	report.EstimatedBandwidthHz = estimateBandwidthHz(samples, sampleRate)
-	EvaluateBandwidthWarning(report, minHz)
+	EvaluateQuality(report, minHz)
 
 	return report, nil
 }
@@ -179,26 +252,111 @@ func measureDynamics(samples []float32, sampleRate int) *AudioQualityReport {
 	}
 }
 
-// probeSampleRate reads the sample rate of the first audio stream in filePath.
-func probeSampleRate(ctx context.Context, filePath string) (int, error) {
+// audioStream describes the first audio stream of a file.
+type audioStream struct {
+	Codec      string
+	SampleRate int
+	// BitrateBps is zero when the stream has no packets or no duration.
+	BitrateBps int
+}
+
+// probeAudioStream reads the codec, sample rate and average bitrate of the
+// first audio stream in filePath. The bitrate counts that stream's packets
+// only; durationSec stands in for packet durations the container omits.
+func probeAudioStream(ctx context.Context, filePath string, durationSec float64) (audioStream, error) {
 	out, err := deps.RunCommand(ctx, "ffprobe",
 		"-v", "error",
 		"-select_streams", "a:0",
-		"-show_entries", "stream=sample_rate",
-		"-of", "default=noprint_wrappers=1:nokey=1",
+		"-show_entries", "stream=codec_name,sample_rate,time_base:packet=size,duration",
+		"-of", "json",
 		filePath,
 	)
 	if err != nil {
-		return 0, fmt.Errorf("probing sample rate of %s: %w", filePath, err)
+		return audioStream{}, fmt.Errorf("probing audio stream of %s: %w", filePath, err)
 	}
-	// Containers with programs, such as MPEG-TS, list the stream once per program.
-	fields := strings.Fields(string(out))
-	if len(fields) == 0 {
-		return 0, fmt.Errorf("probing sample rate of %s: no audio stream with a sample rate", filePath)
+	stream, err := parseAudioStream(out, durationSec)
+	if err != nil {
+		return audioStream{}, fmt.Errorf("probing audio stream of %s: %w", filePath, err)
 	}
-	rate, err := strconv.Atoi(fields[0])
-	if err != nil || rate <= 0 {
-		return 0, fmt.Errorf("probing sample rate of %s: no audio stream with a sample rate", filePath)
+	return stream, nil
+}
+
+// probeValue holds an ffprobe JSON value, which ffprobe prints as a number or
+// a string depending on the field, and as "N/A" when it is unknown.
+type probeValue string
+
+func (v *probeValue) UnmarshalJSON(data []byte) error {
+	*v = probeValue(strings.Trim(string(data), `"`))
+	return nil
+}
+
+func (v probeValue) int64() (int64, bool) {
+	n, err := strconv.ParseInt(string(v), 10, 64)
+	return n, err == nil
+}
+
+// parseAudioStream reads ffprobe's JSON listing of one stream and its packets.
+// The average bitrate divides the packets' bytes by their summed durations,
+// counted exactly in the stream's time base, when every packet has one, and
+// by fallbackSeconds otherwise.
+func parseAudioStream(data []byte, fallbackSeconds float64) (audioStream, error) {
+	var probe struct {
+		Streams []struct {
+			CodecName  string     `json:"codec_name"`
+			SampleRate probeValue `json:"sample_rate"`
+			TimeBase   string     `json:"time_base"`
+		} `json:"streams"`
+		Packets []struct {
+			Size     probeValue `json:"size"`
+			Duration probeValue `json:"duration"`
+		} `json:"packets"`
 	}
-	return rate, nil
+	if err := json.Unmarshal(data, &probe); err != nil {
+		return audioStream{}, fmt.Errorf("reading ffprobe output: %w", err)
+	}
+	// Containers with programs, such as MPEG-TS, can list the stream more than once.
+	if len(probe.Streams) == 0 {
+		return audioStream{}, errors.New("no audio stream with a sample rate")
+	}
+	first := probe.Streams[0]
+	rate, ok := first.SampleRate.int64()
+	if !ok || rate <= 0 {
+		return audioStream{}, errors.New("no audio stream with a sample rate")
+	}
+
+	var totalBytes, ticks int64
+	timed := len(probe.Packets) > 0
+	for _, p := range probe.Packets {
+		size, _ := p.Size.int64()
+		totalBytes += size
+		duration, ok := p.Duration.int64()
+		if !ok || duration <= 0 {
+			timed = false
+			continue
+		}
+		ticks += duration
+	}
+	seconds := fallbackSeconds
+	if numerator, denominator, ok := parseTimeBase(first.TimeBase); ok && timed {
+		seconds = float64(ticks) * float64(numerator) / float64(denominator)
+	}
+	stream := audioStream{Codec: first.CodecName, SampleRate: int(rate)}
+	if totalBytes > 0 && seconds > 0 {
+		stream.BitrateBps = int(math.Round(float64(totalBytes) * 8 / seconds))
+	}
+	return stream, nil
+}
+
+// parseTimeBase reads an ffprobe time base such as "1/48000".
+func parseTimeBase(timeBase string) (numerator, denominator int64, ok bool) {
+	n, d, found := strings.Cut(timeBase, "/")
+	if !found {
+		return 0, 0, false
+	}
+	numerator, errN := strconv.ParseInt(n, 10, 64)
+	denominator, errD := strconv.ParseInt(d, 10, 64)
+	if errN != nil || errD != nil || numerator <= 0 || denominator <= 0 {
+		return 0, 0, false
+	}
+	return numerator, denominator, true
 }

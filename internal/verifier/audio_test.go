@@ -89,6 +89,74 @@ func TestVerifyAudioTrack_LocalFile(t *testing.T) {
 	}
 }
 
+// A low-quality verdict names its cause, and keeps the status prefix that
+// consumers match.
+func TestVerifyAudioTrackStatesWhyQualityIsLow(t *testing.T) {
+	requireFFmpeg(t)
+	source := calibrationFixture(t, "full-band", 44100, fullBand)
+	dir := t.TempDir()
+	tests := []struct {
+		name, file, encoder string
+		args                []string
+		minHz               int
+		wantStatus          []string
+		wantRecommendation  string
+	}{
+		{"opus below the floor", "Artist - Track (Extended Mix).opus", "libopus", []string{"-b:a", "96k", "-vbr", "off"}, 19000,
+			[]string{"STATUS: Low audio quality detected (Opus average bitrate 96.0 kbps is below 160 kbps)."}, "LOW BITRATE: Opus average bitrate (96.0 kbps) below 160 kbps"},
+		{"opus radio edit below the floor", "Artist - Track (Radio Edit).opus", "libopus", []string{"-b:a", "128k", "-vbr", "off"}, 19000,
+			[]string{"STATUS: Low audio quality detected (Opus average bitrate 128.0 kbps is below 160 kbps) and is a radio edit."}, "LOW BITRATE: "},
+		{"opus at an 18 kHz minimum", "Artist - Track (Extended Mix).opus", "libopus", []string{"-b:a", "96k", "-vbr", "off"}, 18000,
+			[]string{"STATUS: High fidelity audio suitable for mixing."}, ""},
+		{"opus at the floor", "Artist - Track (Extended Mix).opus", "libopus", []string{"-b:a", "160k", "-vbr", "off"}, 19000,
+			[]string{"STATUS: High fidelity audio suitable for mixing."}, ""},
+		{"mp3 below the cutoff", "Artist - Track (Extended Mix).mp3", "libmp3lame", []string{"-b:a", "128k"}, 19000,
+			[]string{"STATUS: Low audio quality detected (frequency cutoff 16.", " kHz is below the 19.0 kHz minimum)."}, "LOW BANDWIDTH: "},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if !hasEncoder(t, tt.encoder) {
+				t.Skipf("ffmpeg lacks %s", tt.encoder)
+			}
+			path := filepath.Join(dir, tt.name, tt.file)
+			if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			encode(t, source, path, tt.encoder, tt.args...)
+			report, err := VerifyAudioTrack(context.Background(), path, false, tt.minHz)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, want := range tt.wantStatus {
+				if !strings.Contains(report.SummaryStatus, want) {
+					t.Errorf("status %q does not contain %q", report.SummaryStatus, want)
+				}
+			}
+			found := tt.wantRecommendation == ""
+			for _, rec := range report.Recommendations {
+				if tt.wantRecommendation == "" && (strings.HasPrefix(rec, "LOW BITRATE") || strings.HasPrefix(rec, "LOW BANDWIDTH")) {
+					t.Errorf("unexpected recommendation %q", rec)
+				}
+				if tt.wantRecommendation != "" && strings.HasPrefix(rec, tt.wantRecommendation) {
+					found = true
+				}
+			}
+			if !found {
+				t.Errorf("recommendations %q lack %q", report.Recommendations, tt.wantRecommendation)
+			}
+		})
+	}
+}
+
+func TestQualityReasonTextForAnUnmeasuredBitrate(t *testing.T) {
+	report := AudioQualityReport{Codec: "opus", EstimatedBandwidthHz: 20200}
+	EvaluateQuality(&report, 19000)
+	reasons := lowQualityReasonText(report)
+	if len(reasons) != 1 || reasons[0] != "Opus average bitrate could not be measured; it needs 160 kbps" {
+		t.Errorf("reasons %q", reasons)
+	}
+}
+
 func TestVerifyAudioTrack_URLWithRunner(t *testing.T) {
 	ctx := context.Background()
 	dummyAudio := createTestAudioFile(t, "sample.m4a")

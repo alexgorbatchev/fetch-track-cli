@@ -23,12 +23,27 @@ type JSONExecutionResult struct {
 
 type JSONVerification struct {
 	DurationSeconds float64 `json:"duration_seconds"`
-	BandwidthHz     int     `json:"bandwidth_hz"`
-	BandwidthRating string  `json:"bandwidth_rating"`
-	PeakDbFS        float64 `json:"peak_dbfs"`
-	RMSDbFS         float64 `json:"rms_dbfs"`
-	GainOffsetDb    float64 `json:"gain_offset_db"`
-	Status          string  `json:"status"`
+	// Codec is the ffprobe codec name of the measured audio stream.
+	Codec string `json:"codec"`
+	// BitrateBps is the stream's average bitrate (packet bytes over duration);
+	// zero when it cannot be measured.
+	BitrateBps      int    `json:"bitrate_bps"`
+	BandwidthHz     int    `json:"bandwidth_hz"`
+	BandwidthRating string `json:"bandwidth_rating"`
+	// MinBandwidthHz is the minimum the verdict applied.
+	MinBandwidthHz int `json:"min_bandwidth_hz"`
+	// MinBitrateBps is the codec's bitrate floor at that minimum; omitted when
+	// none applies.
+	MinBitrateBps int `json:"min_bitrate_bps,omitempty"`
+	// MeetsMinimum is the verdict: the cutoff reaches MinBandwidthHz and the
+	// bitrate reaches any MinBitrateBps.
+	MeetsMinimum bool `json:"meets_minimum"`
+	// LowQualityReasons names each failed criterion; empty when MeetsMinimum.
+	LowQualityReasons []string `json:"low_quality_reasons"`
+	PeakDbFS          float64  `json:"peak_dbfs"`
+	RMSDbFS           float64  `json:"rms_dbfs"`
+	GainOffsetDb      float64  `json:"gain_offset_db"`
+	Status            string   `json:"status"`
 }
 
 type JSONMetadata struct {
@@ -53,13 +68,23 @@ func ConvertVerificationReport(rep *verifier.VerificationReport) *JSONVerificati
 	if rep == nil {
 		return nil
 	}
+	reasons := rep.Quality.LowQualityReasons
+	if reasons == nil {
+		reasons = []string{}
+	}
 	return &JSONVerification{
-		DurationSeconds: rep.Metadata.DurationSeconds,
-		BandwidthHz:     rep.Quality.EstimatedBandwidthHz,
-		BandwidthRating: rep.Quality.BandwidthRating,
-		PeakDbFS:        rep.Quality.PeakDbFS,
-		RMSDbFS:         rep.Quality.RMSDbFS,
-		GainOffsetDb:    rep.Quality.SuggestedDJGainDb,
-		Status:          rep.SummaryStatus,
+		DurationSeconds:   rep.Metadata.DurationSeconds,
+		Codec:             rep.Quality.Codec,
+		BitrateBps:        rep.Quality.BitrateBps,
+		BandwidthHz:       rep.Quality.EstimatedBandwidthHz,
+		BandwidthRating:   rep.Quality.BandwidthRating,
+		MinBandwidthHz:    rep.Quality.MinBandwidthHz,
+		MinBitrateBps:     rep.Quality.MinBitrateBps,
+		MeetsMinimum:      rep.Quality.MeetsMinimum,
+		LowQualityReasons: reasons,
+		PeakDbFS:          rep.Quality.PeakDbFS,
+		RMSDbFS:           rep.Quality.RMSDbFS,
+		GainOffsetDb:      rep.Quality.SuggestedDJGainDb,
+		Status:            rep.SummaryStatus,
 	}
 }

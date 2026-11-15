@@ -8,11 +8,13 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/alexgorbatchev/fetch-track-cli/internal/deps"
 	"github.com/alexgorbatchev/fetch-track-cli/internal/pipeline"
+	"github.com/alexgorbatchev/fetch-track-cli/internal/verifier"
 	"github.com/spf13/cobra"
 )
 
@@ -62,6 +64,11 @@ func TestVerifyJSONSuccessInBothModes(t *testing.T) {
 			result, err := executeJSONCommand(t, []string{"--json", "verify", path})
 			if err != nil || result.Status != "success" || result.Target != path || result.Verification == nil || result.Verification.DurationSeconds != 2 {
 				t.Fatalf("verification result %+v error %v", result, err)
+			}
+			// The fixture is silent AAC: it has a bitrate but no bandwidth.
+			v := result.Verification
+			if v.Codec != "aac" || v.BitrateBps <= 0 || v.MinBandwidthHz != 19000 || v.MeetsMinimum || !slices.Equal(v.LowQualityReasons, []string{verifier.ReasonBandwidthBelowMinimum}) {
+				t.Fatalf("verdict %+v", v)
 			}
 		})
 	}

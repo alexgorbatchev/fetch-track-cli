@@ -57,7 +57,7 @@ func TestBandwidthClassificationThresholds(t *testing.T) {
 	}
 	for _, tt := range tests {
 		report := AudioQualityReport{EstimatedBandwidthHz: tt.bandwidth}
-		EvaluateBandwidthWarning(&report, tt.threshold)
+		EvaluateQuality(&report, tt.threshold)
 		if report.HasLowBandwidthWarning != tt.warning || report.BandwidthRating != tt.rating {
 			t.Fatalf("report = %+v", report)
 		}

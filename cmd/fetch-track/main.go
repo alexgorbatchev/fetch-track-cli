@@ -50,7 +50,7 @@ var (
 
 const (
 	defaultMinBandwidthKhz = float64(verifier.DefaultMinBandwidthHz) / 1000
-	minBandwidthUsage      = "Minimum audio bandwidth in kHz; lower measured cutoffs are flagged (19 is met by MP3 224 kbps and above, AAC 256 kbps and lossless audio; Opus reaches about 20 kHz at every bitrate)"
+	minBandwidthUsage      = "Minimum audio bandwidth in kHz; lower measured cutoffs are flagged (19 is met by MP3 224 kbps and above, AAC 256 kbps and lossless audio; Opus reaches about 20 kHz at every bitrate, so at 19 and above it also needs an average of 160 kbps)"
 )
 
 // bandwidthHz converts a kHz flag to Hz without truncating values such as 16.345.
@@ -247,6 +247,7 @@ When a query is provided, fetch-track executes the full acquisition pipeline:
 					fmt.Printf("title: %s\n", deps.FoldHome(report.Metadata.Title))
 					fmt.Printf("duration: %s (%s)\n", report.MixStructure.DurationFormatted, report.MixStructure.MixTypeDescription)
 					fmt.Printf("bandwidth: %.1f kHz (%s)\n", report.Quality.BandwidthKHz(), report.Quality.BandwidthRating)
+					fmt.Printf("codec: %s %.1f kbps\n", report.Quality.Codec, report.Quality.BitrateKbps())
 					gainSign := ""
 					if report.Quality.SuggestedDJGainDb > 0 {
 						gainSign = "+"
@@ -262,6 +263,7 @@ When a query is provided, fetch-track executes the full acquisition pipeline:
 				fmt.Printf("Title: %s\n", deps.FoldHome(report.Metadata.Title))
 				fmt.Printf("Duration: %s (%s)\n", report.MixStructure.DurationFormatted, report.MixStructure.MixTypeDescription)
 				fmt.Printf("Bandwidth: %s (%.1f kHz)\n", report.Quality.BandwidthRating, report.Quality.BandwidthKHz())
+				fmt.Printf("Codec: %s (%.1f kbps)\n", report.Quality.Codec, report.Quality.BitrateKbps())
 				fmt.Printf("Peak / RMS: %.2f dBFS / %.2f dBFS\n", report.Quality.PeakDbFS, report.Quality.RMSDbFS)
 				fmt.Printf("Sub / Kick: %.2f dBFS / %.2f dBFS\n", report.Quality.SubBassDbFS, report.Quality.KickBassDbFS)
 				gainSign := ""
@@ -494,7 +496,7 @@ func buildTechCatalog() cobrahelptree.TechCatalog {
 		},
 		"fetch-track track verify": {
 			Summary:     "Inspect audio bandwidth, loudness, mix duration, and acoustic fingerprint",
-			Description: "Decodes up to 60 seconds of PCM at the source sample rate (at most 48 kHz), reports where the averaged spectrum falls off its high-frequency cliff, and calculates peak/RMS, DJ mixer gain offset, and optional Shazam/AcoustID identification.",
+			Description: "Decodes up to 60 seconds of PCM at the source sample rate (at most 48 kHz), reports where the averaged spectrum falls off its high-frequency cliff and the stream's codec and average bitrate, grades them against the minimum (Opus also needs 160 kbps at 19 kHz and above), and calculates peak/RMS, DJ mixer gain offset, and optional Shazam/AcoustID identification.",
 			Args: []cobrahelptree.ArgSpec{
 				{Name: "<url|path>", Description: "Local audio file path or direct streaming URL to inspect"},
 			},
@@ -505,7 +507,7 @@ func buildTechCatalog() cobrahelptree.TechCatalog {
 		},
 		"fetch-track verify": {
 			Summary:     "Inspect audio bandwidth, loudness, mix duration, and acoustic fingerprint",
-			Description: "Decodes up to 60 seconds of PCM at the source sample rate (at most 48 kHz), reports where the averaged spectrum falls off its high-frequency cliff, and calculates peak/RMS, DJ mixer gain offset, and optional Shazam/AcoustID identification.",
+			Description: "Decodes up to 60 seconds of PCM at the source sample rate (at most 48 kHz), reports where the averaged spectrum falls off its high-frequency cliff and the stream's codec and average bitrate, grades them against the minimum (Opus also needs 160 kbps at 19 kHz and above), and calculates peak/RMS, DJ mixer gain offset, and optional Shazam/AcoustID identification.",
 			Args: []cobrahelptree.ArgSpec{
 				{Name: "<url|path>", Description: "Local audio file path or direct streaming URL to inspect"},
 			},

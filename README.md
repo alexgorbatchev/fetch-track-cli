@@ -25,7 +25,7 @@ A fast, lightweight CLI tool with AI agent support for bedroom and amateur DJs t
 - Auto-detects available JavaScript runtimes (`deno`, `node`, `bun`, `quickjs`) on `$PATH` for seamless `yt-dlp` signature challenge solving.
 - Performs pre-tag acoustic fingerprint validation (`--confirm-fingerprint`) to automatically reject and retry mismatched search candidates.
 - Stops external tools gracefully on macOS and Linux: when a search query reaches its 25-second limit or a run is interrupted with Ctrl+C, each running `yt-dlp`, `ffmpeg`, `ffprobe`, or `tag-track` process group receives SIGTERM, and SIGKILL only if it is still running 5 seconds later, so the tools remove their temporary files. A second Ctrl+C exits immediately. Windows has no SIGTERM, so there a stopped tool is killed at once.
-- Decodes up to 60 seconds of the first audio stream via `ffmpeg` at its sample rate (at most 48 kHz) and averages Blackman-Harris-windowed 8192-point power spectra. The reported bandwidth is the highest 50 Hz band, in 100 Hz steps, that stays within 25 dB of the 10–14 kHz level after median smoothing, which keeps isolated tones from moving it. Typical results: MP3 128 kbps about 16.7 kHz, MP3 192 kbps about 18.8 kHz, MP3 224 and 256 kbps about 19.5 kHz, MP3 320 kbps about 20.2 kHz, lossless audio up to the Nyquist frequency (22 kHz at 44.1 kHz). Opus reads about 20.2 kHz at every bitrate. Re-encoding at a higher bitrate keeps the lower cutoff. When verifying a URL, the stream that acquisition would download is measured in its own format.
+- Decodes up to 60 seconds of the first audio stream via `ffmpeg` at its sample rate (at most 48 kHz) and averages Blackman-Harris-windowed 8192-point power spectra. The reported bandwidth is the highest 50 Hz band, in 100 Hz steps, that stays within 25 dB of the 10–14 kHz level after median smoothing, which keeps isolated tones from moving it. Typical results: MP3 128 kbps about 16.7 kHz, MP3 192 kbps about 18.8 kHz, MP3 224 and 256 kbps about 19.5 kHz, MP3 320 kbps about 20.2 kHz, lossless audio up to the Nyquist frequency (22 kHz at 44.1 kHz). Opus reads about 20.2 kHz at every bitrate, so at minimums of 19 kHz and above Opus also needs an average bitrate of at least 160 kbps; below a 19 kHz minimum, bandwidth alone decides. The average bitrate is the audio stream's packet bytes over its duration, so VBR streams report what they actually average and cover art does not count. Re-encoding at a higher bitrate keeps the lower cutoff. When verifying a URL, the stream that acquisition would download is measured in its own format.
 - Generates Chromaprint acoustic fingerprints and landmark constellations to query AcoustID and Shazam recognition services in pure Go.
 - Normalizes and center-crops downloaded album artwork to 1:1 square format (1400x1400) and embeds ID3/MP4 metadata using stream-copy mode (`-c:a copy`).
 - Streams real-time NDJSON progress events over UNIX domain sockets, TCP, or file descriptors when executed by AI agents or supervisor orchestrators. Every `fetch-track` event includes overall milestone completion as `percent` (0–100); see [the progress protocol](PROGRESS.md) for calculation and delegated `tag-track` events.
@@ -96,6 +96,7 @@ Downloading audio stream & artwork
 Running audio quality & spectrum inspection
   - Duration: 8:23 (Original / Extended DJ Mix)
   - Bandwidth: High Fidelity (>=19 kHz) (22.0 kHz)
+  - Codec: aac (256.1 kbps)
   - Peak / RMS: -0.10 dBFS / -9.40 dBFS
   - Gain Offset: -2.6 dB
   - Status: High fidelity audio suitable for mixing.
@@ -116,7 +117,7 @@ DONE: ./Boris Brejcha - Space X.m4a
 | `--json` | | `false` | Output machine-readable JSON execution result to stdout |
 | `--list-candidates` | | `false` | Return ranked candidates as JSON without downloading; implies `--json` |
 | `--candidate-url <url>` | | `""` | Download only the exact URL from a previous candidate result |
-| `--min-bandwidth-khz <khz>` | | `19.0` | Minimum audio bandwidth in kHz; lower measured cutoffs are flagged. MP3 224 kbps and above, AAC 256 kbps and lossless audio meet 19 kHz. Opus reaches about 20 kHz at every bitrate, so bandwidth does not grade Opus |
+| `--min-bandwidth-khz <khz>` | | `19.0` | Minimum audio bandwidth in kHz; lower measured cutoffs are flagged. MP3 224 kbps and above, AAC 256 kbps and lossless audio meet 19 kHz. Opus reaches about 20 kHz at every bitrate, so at 19 kHz and above Opus also needs an average bitrate of 160 kbps |
 | `--out-dir <path>` | `-o` | `.` | Output directory for downloaded tracks |
 | `--sources <list>` | `-s` | `youtube,soundcloud` | Comma-separated list of sources to search in parallel |
 | `--interactive` | `-i` | `false` | Interactively approve or choose track candidate before downloading |
@@ -137,6 +138,24 @@ DONE: ./Boris Brejcha - Space X.m4a
 Use `--json` for one JSON result on stdout, with diagnostics on stderr. Acquisition results include `target`, `status`, and available `output_file`, `selected_candidate`, `verification`, `metadata`, or `error` fields. Failed operations retain their structured result and exit unsuccessfully.
 
 `fetch-track --json verify <path|url>` returns the same envelope with `verification` on success. Acquisition and verification report missing targets and unavailable dependencies as `status: "error"`; acquisition also reports progress-target initialization failures this way. Verification errors include the requested `target` and an actionable `error`.
+
+`verification` reports the measured audio and the quality verdict:
+
+| Field | Meaning |
+|-------|---------|
+| `duration_seconds` | Track duration |
+| `codec` | ffprobe codec name of the measured audio stream, such as `opus`, `mp3`, `aac` or `flac` |
+| `bitrate_bps` | Average bitrate of that stream: its packet bytes over its duration, so VBR streams report their actual average; `0` when it cannot be measured |
+| `bandwidth_hz` | Measured high-frequency cutoff |
+| `bandwidth_rating` | Classification of the cutoff alone |
+| `min_bandwidth_hz` | The minimum the verdict applied (`--min-bandwidth-khz`) |
+| `min_bitrate_bps` | The codec's bitrate floor at that minimum (`160000` for Opus at 19 kHz and above); omitted when none applies |
+| `meets_minimum` | `true` when the cutoff reaches `min_bandwidth_hz` and the bitrate reaches any `min_bitrate_bps` |
+| `low_quality_reasons` | Each failed criterion: `bandwidth_below_minimum`, `bitrate_below_minimum` (also when an Opus bitrate cannot be measured); empty when `meets_minimum` |
+| `peak_dbfs`, `rms_dbfs`, `gain_offset_db` | Loudness and the suggested DJ gain |
+| `status` | Readable summary; a failed verdict starts with `STATUS: Low audio quality detected` and names its reasons in parentheses |
+
+A `status` of `success` means verification ran; read `meets_minimum` for the verdict.
 
 Use `--list-candidates` with the intended search query to inspect ranked candidates without downloading. Its result has `status: "candidates"`, `candidates`, and `candidate_count`. Continue with the same query and `--candidate-url` set to the selected candidate's `webpage_url`; acquisition restricts its candidate pool to that exact URL and fails if the candidate is no longer available.
 

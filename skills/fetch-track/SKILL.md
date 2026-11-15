@@ -38,7 +38,7 @@ AGENT=1 fetch-track track verify <url|path> [flags]
 ```
 
 - `fetch-track track` groups track inspection subcommands.
-- `fetch-track track verify <url|path>` (shorthand alias: `fetch-track verify <url|path>`) inspects a local audio file or remote streaming URL (`<url|path>`) for duration, mix structure classification, spectral cutoff bandwidth, peak/RMS loudness, sub/kick bass levels, and DJ mixer gain offset.
+- `fetch-track track verify <url|path>` (shorthand alias: `fetch-track verify <url|path>`) inspects a local audio file or remote streaming URL (`<url|path>`) for duration, mix structure classification, codec and average bitrate, spectral cutoff bandwidth, peak/RMS loudness, sub/kick bass levels, and DJ mixer gain offset, and reports whether the audio meets the minimum and why not.
 - Exits with code `2` in human mode when the target is classified as a short radio edit (`<= 4.0` minutes).
 
 ### Dependency Management
@@ -85,7 +85,7 @@ AGENT=1 fetch-track completion zsh [--no-descriptions]
 | `--json` | | `bool` | `false` | Global | Emit a single machine-readable JSON result object to `stdout` while routing human logs to `stderr` |
 | `--list-candidates` | | `bool` | `false` | Root | Return ranked candidates without downloading; implies `--json` |
 | `--candidate-url` | | `string` | `""` | Root | Download only this exact URL from a previous candidate result; fail if unavailable |
-| `--min-bandwidth-khz` | | `float64` | `19` | Root, `track verify` | Minimum acceptable audio frequency cutoff in kHz before triggering a low-bandwidth warning; MP3 224 kbps and above, AAC 256 kbps and lossless audio meet 19. Opus reaches about 20 kHz at every bitrate, so bandwidth does not grade Opus. Ratings: `High Fidelity (>=19 kHz)`, `Reduced Bandwidth (16-19 kHz)`, `Low Quality / Transcoded (<16 kHz)` |
+| `--min-bandwidth-khz` | | `float64` | `19` | Root, `track verify` | Minimum acceptable audio frequency cutoff in kHz before triggering a low-bandwidth warning; MP3 224 kbps and above, AAC 256 kbps and lossless audio meet 19. Opus reaches about 20 kHz at every bitrate, so at 19 and above Opus also needs an average bitrate of 160 kbps (measured from its packets, so VBR counts what it averages); below 19, bandwidth alone decides. Ratings: `High Fidelity (>=19 kHz)`, `Reduced Bandwidth (16-19 kHz)`, `Low Quality / Transcoded (<16 kHz)` |
 | `--no-cache` | | `bool` | `false` | Root | Bypass local disk cache for search queries, probed URL metadata, and cover art |
 | `--no-descriptions` | | `bool` | `false` | `completion` | Disable completion descriptions in generated shell scripts |
 | `--out-dir` | `-o` | `string` | `"."` | Root | Destination directory for downloaded and tagged audio files |
@@ -106,8 +106,8 @@ AGENT=1 fetch-track completion zsh [--no-descriptions]
 
 ## Output Contracts & Error Handling
 
-- **Agent Mode (`AGENT=1`)**: Prints flat `key: value` lines (`target:`, `candidate:`, `duration:`, `bandwidth:`, `dynamics:`, `status:`, `metadata:`, `output:`). On failure, prints `target: <input>`, `status: error`, and `error: <sanitized message>` before returning a non-zero exit code.
-- **JSON Mode (`--json`)**: Writes a single `JSONExecutionResult` object (`target`, `status`, `candidate_count`, `selected_candidate`, `output_file`, `verification`, `metadata`, `error`) to `stdout` and sends progress/diagnostic logs to `stderr`.
+- **Agent Mode (`AGENT=1`)**: Prints flat `key: value` lines (`target:`, `candidate:`, `duration:`, `bandwidth:`, `codec:`, `dynamics:`, `status:`, `metadata:`, `output:`). On failure, prints `target: <input>`, `status: error`, and `error: <sanitized message>` before returning a non-zero exit code.
+- **JSON Mode (`--json`)**: Writes a single `JSONExecutionResult` object (`target`, `status`, `candidate_count`, `selected_candidate`, `output_file`, `verification`, `metadata`, `error`) to `stdout` and sends progress/diagnostic logs to `stderr`. `verification` carries `codec`, the measured average `bitrate_bps`, `bandwidth_hz`, `min_bandwidth_hz`, `min_bitrate_bps` (the codec's floor, when one applies), the verdict `meets_minimum`, and `low_quality_reasons` (`bandwidth_below_minimum`, `bitrate_below_minimum`). Read `meets_minimum` for the verdict: a `status` of `success` means verification ran.
 - **Progress Telemetry (`--progress-target`)**: Streams newline-delimited JSON (`phase_start`, `candidate_found`, `candidate_selected`, `progress`, `complete`, `error`) with monotonic `sequence` (starting at `1`), `job_id`, UTC `timestamp`, and milestone `percent` (`0` to `100`).
 - **Home Directory Folding**: All file paths printed in human and agent text outputs, logs, and errors fold the user's home directory prefix to `~` (e.g. `~/tracks/Artist - Title.m4a`).
 - **Temporary Files**: Creates working files inside `.tmp/` in the current working directory and removes `.tmp/` on exit if it did not exist prior to invocation.
