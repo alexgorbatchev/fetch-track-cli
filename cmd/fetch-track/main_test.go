@@ -600,6 +600,41 @@ func TestVerifyPrintsBandwidthWithOneDecimal(t *testing.T) {
 	}
 }
 
+// FLAC files state no stream bitrate, and only codecs with a bitrate floor are
+// measured, so the bitrate prints as unmeasured rather than as 0.0 kbps.
+func TestVerifyPrintsAnUnmeasuredBitrate(t *testing.T) {
+	_, cleanupEnv := setupMainTestEnv(t)
+	defer cleanupEnv()
+	path := filepath.Join(t.TempDir(), "pink-noise.flac")
+	if err := exec.Command("ffmpeg", "-v", "quiet", "-y", "-f", "lavfi", "-i", "anoisesrc=color=pink:sample_rate=44100:duration=5", "-ac", "2", path).Run(); err != nil {
+		t.Skipf("ffmpeg not available: %v", err)
+	}
+	t.Setenv("AGENT", "1")
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stdout := os.Stdout
+	os.Stdout = writer
+	cmd := newRootCommand()
+	cmd.SetArgs([]string{"verify", path})
+	runErr := cmd.Execute()
+	os.Stdout = stdout
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	out, err := io.ReadAll(reader)
+	if err != nil || runErr != nil {
+		t.Fatalf("verify: %v, %v", runErr, err)
+	}
+	if want := "codec: flac, bitrate unmeasured\n"; !strings.Contains(string(out), want) {
+		t.Errorf("output %q does not contain %q", out, want)
+	}
+	if strings.Contains(string(out), "0.0 kbps") {
+		t.Errorf("output %q prints an unmeasured bitrate as a measured zero", out)
+	}
+}
+
 func TestMinBandwidthFlagDefaultAndRounding(t *testing.T) {
 	for _, path := range [][]string{nil, {"verify"}, {"track", "verify"}} {
 		cmd, _, err := newRootCommand().Find(path)

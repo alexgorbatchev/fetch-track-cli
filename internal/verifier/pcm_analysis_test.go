@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"errors"
 	"math"
 	"os"
 	"os/exec"
@@ -12,6 +13,9 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/alexgorbatchev/fetch-track-cli/internal/deps"
 )
 
 // writeFloatWAV writes 32-bit float PCM with one channel per sample slice,
@@ -359,7 +363,7 @@ func TestProbeAudioStreamReadsProgramContainers(t *testing.T) {
 	if out, err := exec.Command("ffmpeg", "-hide_banner", "-v", "error", "-y", "-i", source, "-c:a", "aac", "-f", "mpegts", path).CombinedOutput(); err != nil {
 		t.Fatalf("building fixture: %v %s", err, out)
 	}
-	got, err := probeAudioStream(context.Background(), path, 1)
+	got, err := probeAudioStream(context.Background(), deps.RunCommand, path, 1)
 	if err != nil || got.SampleRate != 44100 || got.Codec != "aac" || got.BitrateBps <= 0 {
 		t.Errorf("MPEG-TS stream %+v, %v; want 44100 Hz AAC with a bitrate", got, err)
 	}
@@ -371,42 +375,44 @@ func TestProbeAudioStreamReportsSourceRateCodecAndBitrate(t *testing.T) {
 	for _, rate := range []int{22050, 44100, 96000} {
 		path := filepath.Join(t.TempDir(), strconv.Itoa(rate)+".wav")
 		writeFloatWAV(t, path, rate, make([]float32, rate))
-		got, err := probeAudioStream(context.Background(), path, 1)
+		got, err := probeAudioStream(context.Background(), deps.RunCommand, path, 1)
 		if err != nil || got.SampleRate != rate || got.Codec != "pcm_f32le" || got.BitrateBps != 32*rate {
 			t.Errorf("rate %d: got %+v, %v; want pcm_f32le at %d bps", rate, got, err, 32*rate)
 		}
 	}
 }
 
-// Cover art and container overhead stay out of the bitrate: only the audio
+// Cover art and container overhead stay out of an Opus bitrate: only the audio
 // stream's packets count.
 func TestProbeAudioStreamIgnoresCoverArt(t *testing.T) {
 	requireFFmpeg(t)
-	if !hasEncoder(t, "mjpeg") {
-		t.Skip("ffmpeg lacks mjpeg")
+	for _, encoder := range []string{"mjpeg", "libopus"} {
+		if !hasEncoder(t, encoder) {
+			t.Skipf("ffmpeg lacks %s", encoder)
+		}
 	}
 	dir := t.TempDir()
 	source := calibrationFixture(t, "full-band", 44100, fullBand)
-	audio := filepath.Join(dir, "plain.m4a")
-	encode(t, source, audio, "aac", "-b:a", "128k")
+	audio := filepath.Join(dir, "plain.opus")
+	encode(t, source, audio, "libopus", "-b:a", "128k", "-vbr", "off")
 	cover := filepath.Join(dir, "cover.jpg")
 	if out, err := exec.Command("ffmpeg", "-hide_banner", "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=1400x1400:duration=1", "-frames:v", "1", "-q:v", "1", cover).CombinedOutput(); err != nil {
 		t.Fatalf("building cover: %v %s", err, out)
 	}
-	tagged := filepath.Join(dir, "tagged.m4a")
+	tagged := filepath.Join(dir, "tagged.mka")
 	if out, err := exec.Command("ffmpeg", "-hide_banner", "-v", "error", "-y", "-i", audio, "-i", cover, "-map", "0:a", "-map", "1:v", "-c", "copy", "-disposition:v", "attached_pic", tagged).CombinedOutput(); err != nil {
 		t.Fatalf("attaching cover: %v %s", err, out)
 	}
 	duration := float64(calibrationSamples) / 44100
-	plain, err := probeAudioStream(context.Background(), audio, duration)
+	plain, err := probeAudioStream(context.Background(), deps.RunCommand, audio, duration)
 	if err != nil {
 		t.Fatal(err)
 	}
-	withCover, err := probeAudioStream(context.Background(), tagged, duration)
+	withCover, err := probeAudioStream(context.Background(), deps.RunCommand, tagged, duration)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if withCover.BitrateBps != plain.BitrateBps || math.Abs(float64(plain.BitrateBps-128000)) > 13000 {
+	if math.Abs(float64(withCover.BitrateBps-plain.BitrateBps)) > 1000 || math.Abs(float64(plain.BitrateBps-128000)) > 1300 {
 		t.Errorf("bitrate with cover %d bps, without %d bps; want the same bitrate near 128000 bps", withCover.BitrateBps, plain.BitrateBps)
 	}
 	// The container's overall bitrate includes the cover, which is what a
@@ -420,42 +426,154 @@ func TestProbeAudioStreamIgnoresCoverArt(t *testing.T) {
 	}
 }
 
-func TestParseAudioStream(t *testing.T) {
-	const stream = `"streams":[{"codec_name":"opus","sample_rate":"48000","time_base":"1/48000"}]`
-	opus := audioStream{Codec: "opus", SampleRate: 48000}
-	at := func(bps int) audioStream { s := opus; s.BitrateBps = bps; return s }
+func TestParseStreamHeader(t *testing.T) {
 	tests := []struct {
-		name            string
-		data            string
-		fallbackSeconds float64
-		want            audioStream
-		wantErr         string
+		name         string
+		data         string
+		want         audioStream
+		wantTimeBase string
+		wantErr      string
 	}{
-		{"packet durations", `{"packets":[{"size":"400","duration":960},{"size":"400","duration":960}],` + stream + `}`, 0, at(160000), ""},
-		{"quoted values", `{"packets":[{"size":"400","duration":"960"}],"streams":[{"codec_name":"opus","sample_rate":48000,"time_base":"1/48000"}]}`, 0, at(160000), ""},
-		{"missing durations use the stream duration", `{"packets":[{"size":"1000"},{"size":"1000","duration":2400}],` + stream + `}`, 0.1, at(160000), ""},
-		{"unknown durations use the stream duration", `{"packets":[{"size":"2000","duration":"N/A"}],` + stream + `}`, 0.1, at(160000), ""},
-		{"unreadable time base uses the stream duration", `{"packets":[{"size":"2000","duration":960}],"streams":[{"codec_name":"opus","sample_rate":"48000","time_base":"0/0"}]}`, 0.1, at(160000), ""},
-		{"missing time base uses the stream duration", `{"packets":[{"size":"2000","duration":960}],"streams":[{"codec_name":"opus","sample_rate":"48000"}]}`, 0.1, at(160000), ""},
-		{"no duration leaves the bitrate unmeasured", `{"packets":[{"size":"2000"}],` + stream + `}`, 0, opus, ""},
-		{"no packets leave the bitrate unmeasured", `{` + stream + `}`, 10, opus, ""},
-		{"first of repeated streams", `{"packets":[],"streams":[{"codec_name":"aac","sample_rate":"44100"},{"codec_name":"aac","sample_rate":"44100"}]}`, 0, audioStream{Codec: "aac", SampleRate: 44100}, ""},
-		{"no stream", `{"packets":[]}`, 0, audioStream{}, "no audio stream with a sample rate"},
-		{"no sample rate", `{"streams":[{"codec_name":"opus","sample_rate":"0"}]}`, 0, audioStream{}, "no audio stream with a sample rate"},
-		{"invalid output", `not json`, 0, audioStream{}, "reading ffprobe output"},
+		{"stated bitrate", `{"streams":[{"codec_name":"mp3","sample_rate":"44100","time_base":"1/14112000","bit_rate":"320000"}]}`, audioStream{Codec: "mp3", SampleRate: 44100, BitrateBps: 320000}, "1/14112000", ""},
+		{"numeric values", `{"streams":[{"codec_name":"aac","sample_rate":44100,"time_base":"1/44100","bit_rate":256297}]}`, audioStream{Codec: "aac", SampleRate: 44100, BitrateBps: 256297}, "1/44100", ""},
+		{"no stated bitrate", `{"streams":[{"codec_name":"opus","sample_rate":"48000","time_base":"1/48000","bit_rate":"N/A"}]}`, audioStream{Codec: "opus", SampleRate: 48000}, "1/48000", ""},
+		{"missing bitrate", `{"streams":[{"codec_name":"flac","sample_rate":"44100","time_base":"1/44100"}]}`, audioStream{Codec: "flac", SampleRate: 44100}, "1/44100", ""},
+		{"first of repeated streams", `{"streams":[{"codec_name":"aac","sample_rate":"44100","bit_rate":"128000"},{"codec_name":"mp3","sample_rate":"48000"}]}`, audioStream{Codec: "aac", SampleRate: 44100, BitrateBps: 128000}, "", ""},
+		{"no stream", `{"streams":[]}`, audioStream{}, "", "no audio stream with a sample rate"},
+		{"no sample rate", `{"streams":[{"codec_name":"opus","sample_rate":"0"}]}`, audioStream{}, "", "no audio stream with a sample rate"},
+		{"invalid output", `not json`, audioStream{}, "", "reading ffprobe output"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := parseAudioStream([]byte(tt.data), tt.fallbackSeconds)
+			got, timeBase, err := parseStreamHeader([]byte(tt.data))
 			if tt.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 					t.Fatalf("error = %v, want %q", err, tt.wantErr)
 				}
 				return
 			}
+			if err != nil || got != tt.want || timeBase != tt.wantTimeBase {
+				t.Fatalf("got %+v %q, %v; want %+v %q", got, timeBase, err, tt.want, tt.wantTimeBase)
+			}
+		})
+	}
+}
+
+// ffprobe prints packet fields in its own order and adds a trailing separator
+// when a packet carries side data, so fields are read by key.
+func TestPacketBitrate(t *testing.T) {
+	tests := []struct {
+		name            string
+		data            string
+		timeBase        string
+		fallbackSeconds float64
+		want            int
+	}{
+		{"packet durations", "duration=960|size=400|\nduration=960|size=400\n", "1/48000", 0, 160000},
+		{"fields in either order", "size=400|duration=960\n", "1/48000", 0, 160000},
+		{"no trailing newline", "duration=960|size=400", "1/48000", 0, 160000},
+		{"missing durations use the stream duration", "size=1000\nduration=2400|size=1000\n", "1/48000", 0.1, 160000},
+		{"unknown durations use the stream duration", "duration=N/A|size=2000\n", "1/48000", 0.1, 160000},
+		{"unreadable time base uses the stream duration", "duration=960|size=2000\n", "0/0", 0.1, 160000},
+		{"missing time base uses the stream duration", "duration=960|size=2000\n", "", 0.1, 160000},
+		{"no duration leaves the bitrate unmeasured", "size=2000\n", "1/48000", 0, 0},
+		{"no packets leave the bitrate unmeasured", "", "1/48000", 10, 0},
+		{"unreadable sizes count nothing", "duration=960|size=N/A\n", "1/48000", 0, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := packetBitrate([]byte(tt.data), tt.timeBase, tt.fallbackSeconds); got != tt.want {
+				t.Fatalf("packetBitrate = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
+
+// Listing packets reads the whole file, so only codecs whose verdict needs
+// their measured bitrate pay for it. Other codecs report the bitrate their
+// container states.
+func TestProbeAudioStreamListsPacketsOnlyForCodecsWithAFloor(t *testing.T) {
+	const opusHeader = `{"streams":[{"codec_name":"opus","sample_rate":"48000","time_base":"1/48000","bit_rate":"N/A"}]}`
+	tests := []struct {
+		name, header string
+		want         audioStream
+		wantScan     bool
+	}{
+		{"mp3", `{"streams":[{"codec_name":"mp3","sample_rate":"44100","time_base":"1/14112000","bit_rate":"320000"}]}`, audioStream{Codec: "mp3", SampleRate: 44100, BitrateBps: 320000}, false},
+		{"aac", `{"streams":[{"codec_name":"aac","sample_rate":"44100","time_base":"1/44100","bit_rate":"256297"}]}`, audioStream{Codec: "aac", SampleRate: 44100, BitrateBps: 256297}, false},
+		{"flac", `{"streams":[{"codec_name":"flac","sample_rate":"44100","time_base":"1/44100","bit_rate":"N/A"}]}`, audioStream{Codec: "flac", SampleRate: 44100}, false},
+		{"opus", opusHeader, audioStream{Codec: "opus", SampleRate: 48000, BitrateBps: 160000}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var calls [][]string
+			run := func(ctx context.Context, name string, args ...string) ([]byte, error) {
+				if deadline, ok := ctx.Deadline(); !ok || time.Until(deadline) > probeTimeout {
+					t.Errorf("%s runs without the probe's own %v deadline", name, probeTimeout)
+				}
+				calls = append(calls, args)
+				if slices.Contains(args, "packet=size,duration") {
+					if !slices.Contains(args, "compact=p=0") {
+						t.Errorf("packet listing %q is not in the compact format", args)
+					}
+					return []byte("duration=960|size=400|\nduration=960|size=400\n"), nil
+				}
+				return []byte(tt.header), nil
+			}
+			got, err := probeAudioStream(context.Background(), run, "track", 300)
 			if err != nil || got != tt.want {
 				t.Fatalf("got %+v, %v; want %+v", got, err, tt.want)
 			}
+			if scans := len(calls) == 2; scans != tt.wantScan || len(calls) > 2 {
+				t.Fatalf("ffprobe calls %q, want a packet listing %t", calls, tt.wantScan)
+			}
+			if strings.Contains(strings.Join(calls[0], " "), "packet") {
+				t.Errorf("the header probe lists packets: %q", calls[0])
+			}
 		})
+	}
+
+	t.Run("failed packet listing", func(t *testing.T) {
+		run := func(_ context.Context, _ string, args ...string) ([]byte, error) {
+			if slices.Contains(args, "packet=size,duration") {
+				return nil, errors.New("signal: terminated")
+			}
+			return []byte(opusHeader), nil
+		}
+		if _, err := probeAudioStream(context.Background(), run, "track.opus", 300); err == nil || !strings.Contains(err.Error(), "measuring the average bitrate of track.opus") {
+			t.Fatalf("error = %v, want the packet listing failure", err)
+		}
+	})
+}
+
+// The probe runs on its own deadline, so a slow packet listing cannot spend
+// the time the decode needs.
+func TestAnalyzePCMAudioDecodesOnItsOwnDeadline(t *testing.T) {
+	const probeDelay = 50 * time.Millisecond
+	var decodeBudget time.Duration
+	run := func(ctx context.Context, name string, args ...string) ([]byte, error) {
+		if name == "ffprobe" {
+			time.Sleep(probeDelay)
+			if slices.Contains(args, "packet=size,duration") {
+				return []byte("duration=960|size=400\n"), nil
+			}
+			return []byte(`{"streams":[{"codec_name":"opus","sample_rate":"48000","time_base":"1/48000"}]}`), nil
+		}
+		deadline, ok := ctx.Deadline()
+		if !ok {
+			t.Fatal("the decode has no deadline")
+		}
+		decodeBudget = time.Until(deadline)
+		return make([]byte, 4*48000), nil
+	}
+	report, err := analyzePCMAudio(context.Background(), run, "track.opus", 300, DefaultMinBandwidthHz)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decodeBudget < analysisTimeout-probeDelay/2 {
+		t.Errorf("decode budget %v, want the full %v after probing", decodeBudget, analysisTimeout)
+	}
+	if report.Codec != "opus" || report.BitrateBps != 160000 {
+		t.Errorf("report %+v, want the probed Opus stream at 160000 bps", report)
 	}
 }

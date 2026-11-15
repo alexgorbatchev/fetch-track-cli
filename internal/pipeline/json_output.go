@@ -25,8 +25,9 @@ type JSONVerification struct {
 	DurationSeconds float64 `json:"duration_seconds"`
 	// Codec is the ffprobe codec name of the measured audio stream.
 	Codec string `json:"codec"`
-	// BitrateBps is the stream's average bitrate (packet bytes over duration);
-	// zero when it cannot be measured.
+	// BitrateBps is the stream's average bitrate: measured from its packets
+	// for codecs with a bitrate floor, as the container states it otherwise;
+	// zero when unknown.
 	BitrateBps      int    `json:"bitrate_bps"`
 	BandwidthHz     int    `json:"bandwidth_hz"`
 	BandwidthRating string `json:"bandwidth_rating"`

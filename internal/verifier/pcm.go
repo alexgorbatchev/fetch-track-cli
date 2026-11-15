@@ -37,6 +37,11 @@ const (
 	// Rates above 48 kHz only add content above the audible band.
 	maxAnalysisRate = 48000
 	analysisTimeout = 30 * time.Second
+	// probeTimeout bounds reading the stream header and, for codecs with a
+	// bitrate floor, listing every packet, which reads the whole file. It is
+	// separate from analysisTimeout so a slow listing cannot spend the
+	// decode's time.
+	probeTimeout = 60 * time.Second
 
 	// opusMinBitrateBps is the average bitrate Opus needs at minimums of
 	// DefaultMinBandwidthHz and above: libopus codes about 20.2 kHz at every
@@ -71,9 +76,11 @@ var bitrateFloors = map[string]bitrateFloor{
 type AudioQualityReport struct {
 	// Codec is the ffprobe codec name of the analysed audio stream.
 	Codec string `json:"codec"`
-	// BitrateBps is the stream's average bitrate: its packet bytes over its
-	// duration, so VBR streams report their actual average and cover art and
-	// container overhead are excluded. Zero when it cannot be measured.
+	// BitrateBps is the stream's average bitrate. Codecs with a bitrate floor
+	// are measured from their packets, so VBR streams report their actual
+	// average and cover art and container overhead are excluded; other codecs
+	// report the bitrate their container states for the stream. Zero when it
+	// is unknown.
 	BitrateBps           int    `json:"bitrateBps"`
 	EstimatedBandwidthHz int    `json:"estimatedBandwidthHz"`
 	BandwidthRating      string `json:"bandwidthRating"`
@@ -103,6 +110,16 @@ func (r AudioQualityReport) BandwidthKHz() float64 {
 // bitrate below a floor never displays as the floor.
 func (r AudioQualityReport) BitrateKbps() float64 {
 	return float64(r.BitrateBps/100) / 10
+}
+
+// CodecSummary names the codec and its average bitrate for display, such as
+// "opus 128.0 kbps", or says the bitrate is unmeasured rather than printing
+// zero.
+func (r AudioQualityReport) CodecSummary() string {
+	if r.BitrateBps <= 0 {
+		return r.Codec + ", bitrate unmeasured"
+	}
+	return fmt.Sprintf("%s %.1f kbps", r.Codec, r.BitrateKbps())
 }
 
 // ComputeGoertzelDb returns the level in dBFS of the freqHz component of
@@ -171,10 +188,13 @@ func AnalyzePCMAudio(ctx context.Context, filePath string, durationSec float64, 
 	if len(minBandwidthHz) > 0 && minBandwidthHz[0] > 0 {
 		minHz = minBandwidthHz[0]
 	}
-	cmdCtx, cancel := context.WithTimeout(ctx, analysisTimeout)
-	defer cancel()
+	return analyzePCMAudio(ctx, deps.RunCommand, filePath, durationSec, minHz)
+}
 
-	stream, err := probeAudioStream(cmdCtx, filePath, durationSec)
+// analyzePCMAudio is AnalyzePCMAudio with the tool runner as a parameter. The
+// probe and the decode each run on their own deadline.
+func analyzePCMAudio(ctx context.Context, run CommandRunner, filePath string, durationSec float64, minHz int) (*AudioQualityReport, error) {
+	stream, err := probeAudioStream(ctx, run, filePath, durationSec)
 	if err != nil {
 		return nil, err
 	}
@@ -185,7 +205,9 @@ func AnalyzePCMAudio(ctx context.Context, filePath string, durationSec float64, 
 		startTime = "0"
 	}
 
-	rawBytes, err := deps.RunCommand(cmdCtx, "ffmpeg",
+	cmdCtx, cancel := context.WithTimeout(ctx, analysisTimeout)
+	defer cancel()
+	rawBytes, err := run(cmdCtx, "ffmpeg",
 		"-hide_banner",
 		"-v", "quiet",
 		"-ss", startTime,
@@ -256,28 +278,52 @@ func measureDynamics(samples []float32, sampleRate int) *AudioQualityReport {
 type audioStream struct {
 	Codec      string
 	SampleRate int
-	// BitrateBps is zero when the stream has no packets or no duration.
+	// BitrateBps is zero when the bitrate is unknown.
 	BitrateBps int
 }
 
-// probeAudioStream reads the codec, sample rate and average bitrate of the
-// first audio stream in filePath. The bitrate counts that stream's packets
-// only; durationSec stands in for packet durations the container omits.
-func probeAudioStream(ctx context.Context, filePath string, durationSec float64) (audioStream, error) {
-	out, err := deps.RunCommand(ctx, "ffprobe",
+// probeAudioStream reads the codec, sample rate and bitrate of the first audio
+// stream in filePath, on its own probeTimeout deadline. Codecs listed in
+// bitrateFloors report the average of that stream's packets, which needs a
+// listing of the whole file; durationSec stands in for packet durations the
+// container omits. Other codecs report the bitrate their container states,
+// which only describes them, so their files are read no further than the
+// header.
+func probeAudioStream(ctx context.Context, run CommandRunner, filePath string, durationSec float64) (audioStream, error) {
+	ctx, cancel := context.WithTimeout(ctx, probeTimeout)
+	defer cancel()
+
+	out, err := run(ctx, "ffprobe",
 		"-v", "error",
 		"-select_streams", "a:0",
-		"-show_entries", "stream=codec_name,sample_rate,time_base:packet=size,duration",
+		"-show_entries", "stream=codec_name,sample_rate,time_base,bit_rate",
 		"-of", "json",
 		filePath,
 	)
 	if err != nil {
 		return audioStream{}, fmt.Errorf("probing audio stream of %s: %w", filePath, err)
 	}
-	stream, err := parseAudioStream(out, durationSec)
+	stream, timeBase, err := parseStreamHeader(out)
 	if err != nil {
 		return audioStream{}, fmt.Errorf("probing audio stream of %s: %w", filePath, err)
 	}
+	if _, ok := bitrateFloors[stream.Codec]; !ok {
+		return stream, nil
+	}
+
+	// ffprobe prints packet fields in its own order whatever the request
+	// order, so the compact format's key=value items are read by key.
+	packets, err := run(ctx, "ffprobe",
+		"-v", "error",
+		"-select_streams", "a:0",
+		"-show_entries", "packet=size,duration",
+		"-of", "compact=p=0",
+		filePath,
+	)
+	if err != nil {
+		return audioStream{}, fmt.Errorf("measuring the average bitrate of %s: %w", filePath, err)
+	}
+	stream.BitrateBps = packetBitrate(packets, timeBase, durationSec)
 	return stream, nil
 }
 
@@ -295,56 +341,79 @@ func (v probeValue) int64() (int64, bool) {
 	return n, err == nil
 }
 
-// parseAudioStream reads ffprobe's JSON listing of one stream and its packets.
-// The average bitrate divides the packets' bytes by their summed durations,
-// counted exactly in the stream's time base, when every packet has one, and
-// by fallbackSeconds otherwise.
-func parseAudioStream(data []byte, fallbackSeconds float64) (audioStream, error) {
+// parseStreamHeader reads ffprobe's JSON description of the first audio stream:
+// its codec, sample rate, stated bitrate (zero when the container states none)
+// and time base.
+func parseStreamHeader(data []byte) (audioStream, string, error) {
 	var probe struct {
 		Streams []struct {
 			CodecName  string     `json:"codec_name"`
 			SampleRate probeValue `json:"sample_rate"`
 			TimeBase   string     `json:"time_base"`
+			BitRate    probeValue `json:"bit_rate"`
 		} `json:"streams"`
-		Packets []struct {
-			Size     probeValue `json:"size"`
-			Duration probeValue `json:"duration"`
-		} `json:"packets"`
 	}
 	if err := json.Unmarshal(data, &probe); err != nil {
-		return audioStream{}, fmt.Errorf("reading ffprobe output: %w", err)
+		return audioStream{}, "", fmt.Errorf("reading ffprobe output: %w", err)
 	}
 	// Containers with programs, such as MPEG-TS, can list the stream more than once.
 	if len(probe.Streams) == 0 {
-		return audioStream{}, errors.New("no audio stream with a sample rate")
+		return audioStream{}, "", errors.New("no audio stream with a sample rate")
 	}
 	first := probe.Streams[0]
 	rate, ok := first.SampleRate.int64()
 	if !ok || rate <= 0 {
-		return audioStream{}, errors.New("no audio stream with a sample rate")
+		return audioStream{}, "", errors.New("no audio stream with a sample rate")
 	}
+	stream := audioStream{Codec: first.CodecName, SampleRate: int(rate)}
+	if bitrate, ok := first.BitRate.int64(); ok && bitrate > 0 {
+		stream.BitrateBps = int(bitrate)
+	}
+	return stream, first.TimeBase, nil
+}
 
+// packetBitrate reads ffprobe's compact listing of one stream's packets, one
+// "key=value|key=value" line per packet, and divides the packets' bytes by
+// their summed durations, counted exactly in timeBase, when every packet has
+// one, and by fallbackSeconds otherwise. It returns zero when neither gives a
+// duration or no bytes were listed.
+func packetBitrate(data []byte, timeBase string, fallbackSeconds float64) int {
 	var totalBytes, ticks int64
-	timed := len(probe.Packets) > 0
-	for _, p := range probe.Packets {
-		size, _ := p.Size.int64()
-		totalBytes += size
-		duration, ok := p.Duration.int64()
-		if !ok || duration <= 0 {
+	packets, timed := 0, true
+	for line := range bytes.Lines(data) {
+		line = bytes.TrimSpace(line)
+		if len(line) == 0 {
+			continue
+		}
+		packets++
+		var duration int64
+		for item := range bytes.SplitSeq(line, []byte("|")) {
+			key, value, _ := bytes.Cut(item, []byte("="))
+			n, err := strconv.ParseInt(string(value), 10, 64)
+			if err != nil {
+				continue
+			}
+			switch string(key) {
+			case "size":
+				totalBytes += n
+			case "duration":
+				duration = n
+			}
+		}
+		if duration <= 0 {
 			timed = false
 			continue
 		}
 		ticks += duration
 	}
 	seconds := fallbackSeconds
-	if numerator, denominator, ok := parseTimeBase(first.TimeBase); ok && timed {
+	if numerator, denominator, ok := parseTimeBase(timeBase); ok && timed && packets > 0 {
 		seconds = float64(ticks) * float64(numerator) / float64(denominator)
 	}
-	stream := audioStream{Codec: first.CodecName, SampleRate: int(rate)}
-	if totalBytes > 0 && seconds > 0 {
-		stream.BitrateBps = int(math.Round(float64(totalBytes) * 8 / seconds))
+	if totalBytes <= 0 || seconds <= 0 {
+		return 0
 	}
-	return stream, nil
+	return int(math.Round(float64(totalBytes) * 8 / seconds))
 }
 
 // parseTimeBase reads an ffprobe time base such as "1/48000".

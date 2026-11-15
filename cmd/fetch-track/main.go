@@ -247,7 +247,7 @@ When a query is provided, fetch-track executes the full acquisition pipeline:
 					fmt.Printf("title: %s\n", deps.FoldHome(report.Metadata.Title))
 					fmt.Printf("duration: %s (%s)\n", report.MixStructure.DurationFormatted, report.MixStructure.MixTypeDescription)
 					fmt.Printf("bandwidth: %.1f kHz (%s)\n", report.Quality.BandwidthKHz(), report.Quality.BandwidthRating)
-					fmt.Printf("codec: %s %.1f kbps\n", report.Quality.Codec, report.Quality.BitrateKbps())
+					fmt.Printf("codec: %s\n", report.Quality.CodecSummary())
 					gainSign := ""
 					if report.Quality.SuggestedDJGainDb > 0 {
 						gainSign = "+"
@@ -263,7 +263,7 @@ When a query is provided, fetch-track executes the full acquisition pipeline:
 				fmt.Printf("Title: %s\n", deps.FoldHome(report.Metadata.Title))
 				fmt.Printf("Duration: %s (%s)\n", report.MixStructure.DurationFormatted, report.MixStructure.MixTypeDescription)
 				fmt.Printf("Bandwidth: %s (%.1f kHz)\n", report.Quality.BandwidthRating, report.Quality.BandwidthKHz())
-				fmt.Printf("Codec: %s (%.1f kbps)\n", report.Quality.Codec, report.Quality.BitrateKbps())
+				fmt.Printf("Codec: %s\n", report.Quality.CodecSummary())
 				fmt.Printf("Peak / RMS: %.2f dBFS / %.2f dBFS\n", report.Quality.PeakDbFS, report.Quality.RMSDbFS)
 				fmt.Printf("Sub / Kick: %.2f dBFS / %.2f dBFS\n", report.Quality.SubBassDbFS, report.Quality.KickBassDbFS)
 				gainSign := ""

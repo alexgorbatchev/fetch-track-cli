@@ -93,6 +93,22 @@ func TestBitrateKbpsNeverRoundsUpToTheFloor(t *testing.T) {
 	}
 }
 
+// An unknown bitrate must not read as a measured zero.
+func TestCodecSummary(t *testing.T) {
+	for _, tt := range []struct {
+		report AudioQualityReport
+		want   string
+	}{
+		{AudioQualityReport{Codec: "opus", BitrateBps: 128019}, "opus 128.0 kbps"},
+		{AudioQualityReport{Codec: "flac"}, "flac, bitrate unmeasured"},
+		{AudioQualityReport{Codec: "opus", BitrateBps: -1}, "opus, bitrate unmeasured"},
+	} {
+		if got := tt.report.CodecSummary(); got != tt.want {
+			t.Errorf("CodecSummary(%+v) = %q, want %q", tt.report, got, tt.want)
+		}
+	}
+}
+
 func TestAnalyzePCMAudio_MinBandwidthThreshold(t *testing.T) {
 	report := &AudioQualityReport{
 		EstimatedBandwidthHz: 18000,
