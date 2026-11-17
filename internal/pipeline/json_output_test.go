@@ -58,12 +58,12 @@ func TestNewResultInfoCarriesTheVerdict(t *testing.T) {
 					Codec: "opus", BitrateBps: 144620, EstimatedBandwidthHz: 20200, BandwidthRating: "High Fidelity (>=19 kHz)",
 					SuggestedDJGainDb: -2.6, LowQualityReasons: []string{verifier.ReasonBitrateBelowMinimum},
 				},
-				SummaryStatus: "STATUS: Low audio quality detected (Opus average bitrate 144.6 kbps is below 160 kbps).",
+				SummaryStatus: "STATUS: Low audio quality detected (Opus average bitrate 144.6 kbps is below 145 kbps).",
 			},
 			want: map[string]any{
 				"path": "tracks/Boris Brejcha - Space X.opus", "title": "Space X", "artist": "Boris Brejcha", "album": "Space X - Single", "release_year": "2024",
 				"duration_seconds": 503.0, "bandwidth_hz": 20200.0, "bandwidth_rating": "High Fidelity (>=19 kHz)", "suggested_gain_db": -2.6,
-				"status": "STATUS: Low audio quality detected (Opus average bitrate 144.6 kbps is below 160 kbps).",
+				"status": "STATUS: Low audio quality detected (Opus average bitrate 144.6 kbps is below 145 kbps).",
 				"codec":  "opus", "bitrate_bps": 144620.0, "meets_minimum": false, "low_quality_reasons": []any{"bitrate_below_minimum"},
 			},
 		},
@@ -123,11 +123,11 @@ func TestConvertVerificationReportCarriesTheVerdict(t *testing.T) {
 			name: "opus below the floor",
 			quality: verifier.AudioQualityReport{
 				Codec: "opus", BitrateBps: 128019, EstimatedBandwidthHz: 20200, BandwidthRating: "High Fidelity (>=19 kHz)",
-				MinBandwidthHz: 19000, MinBitrateBps: 160000, LowQualityReasons: []string{verifier.ReasonBitrateBelowMinimum},
+				MinBandwidthHz: 19000, MinBitrateBps: 145000, LowQualityReasons: []string{verifier.ReasonBitrateBelowMinimum},
 			},
 			want: map[string]any{
 				"codec": "opus", "bitrate_bps": 128019.0, "bandwidth_hz": 20200.0, "bandwidth_rating": "High Fidelity (>=19 kHz)",
-				"min_bandwidth_hz": 19000.0, "min_bitrate_bps": 160000.0, "meets_minimum": false,
+				"min_bandwidth_hz": 19000.0, "min_bitrate_bps": 145000.0, "meets_minimum": false,
 				"low_quality_reasons": []any{"bitrate_below_minimum"},
 			},
 		},

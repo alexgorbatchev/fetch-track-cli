@@ -32,8 +32,10 @@ func TestComputeGoertzelDb(t *testing.T) {
 }
 
 // Opus codes about 20.2 kHz at every bitrate, so at minimums of 19 kHz and
-// above it also needs an average bitrate of 160 kbps. Below a 19 kHz minimum
-// and for other codecs, the measured cutoff alone decides.
+// above it also needs a measured average of 145 kbps, which nominal 160 kbps
+// VBR reaches on music and nominal 128 kbps VBR, YouTube's best free stream
+// included, does not. Below a 19 kHz minimum and for other codecs, the
+// measured cutoff alone decides.
 func TestEvaluateQualityAppliesCodecBitrateFloors(t *testing.T) {
 	tests := []struct {
 		name                 string
@@ -45,17 +47,19 @@ func TestEvaluateQualityAppliesCodecBitrateFloors(t *testing.T) {
 		wantReasons          []string
 		wantLowBandwidthFlag bool
 	}{
-		{"opus 128 kbps at 19 kHz", "opus", 20200, 19000, 128019, 160000, false, []string{ReasonBitrateBelowMinimum}, false},
-		{"opus just under the floor", "opus", 20200, 19000, 159999, 160000, false, []string{ReasonBitrateBelowMinimum}, false},
-		{"opus at the floor", "opus", 20200, 19000, 160000, 160000, true, []string{}, false},
-		{"opus 192 kbps at 19 kHz", "opus", 20200, 19000, 192029, 160000, true, []string{}, false},
-		{"opus at a 20 kHz minimum", "opus", 20200, 20000, 128019, 160000, false, []string{ReasonBitrateBelowMinimum}, false},
-		{"opus at the default minimum", "opus", 20200, 0, 96014, 160000, false, []string{ReasonBitrateBelowMinimum}, false},
+		{"opus 128 kbps at 19 kHz", "opus", 20200, 19000, 128019, 145000, false, []string{ReasonBitrateBelowMinimum}, false},
+		{"nominal 128 kbps vbr on hard material", "opus", 20200, 19000, 141300, 145000, false, []string{ReasonBitrateBelowMinimum}, false},
+		{"opus just under the floor", "opus", 20200, 19000, 144999, 145000, false, []string{ReasonBitrateBelowMinimum}, false},
+		{"opus at the floor", "opus", 20200, 19000, 145000, 145000, true, []string{}, false},
+		{"nominal 160 kbps vbr below its nominal rate", "opus", 20200, 19000, 147900, 145000, true, []string{}, false},
+		{"opus 192 kbps at 19 kHz", "opus", 20200, 19000, 192029, 145000, true, []string{}, false},
+		{"opus at a 20 kHz minimum", "opus", 20200, 20000, 128019, 145000, false, []string{ReasonBitrateBelowMinimum}, false},
+		{"opus at the default minimum", "opus", 20200, 0, 96014, 145000, false, []string{ReasonBitrateBelowMinimum}, false},
 		{"opus 96 kbps at 18 kHz", "opus", 20200, 18000, 96014, 0, true, []string{}, false},
 		{"opus just under a 19 kHz minimum", "opus", 20200, 18999, 96014, 0, true, []string{}, false},
-		{"transcoded opus", "opus", 16700, 19000, 192029, 160000, false, []string{ReasonBandwidthBelowMinimum}, true},
-		{"low cutoff and bitrate", "opus", 16700, 19000, 96014, 160000, false, []string{ReasonBandwidthBelowMinimum, ReasonBitrateBelowMinimum}, true},
-		{"unmeasured opus bitrate", "opus", 20200, 19000, 0, 160000, false, []string{ReasonBitrateBelowMinimum}, false},
+		{"transcoded opus", "opus", 16700, 19000, 192029, 145000, false, []string{ReasonBandwidthBelowMinimum}, true},
+		{"low cutoff and bitrate", "opus", 16700, 19000, 96014, 145000, false, []string{ReasonBandwidthBelowMinimum, ReasonBitrateBelowMinimum}, true},
+		{"unmeasured opus bitrate", "opus", 20200, 19000, 0, 145000, false, []string{ReasonBitrateBelowMinimum}, false},
 		{"mp3 has no floor", "mp3", 19400, 19000, 128002, 0, true, []string{}, false},
 		{"mp3 below the cutoff", "mp3", 16700, 19000, 320005, 0, false, []string{ReasonBandwidthBelowMinimum}, true},
 		{"aac has no floor", "aac", 22000, 19000, 96000, 0, true, []string{}, false},
@@ -86,7 +90,7 @@ func TestBitrateKbpsNeverRoundsUpToTheFloor(t *testing.T) {
 	for _, tt := range []struct {
 		bps  int
 		want float64
-	}{{159999, 159.9}, {160024, 160}, {128019, 128}, {0, 0}} {
+	}{{144999, 144.9}, {145024, 145}, {128019, 128}, {0, 0}} {
 		if got := (AudioQualityReport{BitrateBps: tt.bps}).BitrateKbps(); got != tt.want {
 			t.Errorf("BitrateKbps(%d) = %v, want %v", tt.bps, got, tt.want)
 		}

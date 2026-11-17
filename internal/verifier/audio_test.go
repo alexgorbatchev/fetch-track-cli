@@ -109,17 +109,17 @@ func TestVerifyAudioTrackStatesWhyQualityIsLow(t *testing.T) {
 		wantBandwidth []string
 	}{
 		{"opus below the floor", "Artist - Track (Extended Mix).opus", "libopus", []string{"-b:a", "96k", "-vbr", "off"}, 19000,
-			[]string{"STATUS: Low audio quality detected (Opus average bitrate 96.0 kbps is below 160 kbps)."},
-			"LOW BITRATE: Opus average bitrate 96.0 kbps is below 160 kbps at a 19.0 kHz minimum. Opus frequency cutoffs do not reflect bitrate.",
+			[]string{"STATUS: Low audio quality detected (Opus average bitrate 96.0 kbps is below 145 kbps)."},
+			"LOW BITRATE: Opus average bitrate 96.0 kbps is below 145 kbps at a 19.0 kHz minimum. Opus frequency cutoffs do not reflect bitrate.",
 			[]string{"AUDIO BANDWIDTH: Frequency cutoff 20.", " kHz reaches the 19.0 kHz minimum; see LOW BITRATE."}},
 		{"opus radio edit below the floor", "Artist - Track (Radio Edit).opus", "libopus", []string{"-b:a", "128k", "-vbr", "off"}, 19000,
-			[]string{"STATUS: Low audio quality detected (Opus average bitrate 128.0 kbps is below 160 kbps) and is a radio edit."}, "LOW BITRATE: ",
+			[]string{"STATUS: Low audio quality detected (Opus average bitrate 128.0 kbps is below 145 kbps) and is a radio edit."}, "LOW BITRATE: ",
 			[]string{"see LOW BITRATE."}},
 		{"opus at an 18 kHz minimum", "Artist - Track (Extended Mix).opus", "libopus", []string{"-b:a", "96k", "-vbr", "off"}, 18000,
 			[]string{"STATUS: Standard fidelity audio suitable for mixing."}, "", []string{cleanBandwidth}},
-		{"opus at the floor", "Artist - Track (Extended Mix).opus", "libopus", []string{"-b:a", "160k", "-vbr", "off"}, 19000,
+		{"opus 160 kbps above the floor", "Artist - Track (Extended Mix).opus", "libopus", []string{"-b:a", "160k", "-vbr", "off"}, 19000,
 			[]string{"STATUS: High fidelity audio suitable for mixing."}, "", []string{cleanBandwidth}},
-		{"opus at the floor and an 18 kHz minimum", "Artist - Track (Extended Mix).opus", "libopus", []string{"-b:a", "160k", "-vbr", "off"}, 18000,
+		{"opus 160 kbps above the floor and an 18 kHz minimum", "Artist - Track (Extended Mix).opus", "libopus", []string{"-b:a", "160k", "-vbr", "off"}, 18000,
 			[]string{"STATUS: High fidelity audio suitable for mixing."}, "", []string{cleanBandwidth}},
 		{"mp3 192 at an 18 kHz minimum", "Artist - Track (Extended Mix).mp3", "libmp3lame", []string{"-b:a", "192k"}, 18000,
 			[]string{"STATUS: Standard fidelity audio suitable for mixing."}, "", []string{cleanBandwidth}},
@@ -186,10 +186,10 @@ func TestQualityTextForABitrateBelowTheFloor(t *testing.T) {
 		wantReason         string
 		wantRecommendation string
 	}{
-		{"measured", 96014, "Opus average bitrate 96.0 kbps is below 160 kbps",
-			"LOW BITRATE: Opus average bitrate 96.0 kbps is below 160 kbps at a 19.0 kHz minimum. Opus frequency cutoffs do not reflect bitrate."},
-		{"unmeasured", 0, "Opus average bitrate could not be measured; it needs 160 kbps",
-			"LOW BITRATE: Opus average bitrate could not be measured; it needs 160 kbps at a 19.0 kHz minimum. Opus frequency cutoffs do not reflect bitrate."},
+		{"measured", 96014, "Opus average bitrate 96.0 kbps is below 145 kbps",
+			"LOW BITRATE: Opus average bitrate 96.0 kbps is below 145 kbps at a 19.0 kHz minimum. Opus frequency cutoffs do not reflect bitrate."},
+		{"unmeasured", 0, "Opus average bitrate could not be measured; it needs 145 kbps",
+			"LOW BITRATE: Opus average bitrate could not be measured; it needs 145 kbps at a 19.0 kHz minimum. Opus frequency cutoffs do not reflect bitrate."},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -218,11 +218,13 @@ func TestFidelityStatus(t *testing.T) {
 	}{
 		{"opus 96 kbps at 18 kHz", AudioQualityReport{Codec: "opus", BitrateBps: 96014, EstimatedBandwidthHz: 20200}, 18000, false, "STATUS: Standard fidelity audio suitable for mixing."},
 		{"opus 160 kbps at 18 kHz", AudioQualityReport{Codec: "opus", BitrateBps: 160000, EstimatedBandwidthHz: 20200}, 18000, false, "STATUS: High fidelity audio suitable for mixing."},
+		{"opus at the floor at 18 kHz", AudioQualityReport{Codec: "opus", BitrateBps: 145000, EstimatedBandwidthHz: 20200}, 18000, false, "STATUS: High fidelity audio suitable for mixing."},
+		{"opus just under the floor at 18 kHz", AudioQualityReport{Codec: "opus", BitrateBps: 144999, EstimatedBandwidthHz: 20200}, 18000, false, "STATUS: Standard fidelity audio suitable for mixing."},
 		{"unmeasured opus at 18 kHz", AudioQualityReport{Codec: "opus", EstimatedBandwidthHz: 20200}, 18000, false, "STATUS: Standard fidelity audio suitable for mixing."},
 		{"mp3 192 at 18 kHz", AudioQualityReport{Codec: "mp3", BitrateBps: 192000, EstimatedBandwidthHz: 18800}, 18000, false, "STATUS: Standard fidelity audio suitable for mixing."},
 		{"mp3 320 at a 20 kHz minimum", AudioQualityReport{Codec: "mp3", BitrateBps: 320000, EstimatedBandwidthHz: 20200}, 20000, false, "STATUS: High fidelity audio suitable for mixing."},
 		{"radio edit that meets the minimum", AudioQualityReport{Codec: "opus", BitrateBps: 96014, EstimatedBandwidthHz: 20200}, 18000, true, "STATUS: Downloaded track is a radio edit."},
-		{"opus below the floor", AudioQualityReport{Codec: "opus", BitrateBps: 96014, EstimatedBandwidthHz: 20200}, 19000, false, "STATUS: Low audio quality detected (Opus average bitrate 96.0 kbps is below 160 kbps)."},
+		{"opus below the floor", AudioQualityReport{Codec: "opus", BitrateBps: 96014, EstimatedBandwidthHz: 20200}, 19000, false, "STATUS: Low audio quality detected (Opus average bitrate 96.0 kbps is below 145 kbps)."},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

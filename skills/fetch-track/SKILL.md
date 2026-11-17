@@ -9,7 +9,7 @@ description: >-
 author: alexgorbatchev
 metadata:
   created_on: 2026-10-18 09:20
-  last_modified: 2026-11-15 13:24
+  last_modified: 2026-11-16 16:14
   status: current
 ---
 
@@ -28,7 +28,7 @@ AGENT=1 fetch-track <url|query> [flags]
   1. Verifies required external tools (`yt-dlp` >= `2024.08.01`, `ffmpeg` >= `4.4`, `ffprobe` >= `4.4`, `tag-track` >= `1.0.0`).
   2. Searches configured sources in parallel and ranks candidates using DJ duration curves (preferring 4.5–9 minute extended, club, original, and dub mixes while penalizing <3.5 minute radio edits, snippets, and continuous mixes).
   3. Downloads the native audio stream without lossy re-encoding (`-c:a copy`), verifying candidate identity via acoustic fingerprinting when `--confirm-fingerprint` is enabled.
-  4. Decodes up to 60 seconds of PCM audio via `ffmpeg` at the source sample rate (at most 48 kHz) and measures the high-frequency cutoff of its averaged spectrum (100 Hz steps; MP3 128 kbps about 16.7 kHz, MP3 320 kbps about 20.2 kHz, lossless up to 22 kHz at 44.1 kHz), probes the codec and, for Opus, its measured average bitrate, grades the audio against `--min-bandwidth-khz` (`meets_minimum`; Opus also needs 160 kbps at minimums of 19 kHz and above), and reports peak/RMS loudness and the recommended DJ mixer gain offset (`-12.0 dBFS` target RMS).
+  4. Decodes up to 60 seconds of PCM audio via `ffmpeg` at the source sample rate (at most 48 kHz) and measures the high-frequency cutoff of its averaged spectrum (100 Hz steps; MP3 128 kbps about 16.7 kHz, MP3 320 kbps about 20.2 kHz, lossless up to 22 kHz at 44.1 kHz), probes the codec and, for Opus, its measured average bitrate, grades the audio against `--min-bandwidth-khz` (`meets_minimum`; Opus also needs a measured average of 145 kbps at minimums of 19 kHz and above, which nominal 160 kbps VBR reaches and YouTube's 251 stream, a nominal 128 kbps encode, usually does not), and reports peak/RMS loudness and the recommended DJ mixer gain offset (`-12.0 dBFS` target RMS).
   5. Enriches the downloaded file via `tag-track` with canonical metadata, `1400x1400` 1:1 square cover art, release date, and provenance comments (`Source: <url> | Metadata: <provider> | Fetched: <date>`), saving to `<out-dir>/<Artist> - <Title>.<ext>` without brackets or video IDs.
 
 ### Track Verification
@@ -86,7 +86,7 @@ AGENT=1 fetch-track completion zsh [--no-descriptions]
 | `--json` | | `bool` | `false` | Global | Emit a single machine-readable JSON result object to `stdout` while routing human logs to `stderr` |
 | `--list-candidates` | | `bool` | `false` | Root | Return ranked candidates without downloading; implies `--json` |
 | `--candidate-url` | | `string` | `""` | Root | Download only this exact URL from a previous candidate result; fail if unavailable |
-| `--min-bandwidth-khz` | | `float64` | `19` | Root, `track verify` | Minimum acceptable audio frequency cutoff in kHz before triggering a low-bandwidth warning; MP3 224 kbps and above, AAC 256 kbps and lossless audio meet 19. Opus reaches about 20 kHz at every bitrate, so at 19 and above Opus also needs an average bitrate of 160 kbps (measured from its packets, so VBR counts what it averages); below 19, bandwidth alone decides. Ratings: `High Fidelity (>=19 kHz)`, `Reduced Bandwidth (16-19 kHz)`, `Low Quality / Transcoded (<16 kHz)` |
+| `--min-bandwidth-khz` | | `float64` | `19` | Root, `track verify` | Minimum acceptable audio frequency cutoff in kHz before triggering a low-bandwidth warning; MP3 224 kbps and above, AAC 256 kbps and lossless audio meet 19. Opus reaches about 20 kHz at every bitrate, so at 19 and above Opus also needs an average bitrate of 145 kbps (measured from its packets, so VBR counts what it averages; nominal 160 kbps VBR reaches it); below 19, bandwidth alone decides. Ratings: `High Fidelity (>=19 kHz)`, `Reduced Bandwidth (16-19 kHz)`, `Low Quality / Transcoded (<16 kHz)` |
 | `--no-cache` | | `bool` | `false` | Root | Bypass local disk cache for search queries, probed URL metadata, and cover art |
 | `--no-descriptions` | | `bool` | `false` | `completion` | Disable completion descriptions in generated shell scripts |
 | `--out-dir` | `-o` | `string` | `"."` | Root | Destination directory for downloaded and tagged audio files |

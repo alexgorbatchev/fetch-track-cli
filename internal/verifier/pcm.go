@@ -45,9 +45,15 @@ const (
 )
 
 const (
-	// OpusMinBitrateBps is the average bitrate Opus needs at minimums of
-	// OpusFloorFromMinimumHz and above.
-	OpusMinBitrateBps = 160000
+	// OpusMinBitrateBps is the measured average bitrate Opus needs at minimums
+	// of OpusFloorFromMinimumHz and above. It stands for nominal 160 kbps VBR,
+	// the lowest libopus rate transparent to critical listeners on hard
+	// material, as MP3 at 320 kbps and AAC at 256 kbps are. VBR averages
+	// follow the content: on full-band music, nominal 160 kbps averaged 148 to
+	// 184 kbps, while nominal 128 kbps, which YouTube's best free Opus stream
+	// matches, averaged 119 to 149 kbps and passed only on solo harpsichord
+	// and piano.
+	OpusMinBitrateBps = 145000
 	// OpusFloorFromMinimumHz is the lowest minimum at which Opus needs
 	// OpusMinBitrateBps. libopus codes about 20.2 kHz at every bitrate from 48
 	// to 192 kbps, so a 19 kHz minimum, the bar MP3 meets at 224 kbps and AAC
